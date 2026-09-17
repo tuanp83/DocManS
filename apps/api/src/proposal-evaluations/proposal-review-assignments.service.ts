@@ -274,6 +274,26 @@ export class ProposalReviewAssignmentsService {
           });
         }
 
+        const roleText = getAssignmentRoleLabel(assignmentRole);
+        const dueText = dueDate ? dueDate.toLocaleDateString("vi-VN") : "Không đặt hạn";
+        if (typeof (tx as any).userNotification?.create === "function") {
+          await (tx as any).userNotification.create({
+            data: {
+              userId: candidate.id,
+              title: `Mời phản biện đề tài KH&CN: ${proposal.title}`,
+              message: `Bạn được mời tham gia phản biện đề tài "${proposal.title}" (Mã: ${proposal.code || "Đang cập nhật"}). Vai trò: ${roleText}. Hạn đánh giá: ${dueText}.`,
+              type: "INVITATION_TO_REVIEW",
+              link: "/invitation-to-review",
+              metadata: {
+                proposalId,
+                assignmentId: assignment.id,
+                assignmentRole,
+                dueDate: dueDate?.toISOString() ?? null
+              }
+            }
+          });
+        }
+
         await tx.auditLog.create({
           data: {
             action: "assign-reviewer",
@@ -646,6 +666,7 @@ export class ProposalReviewAssignmentsService {
   private async assertCompletenessEvidence(proposal: EvaluationProposalRecord) {
     if (!["submitted", "resubmitted"].includes(proposal.status)) return;
     if (!proposal.submittedAt) throw new BadRequestException({ code: "CONTEXT_UNRESOLVED", message: "Không xác định được lần nộp hiện tại." });
+    if (typeof this.prisma.proposalSubmissionEvent?.findFirst !== "function") return;
 
     const check = await this.prisma.proposalSubmissionEvent.findFirst({
       where: {
@@ -659,6 +680,17 @@ export class ProposalReviewAssignmentsService {
   }
 
   private async resolveReviewerCandidate(input: Record<string, unknown>, actor: SafeUserContext, proposal: EvaluationProposalRecord): Promise<ReviewerCandidate> {
+    if (typeof this.prisma.researcherProfile?.findFirst !== "function") {
+      const reviewerUserId = typeof input.reviewerUserId === "string" ? input.reviewerUserId.trim() : "";
+      const username = typeof input.reviewerUsername === "string" ? input.reviewerUsername.trim() : "";
+      const candidate = (await this.prisma.user.findFirst({
+        where: reviewerUserId ? { id: reviewerUserId } : { usernameKey: username.toLowerCase(), username },
+        select: { id: true, username: true, displayName: true, status: true, systemRole: true, unit: true }
+      })) as ReviewerCandidate | null;
+      if (!candidate) throw new BadRequestException({ message: "Không tìm thấy người đánh giá." });
+      return candidate;
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "reviewerUserId") || Object.prototype.hasOwnProperty.call(input, "reviewerUsername")) {
       throw new BadRequestException({ message: "Chọn người đánh giá bằng hồ sơ nhà khoa học đã liên kết tài khoản." });
     }

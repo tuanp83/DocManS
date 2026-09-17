@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,6 +18,9 @@ export default async function CatchAllPage({
   params: Promise<{ segments: string[] }>;
 }) {
   const { segments } = await params;
+  if (!segments.length || segments[0] === "_next" || segments[0] === "api") {
+    notFound();
+  }
   const pathname = `/${segments.join("/")}`;
   const routeDefinition = getRouteDefinition(pathname);
   const title = routeDefinition?.title ?? formatSegment(segments[segments.length - 1] ?? "Phan he");

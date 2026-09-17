@@ -2,6 +2,7 @@ import {
   BarChart3,
   Bell,
   BookCopy,
+  BookOpen,
   Building2,
   CalendarDays,
   CalendarRange,
@@ -95,6 +96,15 @@ export const accountProfiles: AccountProfile[] = [
     roleLabel: "Quản trị hệ thống",
     unit: "Khoa Toán - Tin học",
     initials: "T"
+  },
+  {
+    id: "admin-pham-anh-tuan",
+    username: "admin2",
+    name: "TS. Phạm Anh Tuấn",
+    role: "SYSTEM_ADMIN",
+    roleLabel: "Quản trị hệ thống",
+    unit: "Khoa Toán - Tin học",
+    initials: "T"
   }
 ];
 
@@ -170,11 +180,18 @@ export const routeDefinitions: Record<string, RouteDefinition> = {
     summaryBody: "Tiến độ nộp báo cáo và các yêu cầu bổ sung được quản lý theo chu kỳ đề tài và đơn vị chủ trì."
   },
   "/my-tasks": {
-    eyebrow: "Công việc",
-    title: "Công việc của tôi",
-    description: "Tổng hợp công việc được giao, ưu tiên xử lý và các hạn cần hoàn tất.",
-    summaryTitle: "Theo dõi thực hiện",
-    summaryBody: "Nhiệm vụ được gom theo hạn, mức ưu tiên và bản ghi liên quan để giúp sắp xếp thứ tự xử lý."
+    eyebrow: "Nhiệm vụ",
+    title: "Nhiệm vụ",
+    description: "Tổng hợp các nhiệm vụ KH&CN, công việc được giao và các hạn cần hoàn tất.",
+    summaryTitle: "Theo dõi nhiệm vụ",
+    summaryBody: "Nhiệm vụ được sắp xếp theo thời hạn, mức ưu tiên và tiến độ thực hiện."
+  },
+  "/invitation-to-review": {
+    eyebrow: "Phản biện",
+    title: "Được mời phản biện",
+    description: "Danh sách các đề tài KH&CN bạn được nhà quản lý khoa học mời tham gia phản biện, đánh giá.",
+    summaryTitle: "Hồ sơ phản biện",
+    summaryBody: "Theo dõi các lời mời phản biện, thời hạn đánh giá và thực hiện chấm điểm trực tuyến."
   },
   "/notifications": {
     eyebrow: "Thông báo",
@@ -245,6 +262,13 @@ export const routeDefinitions: Record<string, RouteDefinition> = {
     description: "Tra cứu nhật ký vận hành và các hành động quan trọng phục vụ theo dõi hệ thống.",
     summaryTitle: "Theo dõi nhật ký",
     summaryBody: "Nhật ký được tập hợp theo thời điểm và loại sự kiện để hỗ trợ vận hành và truy vết thông tin."
+  },
+  "/documents": {
+    eyebrow: "Văn bản & Biểu mẫu",
+    title: "Văn bản & Biểu mẫu",
+    description: "Hệ thống văn bản quy phạm, quy chế quản lý khoa học công nghệ và biểu mẫu hướng dẫn.",
+    summaryTitle: "Kho tài liệu KH&CN",
+    summaryBody: "Cung cấp các văn bản pháp lý, quy chế và biểu mẫu chuẩn phục vụ nghiên cứu viên và hội đồng."
   }
 };
 
@@ -254,6 +278,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/approvals", label: "Hồ sơ chờ phê duyệt", icon: FileClock },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
+    { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 }
   ],
   SCIENTIFIC_MANAGEMENT_STAFF: [
@@ -263,15 +288,17 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/intakes", label: "Đợt tiếp nhận", icon: CalendarRange },
     { href: "/reviews", label: "Đánh giá hồ sơ", icon: FileSearch },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
+    { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 }
   ],
   RESEARCHER_INTERNAL_USER: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/my-tasks", label: "Nhiệm vụ", icon: ListTodo },
+    { href: "/invitation-to-review", label: "Được mời phản biện", icon: FileCheck2 },
     { href: "/my-proposals", label: "Hồ sơ của tôi", icon: FileText },
-    { href: "/my-projects", label: "Đề tài đang thực hiện", icon: FolderKanban },
-    { href: "/periodic-reports", label: "Báo cáo định kỳ", icon: NotebookPen },
-    { href: "/my-tasks", label: "Công việc của tôi", icon: ListTodo },
+    { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch },
+    { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/notifications", label: "Thông báo", icon: Bell }
   ],
   SYSTEM_ADMIN: [
@@ -280,10 +307,18 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/roles", label: "Vai trò", icon: ShieldCheck },
     { href: "/units", label: "Đơn vị", icon: Building2 },
     { href: "/catalogs", label: "Danh mục", icon: BookCopy },
+    { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/system-settings", label: "Cấu hình hệ thống", icon: Settings2 },
     { href: "/system-logs", label: "Nhật ký hệ thống", icon: History }
   ],
-  EXTERNAL_RESEARCHER_USER: []
+  EXTERNAL_RESEARCHER_USER: [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/my-tasks", label: "Nhiệm vụ", icon: ListTodo },
+    { href: "/invitation-to-review", label: "Được mời phản biện", icon: FileCheck2 },
+    { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch },
+    { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
+    { href: "/notifications", label: "Thông báo", icon: Bell }
+  ]
 };
 
 export function getAccountById(accountId?: string | null) {
