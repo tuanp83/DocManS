@@ -37,8 +37,7 @@ import {
 export type SubCategoryKey =
   | "LAW_REGULATION"
   | "INTERNAL_REGULATION"
-  | "PROPOSAL_TEMPLATE"
-  | "EVALUATION_TEMPLATE"
+  | "DOCUMENT_TEMPLATE"
   | "GUIDELINE";
 
 export type SubCategoryDefinition = {
@@ -82,12 +81,12 @@ export const SUB_CATEGORIES: Record<SubCategoryKey, SubCategoryDefinition> = {
     iconColor: "text-indigo-600 dark:text-indigo-400 bg-indigo-500/15",
     badgeStyle: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300"
   },
-  PROPOSAL_TEMPLATE: {
-    key: "PROPOSAL_TEMPLATE",
-    label: "3. Biểu mẫu đăng ký & Thuyết minh đề tài",
-    shortLabel: "3. Mẫu Thuyết minh",
-    subLabel: "BM-01, BM-02, BM-06",
-    description: "Biểu mẫu thuyết minh đề tài, dự toán kinh phí, lý lịch khoa học cá nhân (BM-01, BM-02, BM-06).",
+  DOCUMENT_TEMPLATE: {
+    key: "DOCUMENT_TEMPLATE",
+    label: "3. Mẫu văn bản",
+    shortLabel: "3. Mẫu văn bản",
+    subLabel: "Thuyết minh, Đánh giá, Nghiệm thu",
+    description: "Hệ thống biểu mẫu văn bản phục vụ đăng ký, thuyết minh đề tài, dự toán kinh phí, lý lịch khoa học và phiếu đánh giá, biên bản nghiệm thu (BM-01, BM-02, BM-04, BM-06...).",
     icon: ScrollText,
     containerBg: "bg-emerald-50/20 dark:bg-emerald-950/10",
     headerBg: "bg-emerald-100/60 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-100",
@@ -95,23 +94,10 @@ export const SUB_CATEGORIES: Record<SubCategoryKey, SubCategoryDefinition> = {
     iconColor: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/15",
     badgeStyle: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300"
   },
-  EVALUATION_TEMPLATE: {
-    key: "EVALUATION_TEMPLATE",
-    label: "4. Biểu mẫu thẩm định, đánh giá & Nghiệm thu",
-    shortLabel: "4. Mẫu Đánh giá",
-    subLabel: "BM-04, Hội đồng, Nghiệm thu",
-    description: "Phiếu nhận xét đánh giá của chuyên gia phản biện, biên bản họp hội đồng tư vấn, nghiệm thu (BM-04).",
-    icon: ClipboardList,
-    containerBg: "bg-purple-50/20 dark:bg-purple-950/10",
-    headerBg: "bg-purple-100/60 dark:bg-purple-950/40 text-purple-950 dark:text-purple-100",
-    borderColor: "border-purple-200/80 dark:border-purple-800/60",
-    iconColor: "text-purple-600 dark:text-purple-400 bg-purple-500/15",
-    badgeStyle: "bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300"
-  },
   GUIDELINE: {
     key: "GUIDELINE",
-    label: "5. Hướng dẫn & Quy trình nghiệp vụ",
-    shortLabel: "5. Hướng dẫn nghiệp vụ",
+    label: "4. Hướng dẫn & Quy trình nghiệp vụ",
+    shortLabel: "4. Hướng dẫn nghiệp vụ",
     subLabel: "Quy trình nộp & thanh toán",
     description: "Sổ tay hướng dẫn quy trình đăng ký, nộp hồ sơ trực tuyến, quy trình giải ngân và thanh quyết toán.",
     icon: FileCode,
@@ -126,14 +112,20 @@ export const SUB_CATEGORIES: Record<SubCategoryKey, SubCategoryDefinition> = {
 const CATEGORY_KEYS: SubCategoryKey[] = [
   "LAW_REGULATION",
   "INTERNAL_REGULATION",
-  "PROPOSAL_TEMPLATE",
-  "EVALUATION_TEMPLATE",
+  "DOCUMENT_TEMPLATE",
   "GUIDELINE"
 ];
 
 function normalizeCategoryKey(category: string): SubCategoryKey {
   if (category === "LEGAL_DOCUMENT") return "LAW_REGULATION";
-  if (category === "FORM_TEMPLATE") return "PROPOSAL_TEMPLATE";
+  if (
+    category === "DOCUMENT_TEMPLATE" ||
+    category === "FORM_TEMPLATE" ||
+    category === "PROPOSAL_TEMPLATE" ||
+    category === "EVALUATION_TEMPLATE"
+  ) {
+    return "DOCUMENT_TEMPLATE";
+  }
   if (category in SUB_CATEGORIES) return category as SubCategoryKey;
   return "LAW_REGULATION";
 }
@@ -233,8 +225,7 @@ export function ScientificDocumentsPanel() {
     const map: Record<SubCategoryKey, ScientificDocument[]> = {
       LAW_REGULATION: [],
       INTERNAL_REGULATION: [],
-      PROPOSAL_TEMPLATE: [],
-      EVALUATION_TEMPLATE: [],
+      DOCUMENT_TEMPLATE: [],
       GUIDELINE: []
     };
 
@@ -664,8 +655,7 @@ export function ScientificDocumentsPanel() {
                   >
                     <option value="LAW_REGULATION">Văn bản quy phạm pháp luật</option>
                     <option value="INTERNAL_REGULATION">Quy chế & Quy định quản lý KH&CN</option>
-                    <option value="PROPOSAL_TEMPLATE">Biểu mẫu đăng ký & Thuyết minh đề tài</option>
-                    <option value="EVALUATION_TEMPLATE">Biểu mẫu thẩm định, đánh giá & Nghiệm thu</option>
+                    <option value="DOCUMENT_TEMPLATE">Mẫu văn bản (Thuyết minh, Đánh giá, Nghiệm thu...)</option>
                     <option value="GUIDELINE">Hướng dẫn & Quy trình nghiệp vụ</option>
                   </select>
                 </div>
@@ -811,8 +801,7 @@ export function ScientificDocumentsPanel() {
                   >
                     <option value="LAW_REGULATION">Văn bản quy phạm pháp luật</option>
                     <option value="INTERNAL_REGULATION">Quy chế & Quy định quản lý KH&CN</option>
-                    <option value="PROPOSAL_TEMPLATE">Biểu mẫu đăng ký & Thuyết minh đề tài</option>
-                    <option value="EVALUATION_TEMPLATE">Biểu mẫu thẩm định, đánh giá & Nghiệm thu</option>
+                    <option value="DOCUMENT_TEMPLATE">Mẫu văn bản (Thuyết minh, Đánh giá, Nghiệm thu...)</option>
                     <option value="GUIDELINE">Hướng dẫn & Quy trình nghiệp vụ</option>
                   </select>
                 </div>
