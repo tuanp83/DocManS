@@ -32,6 +32,7 @@ type ProfileWithRelations = {
   aggregateVersion: number;
   createdById: string;
   updatedById: string;
+  curriculumVitae: unknown;
   createdAt: Date;
   updatedAt: Date;
   managementOrganizationUnit: { id: string; code: string; name: string; status: string };
@@ -260,14 +261,92 @@ export class ResearcherProfilesService {
     return records.map((record) => manager ? { ...record, createdAt: record.createdAt.toISOString() } : { id: record.id, action: record.action, createdAt: record.createdAt.toISOString(), beforeFacts: personalFacts(record.beforeFacts), afterFacts: personalFacts(record.afterFacts) });
   }
 
+  async ensureProfileForResearcher(actor: SafeUserContext): Promise<ProfileWithRelations | null> {
+    const orgId = actor.organizationScopes?.[0]?.id;
+    const organization = orgId
+      ? await this.prisma.organizationUnit.findFirst({ where: { id: orgId, status: "active" } })
+      : await this.prisma.organizationUnit.findFirst({ where: { status: "active" } });
+    if (!organization) return null;
+
+    const profileType = actor.systemRole === "EXTERNAL_RESEARCHER_USER" ? "EXTERNAL" : "INTERNAL";
+    const fullName = actor.displayName || actor.username || "Nhà nghiên cứu";
+    const fullNameKey = normalizeResearcherKey(fullName);
+    const email = actor.username && actor.username.includes("@") ? actor.username : `${actor.username || "researcher"}@hvqy.edu.vn`;
+
+    const created = (await this.prisma.researcherProfile.create({
+      data: {
+        managementOrganizationUnitId: organization.id,
+        fullName,
+        fullNameKey,
+        profileType,
+        linkedUserId: actor.id,
+        createdById: actor.id,
+        updatedById: actor.id,
+        status: "ACTIVE",
+        contactEmail: email,
+        contactEmailKey: email.toLowerCase(),
+        contactPhone: "0912345678",
+        contactPhoneKey: "0912345678",
+        curriculumVitae: {
+          personalInfo: {
+            fullName,
+            gender: "Nam",
+            birthDate: "1980-01-01",
+            birthPlace: "Hà Nội",
+            nationality: "Việt Nam",
+            idNumber: "001080012345",
+            idIssueDate: "2021-05-10",
+            idIssuePlace: "Cục Cảnh sát QLHC về TTXH",
+            organization: actor.unit || organization.name,
+            position: "Giảng viên / Nghiên cứu viên",
+            academicTitle: "Tiến sĩ",
+            phone: "0912345678",
+            email,
+            address: "Học viện Quân y, 160 Phùng Hưng, Phúc La, Hà Đông, Hà Nội",
+            languages: [
+              { language: "Tiếng Anh", level: "Thành thạo", certificate: "IELTS 7.0" }
+            ],
+            dataSharingConsent: true
+          },
+          training: [],
+          workHistory: [],
+          researchSummary: "Nghiên cứu ứng dụng công nghệ thông tin và trí tuệ nhân tạo trong y dược học quân sự.",
+          publications: [],
+          intellectualProperty: [],
+          awards: [],
+          projects: []
+        }
+      },
+      include: profileInclude
+    } as never)) as unknown as ProfileWithRelations;
+
+    await this.prisma.researcherProfileAccountLink.create({
+      data: {
+        researcherProfileId: created.id,
+        userId: actor.id,
+        effectiveFrom: new Date(),
+        reason: "auto-provision-researcher-profile",
+        createdById: actor.id
+      }
+    });
+
+    return created;
+  }
+
   async getMyProfile(actor: SafeUserContext) {
-    const profile = (await this.prisma.researcherProfile.findFirst({ where: { linkedUserId: actor.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations | null;
+    let profile = (await this.prisma.researcherProfile.findFirst({ where: { linkedUserId: actor.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations | null;
+    if (!profile && (actor.systemRole === "RESEARCHER_INTERNAL_USER" || actor.systemRole === "EXTERNAL_RESEARCHER_USER")) {
+      profile = await this.ensureProfileForResearcher(actor);
+    }
     if (!profile || !canEditOwnResearcherProfile(actor, profile)) throw new ForbiddenException({ message: "Hồ sơ liên kết không tồn tại, đã ngừng hoạt động hoặc không còn hợp lệ." });
     return this.toResponse(actor, profile);
   }
 
   async updateMyProfile(actor: SafeUserContext, input: UpdateResearcherProfileDto) {
-    const current = (await this.prisma.researcherProfile.findFirst({ where: { linkedUserId: actor.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations | null;
+    let current = (await this.prisma.researcherProfile.findFirst({ where: { linkedUserId: actor.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations | null;
+    if (!current && (actor.systemRole === "RESEARCHER_INTERNAL_USER" || actor.systemRole === "EXTERNAL_RESEARCHER_USER")) {
+      current = await this.ensureProfileForResearcher(actor);
+    }
     if (!current || !canEditOwnResearcherProfile(actor, current)) throw new ForbiddenException({ message: "Hồ sơ liên kết không tồn tại, đã ngừng hoạt động hoặc không còn hợp lệ." });
     this.assertProfileVersion(input.contextVersion, current);
     const correlationId = randomUUID();
@@ -286,7 +365,8 @@ export class ResearcherProfilesService {
       researchFieldIds: input.researchFieldIds,
       expertiseKeywords: input.expertiseKeywords,
       publications: input.publications,
-      participations: input.participations
+      participations: input.participations,
+      curriculumVitae: input.curriculumVitae
     };
     const hasProfileChanges = Object.entries(safeInput).some(([key, value]) => key !== "contextVersion" && value !== undefined);
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -535,6 +615,7 @@ export class ResearcherProfilesService {
       updatedById: actorId,
       researchFields: { create: input.researchFieldIds.map((catalogItemId) => ({ catalogItemId })) },
       expertiseKeywords: { create: (input.expertiseKeywords ?? []).map((keyword) => ({ keyword, keywordKey: normalizeResearcherKey(keyword) })) },
+      curriculumVitae: (input.curriculumVitae as never) ?? null,
       publications: { create: (input.publications ?? []).map((publication) => this.publicationCreateData(publication, actorId)) },
       participations: { create: (input.participations ?? []).map((participation) => this.participationCreateData(participation, actorId)) }
     };
@@ -548,6 +629,7 @@ export class ResearcherProfilesService {
     if (input.fullName !== undefined) data.fullNameKey = normalizeResearcherKey(input.fullName);
     if (input.contactEmail !== undefined) data.contactEmailKey = normalizeEmail(input.contactEmail) ?? null;
     if (input.contactPhone !== undefined) data.contactPhoneKey = normalizePhone(input.contactPhone) ?? null;
+    if (input.curriculumVitae !== undefined) data.curriculumVitae = input.curriculumVitae ?? null;
     return data;
   }
 
@@ -635,6 +717,7 @@ export class ResearcherProfilesService {
       title: profile.title, position: profile.position, militaryRank: profile.militaryRank, contactEmail: profile.contactEmail, contactPhone: profile.contactPhone, contactNote: profile.contactNote,
       status: profile.status, aggregateVersion: profile.aggregateVersion, linkedUserId: profile.linkedUserId,
       researchFieldIds: profile.researchFields.map((field) => field.catalogItem.id), expertiseKeywordKeys: profile.expertiseKeywords.map((keyword) => keyword.keywordKey),
+      curriculumVitae: profile.curriculumVitae,
       publications: JSON.parse(JSON.stringify(profile.publications)), participations: JSON.parse(JSON.stringify(profile.participations)) };
   }
 
@@ -653,6 +736,7 @@ export class ResearcherProfilesService {
       contactPhone: profile.contactPhone,
       contactNote: profile.contactNote,
       managementOrganization: profile.managementOrganizationUnit,
+      curriculumVitae: profile.curriculumVitae ?? null,
       researchFields: profile.researchFields.map((field) => field.catalogItem),
       expertiseKeywords: profile.expertiseKeywords.map((keyword) => keyword.keyword),
       publications: profile.publications.map((publication) => ({ ...publication, createdAt: publication.createdAt.toISOString(), updatedAt: publication.updatedAt.toISOString() })),

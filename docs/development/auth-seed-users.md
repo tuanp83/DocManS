@@ -7,6 +7,7 @@ These credentials are for local development only. All seeded accounts share the 
 | Username | Password | Role | Unit |
 | --- | --- | --- | --- |
 | `admin` | `1234` | Quản trị hệ thống | Khoa Toán - Tin học |
+| `admin2` | `1234` | Quản trị hệ thống | Khoa Toán - Tin học |
 | `tvtien` | `1234` | Giám Đốc | Ban Giám Đốc |
 | `nmphuong` | `1234` | Trưởng phòng | Phòng KHQS |
 | `patuan` | `1234` | Chủ nhiệm đề tài | Khoa Toán - Tin học |
@@ -30,7 +31,7 @@ first scope-checked staff action.
 
 | Username | Organization scopes |
 | --- | --- |
-| `admin` | `org-khti` |
+| `admin`, `admin2` | `org-khti` |
 | `tvtien` | `org-bgq` |
 | `nmphuong`, `hdtien1`, `hdtien2` | `org-khqs`, `org-khti`, `org-bqlkhqs` |
 | `patuan` | `org-khti` |

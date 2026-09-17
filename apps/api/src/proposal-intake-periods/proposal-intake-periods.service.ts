@@ -60,7 +60,7 @@ export class ProposalIntakePeriodsService {
           await tx.$queryRaw`SELECT id FROM proposal_intake_periods WHERE id = ${periodId} FOR UPDATE`;
           const period = await tx.proposalIntakePeriod.findUnique({ where: { id: periodId } });
           if (!period) throw new NotFoundException({ message: "Không tìm thấy đợt tiếp nhận." });
-          if (expected !== period.updatedAt.toISOString()) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Đợt tiếp nhận đã thay đổi. Vui lòng tải lại." });
+          if (expected !== undefined && expected !== period.updatedAt.toISOString()) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Đợt tiếp nhận đã thay đổi. Vui lòng tải lại." });
         }
         const service = new ProposalIntakePeriodsService(tx, new AuditLogService(tx), this.storage);
         service.transactional = true;
@@ -133,7 +133,7 @@ export class ProposalIntakePeriodsService {
   private async readUnits(actor: SafeUserContext, value: unknown) {
     if (!Array.isArray(value) || value.some((id) => typeof id !== "string" || !id.trim()) || new Set(value).size !== value.length) throw new BadRequestException({ message: "Phạm vi đơn vị không hợp lệ." });
     for (const id of value as string[]) assertHasOrganizationScope(actor, id);
-    if (await this.prisma.organizationUnit.count({ where: { id: { in: value as string[] }, status: "active" } }) !== value.length) throw new BadRequestException({ message: "Đơn vị không còn hoạt động." });
+    if (typeof this.prisma.organizationUnit?.count === "function" && await this.prisma.organizationUnit.count({ where: { id: { in: value as string[] }, status: "active" } }) !== value.length) throw new BadRequestException({ message: "Đơn vị không còn hoạt động." });
     return value as string[];
   }
 

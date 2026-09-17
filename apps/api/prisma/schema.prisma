@@ -50,6 +50,8 @@ model User {
   createdResearcherProfileAccountLinks ResearcherProfileAccountLink[] @relation("ProfileAccountLinkCreator")
   credentialDeliveries AccountCredentialDelivery[]
   researcherProfileHistories ResearcherProfileHistory[]
+  notifications UserNotification[] @relation("UserNotifications")
+  createdScientificDocuments ScientificDocument[] @relation("ScientificDocumentCreator")
 
   @@map("users")
 }
@@ -216,6 +218,7 @@ model ResearcherProfile {
   createdBy                  User          @relation("ResearcherProfileCreator", fields: [createdById], references: [id])
   updatedById                String        @map("updated_by_id")
   updatedBy                  User          @relation("ResearcherProfileUpdater", fields: [updatedById], references: [id])
+  curriculumVitae            Json?         @map("curriculum_vitae")
   createdAt                  DateTime      @default(now()) @map("created_at")
   updatedAt                  DateTime      @updatedAt @map("updated_at")
   researchFields             ResearcherProfileField[]
@@ -641,4 +644,47 @@ model ProposalDecision {
   @@index([decidedById])
   @@index([decision])
   @@map("proposal_decisions")
+}
+
+model UserNotification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  message   String
+  type      String   @default("INVITATION_TO_REVIEW")
+  link      String?
+  isRead    Boolean  @default(false) @map("is_read")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@map("user_notifications")
+}
+
+model ScientificDocument {
+  id               String    @id @default(uuid())
+  documentNumber   String    @map("document_number")
+  title            String
+  category         String
+  issuingAuthority String?   @map("issuing_authority")
+  issuedDate       DateTime? @map("issued_date")
+  effectiveDate    DateTime? @map("effective_date")
+  description      String?
+  status           String    @default("ACTIVE")
+  fileName         String    @map("file_name")
+  fileSize         Int       @map("file_size")
+  mimeType         String    @map("mime_type")
+  storageObjectKey String    @map("storage_object_key")
+  createdById      String    @map("created_by_id")
+  createdBy        User      @relation("ScientificDocumentCreator", fields: [createdById], references: [id])
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  @@index([category])
+  @@index([status])
+  @@index([createdById])
+  @@index([deletedAt])
+  @@map("scientific_documents")
 }

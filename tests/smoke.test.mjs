@@ -77,7 +77,7 @@ describe("workspace smoke checks", () => {
     assert.match(sessionSource, /SystemRole/);
     assert.match(sessionSource, /Nhà nghiên cứu bên ngoài/);
     assert.match(authApiSource, /SYSTEM_ROLES\.includes/);
-    assert.match(shellSource, /EXTERNAL_RESEARCHER_USER:\s*\[\]/);
+    assert.match(shellSource, /EXTERNAL_RESEARCHER_USER:\s*\[/);
   });
 
   it("keeps database scope focused on auth, access, catalogs, config, audit, and the EP-02/EP-03 proposal models", () => {
@@ -114,7 +114,9 @@ describe("workspace smoke checks", () => {
       "ProposalReviewAssignment",
       "ProposalReview",
       "ProposalEvaluationSummary",
-      "ProposalDecision"
+      "ProposalDecision",
+      "UserNotification",
+      "ScientificDocument"
     ]);
     assert.match(schemaSource, /@@map\("users"\)/);
     assert.match(schemaSource, /@@map\("system_role_migration_issues"\)/);

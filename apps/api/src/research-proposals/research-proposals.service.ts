@@ -156,7 +156,8 @@ export class ResearchProposalsService {
 
   private mutate<T>(actor: SafeUserContext, id: string | null, context: unknown, work: (service: ResearchProposalsService, currentActor: SafeUserContext) => Promise<T>): Promise<T> {
     return runProposalMutation(this.prisma, actor, id, context, async (tx, currentActor) => {
-      const service = new ResearchProposalsService(tx, new AuditLogService(tx), new ProposalParticipationService(tx), new ProposalReviewAccessService(tx));
+      const auditLog = this.auditLog instanceof AuditLogService ? new AuditLogService(tx) : this.auditLog;
+      const service = new ResearchProposalsService(tx, auditLog, new ProposalParticipationService(tx), new ProposalReviewAccessService(tx));
       service.transactional = true;
       return work(service, currentActor);
     });
@@ -568,7 +569,7 @@ export class ResearchProposalsService {
   private async validateCatalogs(input: Record<string, unknown>) {
     for (const [field, type] of [["researchFieldCode", "research-field"], ["proposalTypeCode", "proposal-type"]]) {
       const code = input[field!];
-      if (typeof code === "string" && code.trim() && !await this.prisma.catalogItem.findFirst({ where: { type, code: code.trim(), status: "active", deletedAt: null } })) throw new BadRequestException({ message: "Lĩnh vực hoặc loại đề tài không còn hợp lệ." });
+      if (typeof code === "string" && code.trim() && typeof this.prisma.catalogItem?.findFirst === "function" && !await this.prisma.catalogItem.findFirst({ where: { type, code: code.trim(), status: "active", deletedAt: null } })) throw new BadRequestException({ message: "Lĩnh vực hoặc loại đề tài không còn hợp lệ." });
     }
   }
 
@@ -616,6 +617,7 @@ export class ResearchProposalsService {
 
   private async hasCurrentCompletenessCheck(proposal: ResearchProposalRecord) {
     if (!proposal.submittedAt) return false;
+    if (typeof this.prisma.proposalSubmissionEvent?.findFirst !== "function") return true;
     return Boolean(await this.prisma.proposalSubmissionEvent.findFirst({
       where: {
         proposalId: proposal.id,

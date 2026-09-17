@@ -86,22 +86,22 @@ export type DashboardSnapshot = {
 
 export const proposals: Proposal[] = [
   {
-    id: "hvqy-2026-001",
-    code: "HVQY-2026-001",
-    title: "Đánh giá hiệu quả can thiệp phục hồi chức năng sau chấn thương chi dưới",
-    unit: "Khoa Chấn thương chỉnh hình",
-    owner: "TS. Nguyễn Minh Đức",
+    id: "prop-seed-001",
+    code: "HVQY-2026-NC01",
+    title: "Nghiên cứu ứng dụng trí tuệ nhân tạo trong hỗ trợ chẩn đoán hình ảnh chấn thương sọ não",
+    unit: "Khoa Toán - Tin học",
+    owner: "TS. Phạm Anh Tuấn",
     intakePeriod: "Đợt 1/2026",
-    status: "pending-approval",
+    status: "in-review",
     submittedAt: "22/04/2026",
     dueDate: "30/04/2026"
   },
   {
-    id: "hvqy-2026-014",
-    code: "HVQY-2026-014",
-    title: "Ứng dụng mô hình dự báo nguy cơ nhiễm khuẩn bệnh viện",
-    unit: "Khoa Kiểm soát nhiễm khuẩn",
-    owner: "PGS. Trần Thu Hà",
+    id: "prop-seed-002",
+    code: "BQP-2026-Y03",
+    title: "Nghiên cứu hiệu quả điều trị phục hồi chức năng sau ghép tạng tại các bệnh viện quân đội",
+    unit: "Bệnh viện Quân y 103",
+    owner: "TS. Phạm Anh Tuấn",
     intakePeriod: "Đợt 1/2026",
     status: "in-review",
     submittedAt: "20/04/2026",
@@ -283,17 +283,44 @@ export function getDashboardSnapshot(role: UserRole): DashboardSnapshot {
     case "RESEARCHER_INTERNAL_USER":
       return {
         eyebrow: "Công việc cá nhân",
-        title: "Dashboard chủ nhiệm đề tài",
-        description: "Tổng hợp hồ sơ, đề tài đang thực hiện, báo cáo định kỳ và công việc được giao cho chủ nhiệm.",
-        primaryActionLabel: "Mở hồ sơ của tôi",
-        primaryActionHref: "/my-proposals",
+        title: "Dashboard nhà nghiên cứu khoa học",
+        description: "Tổng hợp nhiệm vụ nghiên cứu khoa học và công nghệ, hồ sơ đề xuất, lời mời phản biện và báo cáo định kỳ.",
+        primaryActionLabel: "Được mời phản biện",
+        primaryActionHref: "/invitation-to-review",
         kpis: [
-          { label: "Hồ sơ đang chuẩn bị", value: "02", meta: "Cần bổ sung thành phần trước khi nộp", tone: "warning" },
-          { label: "Hồ sơ đã nộp", value: "04", meta: "Đang theo dõi quá trình thẩm định", tone: "info" },
-          { label: "Đề tài đang thực hiện", value: "03", meta: "01 đề tài cần cập nhật tiến độ", tone: "default" },
+          { label: "Được mời phản biện", value: "02", meta: "02 hồ sơ đang chờ đánh giá", tone: "warning" },
+          { label: "Nhiệm vụ KH&CN", value: "04", meta: "02 đề tài đang thực hiện", tone: "default" },
+          { label: "Hồ sơ của tôi", value: "06", meta: "04 đã nộp, 02 đang chuẩn bị", tone: "info" },
           { label: "Báo cáo cần nộp", value: "02", meta: "Một mốc đến hạn trong 5 ngày tới", tone: "danger" }
         ],
         panels: [
+          {
+            variant: "table",
+            title: "Được mời phản biện",
+            subtitle: "Hồ sơ đề tài bạn được mời tham gia đánh giá, phản biện",
+            actionLabel: "Vào đánh giá",
+            actionHref: "/invitation-to-review",
+            rows: [
+              {
+                code: "HVQY-2026-NC02",
+                title: "Nghiên cứu ứng dụng kỹ thuật giải trình tự gen thế hệ mới trong chẩn đoán sớm bệnh lý tim mạch di truyền",
+                meta: "Vai trò: Phản biện độc lập",
+                unit: "Khoa Tim mạch",
+                status: "in-review",
+                dueDate: "2026-09-30",
+                href: "/invitation-to-review"
+              },
+              {
+                code: "BQP-2026-Y03",
+                title: "Nghiên cứu hiệu quả điều trị phục hồi chức năng sau ghép tạng tại các bệnh viện quân đội",
+                meta: "Vai trò: Thành viên Hội đồng",
+                unit: "Bệnh viện Quân y 103",
+                status: "in-review",
+                dueDate: "2026-10-15",
+                href: "/invitation-to-review"
+              }
+            ]
+          },
           {
             variant: "table",
             title: "Hồ sơ của tôi",
@@ -312,11 +339,12 @@ export function getDashboardSnapshot(role: UserRole): DashboardSnapshot {
           },
           {
             variant: "list",
-            title: "Công việc của tôi",
-            subtitle: "Nhiệm vụ ưu tiên cần xử lý trong ngày",
-            actionLabel: "Mở công việc",
+            title: "Nhiệm vụ của tôi",
+            subtitle: "Nhiệm vụ ưu tiên cần xử lý",
+            actionLabel: "Mở nhiệm vụ",
             actionHref: "/my-tasks",
             items: [
+              { title: "Đánh giá hồ sơ đề tài HVQY-2026-NC02", meta: "Hạn 30/09/2026 - Mức ưu tiên cao" },
               { title: "Hoàn thiện dự toán kinh phí đề tài thận cấp", meta: "Hạn 29/04/2026 - Mức ưu tiên cao" },
               { title: "Cập nhật biên bản họp nhóm nghiên cứu", meta: "Hạn 30/04/2026 - Trung tâm Huấn luyện kỹ năng y khoa" },
               { title: "Rà soát tài liệu bổ sung đề tài chấn thương", meta: "Hạn 02/05/2026 - Cần đối chiếu với Phòng QLKH" }
@@ -333,17 +361,84 @@ export function getDashboardSnapshot(role: UserRole): DashboardSnapshot {
               { label: "Báo cáo", height: "118px" },
               { label: "Minh chứng", height: "146px" }
             ]
+          }
+        ]
+      };
+    case "EXTERNAL_RESEARCHER_USER":
+      return {
+        eyebrow: "Công việc chuyên gia",
+        title: "Dashboard nhà khoa học & chuyên gia",
+        description: "Tổng hợp các nhiệm vụ nghiên cứu khoa học và công nghệ, lời mời phản biện và lý lịch khoa học cá nhân.",
+        primaryActionLabel: "Xem hồ sơ được mời phản biện",
+        primaryActionHref: "/invitation-to-review",
+        kpis: [
+          { label: "Được mời phản biện", value: "02", meta: "02 hồ sơ đang chờ gửi phiếu đánh giá", tone: "warning" },
+          { label: "Nhiệm vụ tham gia", value: "03", meta: "Đang tham gia phối hợp nghiên cứu", tone: "info" },
+          { label: "Đánh giá đã hoàn tất", value: "05", meta: "Đã nộp phiếu nhận xét chuyên môn", tone: "default" },
+          { label: "Thông báo mới", value: "03", meta: "Nhắc việc và phân công phản biện", tone: "danger" }
+        ],
+        panels: [
+          {
+            variant: "table",
+            title: "Được mời phản biện",
+            subtitle: "Hồ sơ chuyên gia được phân công đánh giá",
+            actionLabel: "Vào đánh giá",
+            actionHref: "/invitation-to-review",
+            rows: [
+              {
+                code: "HVQY-2026-NC02",
+                title: "Nghiên cứu ứng dụng kỹ thuật giải trình tự gen thế hệ mới trong chẩn đoán sớm bệnh lý tim mạch di truyền",
+                meta: "Vai trò: Phản biện độc lập",
+                unit: "Khoa Tim mạch",
+                status: "in-review",
+                dueDate: "2026-09-30",
+                href: "/invitation-to-review"
+              },
+              {
+                code: "BQP-2026-Y03",
+                title: "Nghiên cứu hiệu quả điều trị phục hồi chức năng sau ghép tạng tại các bệnh viện quân đội",
+                meta: "Vai trò: Thành viên Hội đồng",
+                unit: "Bệnh viện Quân y 103",
+                status: "in-review",
+                dueDate: "2026-10-15",
+                href: "/invitation-to-review"
+              }
+            ]
           },
           {
             variant: "list",
-            title: "Báo cáo định kỳ",
-            subtitle: "Các kỳ báo cáo cần lưu ý",
-            actionLabel: "Mở báo cáo định kỳ",
-            actionHref: "/periodic-reports",
+            title: "Nhiệm vụ của tôi",
+            subtitle: "Nhiệm vụ ưu tiên cần xử lý",
+            actionLabel: "Mở nhiệm vụ",
+            actionHref: "/my-tasks",
             items: [
-              { title: "Báo cáo quý II đề tài cấp Học viện", meta: "Hạn 05/05/2026 - Đang chuẩn bị tệp đính kèm" },
-              { title: "Báo cáo tiến độ nhóm đề tài cấp cơ sở", meta: "Hạn 10/05/2026 - Chờ xác nhận thành viên" },
-              { title: "Cập nhật bảng kê chi phí đợt 1", meta: "Hạn 12/05/2026 - Cần đối chiếu phòng Tài chính" }
+              { title: "Đánh giá hồ sơ đề tài HVQY-2026-NC02", meta: "Hạn 30/09/2026 - Mức ưu tiên cao" },
+              { title: "Gửi nhận xét phản biện đề tài BQP-2026-Y03", meta: "Hạn 15/10/2026 - Ban Quản lý KHQS" },
+              { title: "Cập nhật thông tin lý lịch khoa học năm 2026", meta: "Hoàn thiện hồ sơ chuyên gia" }
+            ]
+          },
+          {
+            variant: "chart",
+            title: "Hoạt động phản biện",
+            subtitle: "Số lượng hồ sơ đã tham gia đánh giá theo đợt",
+            bars: [
+              { label: "Đợt 1/2025", height: "90px" },
+              { label: "Đợt 2/2025", height: "135px" },
+              { label: "Đợt 3/2025", height: "160px" },
+              { label: "Đợt 1/2026", height: "120px" },
+              { label: "Hiện tại", height: "145px" }
+            ]
+          },
+          {
+            variant: "list",
+            title: "Thông báo & Nhắc việc",
+            subtitle: "Các cập nhật liên quan đến lời mời phản biện",
+            actionLabel: "Xem tất cả",
+            actionHref: "/notifications",
+            items: [
+              { title: "Mời phản biện đề tài gen tim mạch", meta: "Hạn 30/09/2026 - Mới phân công" },
+              { title: "Phiên họp hội đồng nghiệm thu đề tài ghép tạng", meta: "Dự kiến 20/10/2026 tại Phòng Hội thảo" },
+              { title: "Nhắc cập nhật lý lịch khoa học định kỳ", meta: "Đã xác nhận dữ liệu đợt 1" }
             ]
           }
         ]

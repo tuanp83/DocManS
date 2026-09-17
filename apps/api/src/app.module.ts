@@ -6,6 +6,8 @@ import { ProposalEvaluationsModule } from "./proposal-evaluations/proposal-evalu
 import { ProposalIntakePeriodsModule } from "./proposal-intake-periods/proposal-intake-periods.module.js";
 import { ResearchProposalsModule } from "./research-proposals/research-proposals.module.js";
 import { ResearcherProfilesModule } from "./researcher-profiles/researcher-profiles.module.js";
+import { NotificationsModule } from "./notifications/notifications.module.js";
+import { ScientificDocumentsModule } from "./scientific-documents/scientific-documents.module.js";
 
 @Controller("api/v1/health")
 class HealthController {
@@ -20,7 +22,17 @@ class HealthController {
 }
 
 @Module({
-  imports: [AuthModule, AdminModule, FilesModule, ProposalIntakePeriodsModule, ResearchProposalsModule, ProposalEvaluationsModule, ResearcherProfilesModule],
+  imports: [
+    AuthModule,
+    AdminModule,
+    FilesModule,
+    ProposalIntakePeriodsModule,
+    ResearchProposalsModule,
+    ProposalEvaluationsModule,
+    ResearcherProfilesModule,
+    NotificationsModule,
+    ScientificDocumentsModule
+  ],
   controllers: [HealthController]
 })
 export class AppModule {}

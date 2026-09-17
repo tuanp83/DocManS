@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { Client as MinioClient } from "minio";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 
@@ -22,6 +23,16 @@ const users = [
     passwordHash:
       "scrypt:user-admin:88577689e88df3ec17a117384f8a68ff4e516d4ccc3c4a7783764eb66f4a72a8c35ae574d915e01d7ba3fe5e3a800b30463e721c488544ca3fc90192544e0c43",
     displayName: "TS. Đỗ Tiến Thành",
+    status: "active",
+    systemRole: "SYSTEM_ADMIN",
+    unit: "Khoa Toán - Tin học"
+  },
+  {
+    id: "user-admin2",
+    username: "admin2",
+    passwordHash:
+      "scrypt:user-admin2:ed227cd890900c9018d82e5beeffcad1b8eecaf534b6d30fa5e91d674e0454225563312ec5037e1a38ae9cf01bf6a74a1966fd597a8f178a8dd7352d4493b514",
+    displayName: "TS. Phạm Anh Tuấn",
     status: "active",
     systemRole: "SYSTEM_ADMIN",
     unit: "Khoa Toán - Tin học"
@@ -168,10 +179,12 @@ const organizationUnits = [
 // refused and the demo cannot reach the approval step.
 const additionalOrganizationScopes = {
   "user-admin": ["org-bgq", "org-khqs", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
+  "user-admin2": ["org-bgq", "org-khqs", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
   "user-leadership": ["org-hvqy", "org-khti", "org-khqs", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
   "user-staff": ["org-khti", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
   "user-staff-hdtien1": ["org-khti", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
-  "user-staff-hdtien2": ["org-khti", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"]
+  "user-staff-hdtien2": ["org-khti", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
+  "user-reviewer": ["org-khti"]
 };
 
 for (const [id, code, name] of organizationUnits) {
@@ -353,4 +366,740 @@ await prisma.notificationTemplate.upsert({
   }
 });
 
+// Seed researcher profiles for internal researchers
+const doctorDegree = await prisma.catalogItem.findFirst({ where: { type: "academic-degree", code: "doctor" } });
+
+const patuanProfile = await prisma.researcherProfile.upsert({
+  where: { linkedUserId: "user-pi" },
+  update: {
+    fullName: "TS. Phạm Anh Tuấn",
+    fullNameKey: "pham anh tuan",
+    profileType: "INTERNAL",
+    managementOrganizationUnitId: "org-khti",
+    academicDegreeCatalogItemId: doctorDegree?.id,
+    title: "Tiến sĩ",
+    position: "Chủ nhiệm Bộ môn",
+    militaryRank: "Thượng tá",
+    contactEmail: "patuan@hvqy.edu.vn",
+    contactEmailKey: "patuan@hvqy.edu.vn",
+    contactPhone: "0912345678",
+    contactPhoneKey: "0912345678",
+    status: "ACTIVE",
+    curriculumVitae: {
+      personalInfo: {
+        avatarUrl: "/logo.png",
+        scientistType: "domestic",
+        fullName: "TS. Phạm Anh Tuấn",
+        gender: "Nam",
+        birthDate: "1978-08-15",
+        birthPlace: "Hà Nội",
+        nationality: "Việt Nam",
+        idNumber: "001078009876",
+        idIssueDate: "2021-04-12",
+        idIssuePlace: "Cục Cảnh sát QLHC về TTXH",
+        organization: "Học viện Quân y",
+        position: "Chủ nhiệm Bộ môn Toán - Tin học",
+        militaryRank: "Thượng tá",
+        academicTitle: "Tiến sĩ",
+        highestDegree: "Tiến sĩ",
+        degreeYear: "2012",
+        academicRankEn: "PhD. Senior Lecturer",
+        researchFieldDetail: "Trí tuệ nhân tạo, Xử lý ảnh y tế, Hệ thống quản lý dữ liệu y học quân sự",
+        keywords: "AI in Medicine, Medical Imaging, Deep Learning, Health Informatics",
+        phone: "0912345678",
+        email: "patuan@hvqy.edu.vn",
+        address: "Số 160 Phùng Hưng, Phường Phúc La, Quận Hà Đông, TP. Hà Nội",
+        bankAccount: "19028889998888",
+        bankName: "Ngân hàng TMCP Quân đội (MB Bank)",
+        bankBranch: "Chi nhánh Thanh Xuân, Hà Nội",
+        smartCaSerial: "VMMU-CA-PAT-2026-99",
+        dataSharingConsent: true,
+        languages: [
+          { language: "Tiếng Anh", level: "Thành thạo", certificate: "IELTS 7.5" },
+          { language: "Tiếng Nga", level: "Khá", certificate: "B2 Quân sự" }
+        ]
+      },
+      training: [
+        {
+          degree: "Đại học",
+          field: "Công nghệ thông tin",
+          institution: "Đại học Bách khoa Hà Nội",
+          graduationYear: "2000",
+          trainingType: "Chính quy",
+          thesisTitle: "Hệ thống truyền tải ảnh y tế chuẩn DICOM"
+        },
+        {
+          degree: "Thạc sĩ",
+          field: "Khoa học máy tính",
+          institution: "Học viện Kỹ thuật Quân sự",
+          graduationYear: "2005",
+          trainingType: "Chính quy",
+          thesisTitle: "Phân đoạn ảnh cộng hưởng từ não bộ bằng mạng nơ-ron nhân tạo"
+        },
+        {
+          degree: "Tiến sĩ",
+          field: "Khoa học máy tính",
+          institution: "Đại học Tổng hợp Sydney (Australia)",
+          graduationYear: "2012",
+          trainingType: "Chính quy",
+          thesisTitle: "Machine learning algorithms for early detection of neurological disorders from 3D MRI scans"
+        }
+      ],
+      workHistory: [
+        {
+          period: "2001 - 2006",
+          institution: "Học viện Quân y",
+          position: "Giảng viên Bộ môn Tin học",
+          address: "160 Phùng Hưng, Hà Đông, Hà Nội"
+        },
+        {
+          period: "2007 - 2012",
+          institution: "Đại học Tổng hợp Sydney (Australia)",
+          position: "Nghiên cứu sinh - Trợ lý nghiên cứu",
+          address: "Camperdown NSW 2006, Australia"
+        },
+        {
+          period: "2013 - 2018",
+          institution: "Học viện Quân y",
+          position: "Phó Chủ nhiệm Bộ môn Toán - Tin học",
+          address: "160 Phùng Hưng, Hà Đông, Hà Nội"
+        },
+        {
+          period: "2019 - Nay",
+          institution: "Học viện Quân y",
+          position: "Chủ nhiệm Bộ môn Toán - Tin học",
+          address: "160 Phùng Hưng, Hà Đông, Hà Nội"
+        }
+      ],
+      researchSummary: "Chuyên gia về trí tuệ nhân tạo trong y tế với hơn 20 năm kinh nghiệm nghiên cứu và giảng dạy tại Học viện Quân y. Đã chủ nhiệm và tham gia 8 đề tài nghiên cứu khoa học các cấp, công bố hơn 35 bài báo quốc tế thuộc danh mục ISI/Scopus và nhiều công trình tiêu biểu phục vụ y học quân sự.",
+      publications: [
+        {
+          category: "Tạp chí quốc tế ISI/Scopus",
+          title: "A multimodal deep learning framework for brain trauma outcome prediction",
+          year: "2024",
+          journalOrPublisher: "IEEE Journal of Biomedical and Health Informatics",
+          issnOrIsbn: "2168-2194",
+          role: "Tác giả chính"
+        },
+        {
+          category: "Tạp chí uy tín trong nước",
+          title: "Nghiên cứu ứng dụng mạng học sâu nhận dạng tổn thương xuất huyết sọ não trên phim cắt lớp vi tính",
+          year: "2025",
+          journalOrPublisher: "Tạp chí Y - Dược học Quân sự",
+          issnOrIsbn: "1859-1892",
+          role: "Tác giả chính"
+        },
+        {
+          category: "Sách chuyên khảo / Giáo trình",
+          title: "Giáo trình Tin học ứng dụng trong Y học lâm sàng",
+          year: "2023",
+          journalOrPublisher: "NXB Quân đội nhân dân",
+          issnOrIsbn: "978-604-51-1234-5",
+          role: "Chủ biên"
+        }
+      ],
+      intellectualProperty: [
+        {
+          category: "Bản quyền phần mềm",
+          title: "Hệ thống phần mềm hỗ trợ chẩn đoán tự động xuất huyết nội sọ trên ảnh CT",
+          number: "Số 1234/2024/QTG",
+          year: "2024",
+          authority: "Cục Bản quyền tác giả",
+          role: "Chủ trì"
+        },
+        {
+          category: "Giải pháp hữu ích",
+          title: "Quy trình phân tầng nguy cơ tổn thương đa chấn thương sử dụng mô hình học máy",
+          number: "Số 5678/GPHI",
+          year: "2023",
+          authority: "Cục Sở hữu trí tuệ",
+          role: "Đồng tác giả"
+        }
+      ],
+      awards: [
+        {
+          title: "Giải thưởng Nhân tài Đất Việt trong lĩnh vực Y Dược học",
+          year: "2024",
+          authority: "Ban Tổ chức Nhân tài Đất Việt & Bộ Y tế",
+          description: "Công trình giải pháp chuyển đổi số y tế quân sự"
+        },
+        {
+          title: "Danh hiệu Thầy thuốc Ưu tú",
+          year: "2023",
+          authority: "Chủ tịch nước CHXHCN Việt Nam",
+          description: "Đóng góp xuất sắc trong đào tạo và nghiên cứu khoa học quân y"
+        }
+      ],
+      projects: [
+        {
+          level: "Cấp Học viện",
+          code: "HVQY-2026-NC01",
+          title: "Nghiên cứu ứng dụng trí tuệ nhân tạo trong hỗ trợ chẩn đoán hình ảnh chấn thương sọ não",
+          period: "2026 - 2027",
+          role: "Chủ nhiệm đề tài",
+          status: "Đang thực hiện"
+        },
+        {
+          level: "Cấp Bộ Quốc phòng",
+          code: "BQP-2024-Y04",
+          title: "Đánh giá hiệu quả phác đồ can thiệp sớm ở bệnh nhân đa chấn thương tại tuyến quân y cơ sở",
+          period: "2024 - 2025",
+          role: "Thành viên nghiên cứu chính",
+          status: "Đã nghiệm thu Xuất sắc"
+        }
+      ]
+    }
+  },
+  create: {
+    id: "profile-patuan",
+    managementOrganizationUnitId: "org-khti",
+    linkedUserId: "user-pi",
+    fullName: "TS. Phạm Anh Tuấn",
+    fullNameKey: "pham anh tuan",
+    profileType: "INTERNAL",
+    academicDegreeCatalogItemId: doctorDegree?.id,
+    title: "Tiến sĩ",
+    position: "Chủ nhiệm Bộ môn",
+    militaryRank: "Thượng tá",
+    contactEmail: "patuan@hvqy.edu.vn",
+    contactEmailKey: "patuan@hvqy.edu.vn",
+    contactPhone: "0912345678",
+    contactPhoneKey: "0912345678",
+    status: "ACTIVE",
+    createdById: "user-admin",
+    updatedById: "user-admin",
+    curriculumVitae: {
+      personalInfo: {
+        avatarUrl: "/logo.png",
+        scientistType: "domestic",
+        fullName: "TS. Phạm Anh Tuấn",
+        gender: "Nam",
+        birthDate: "1978-08-15",
+        birthPlace: "Hà Nội",
+        nationality: "Việt Nam",
+        idNumber: "001078009876",
+        idIssueDate: "2021-04-12",
+        idIssuePlace: "Cục Cảnh sát QLHC về TTXH",
+        organization: "Học viện Quân y",
+        position: "Chủ nhiệm Bộ môn Toán - Tin học",
+        militaryRank: "Thượng tá",
+        academicTitle: "Tiến sĩ",
+        highestDegree: "Tiến sĩ",
+        degreeYear: "2012",
+        academicRankEn: "PhD. Senior Lecturer",
+        researchFieldDetail: "Trí tuệ nhân tạo, Xử lý ảnh y tế, Hệ thống quản lý dữ liệu y học quân sự",
+        keywords: "AI in Medicine, Medical Imaging, Deep Learning, Health Informatics",
+        phone: "0912345678",
+        email: "patuan@hvqy.edu.vn",
+        address: "Số 160 Phùng Hưng, Phường Phúc La, Quận Hà Đông, TP. Hà Nội",
+        bankAccount: "19028889998888",
+        bankName: "Ngân hàng TMCP Quân đội (MB Bank)",
+        bankBranch: "Chi nhánh Thanh Xuân, Hà Nội",
+        smartCaSerial: "VMMU-CA-PAT-2026-99",
+        dataSharingConsent: true,
+        languages: [
+          { language: "Tiếng Anh", level: "Thành thạo", certificate: "IELTS 7.5" },
+          { language: "Tiếng Nga", level: "Khá", certificate: "B2 Quân sự" }
+        ]
+      },
+      training: [
+        {
+          degree: "Đại học",
+          field: "Công nghệ thông tin",
+          institution: "Đại học Bách khoa Hà Nội",
+          graduationYear: "2000",
+          trainingType: "Chính quy",
+          thesisTitle: "Hệ thống truyền tải ảnh y tế chuẩn DICOM"
+        },
+        {
+          degree: "Thạc sĩ",
+          field: "Khoa học máy tính",
+          institution: "Học viện Kỹ thuật Quân sự",
+          graduationYear: "2005",
+          trainingType: "Chính quy",
+          thesisTitle: "Phân đoạn ảnh cộng hưởng từ não bộ bằng mạng nơ-ron nhân tạo"
+        },
+        {
+          degree: "Tiến sĩ",
+          field: "Khoa học máy tính",
+          institution: "Đại học Tổng hợp Sydney (Australia)",
+          graduationYear: "2012",
+          trainingType: "Chính quy",
+          thesisTitle: "Machine learning algorithms for early detection of neurological disorders from 3D MRI scans"
+        }
+      ],
+      workHistory: [
+        {
+          period: "2001 - 2006",
+          institution: "Học viện Quân y",
+          position: "Giảng viên Bộ môn Tin học",
+          address: "160 Phùng Hưng, Hà Đông, Hà Nội"
+        },
+        {
+          period: "2007 - 2012",
+          institution: "Đại học Tổng hợp Sydney (Australia)",
+          position: "Nghiên cứu sinh - Trợ lý nghiên cứu",
+          address: "Camperdown NSW 2006, Australia"
+        },
+        {
+          period: "2013 - 2018",
+          institution: "Học viện Quân y",
+          position: "Phó Chủ nhiệm Bộ môn Toán - Tin học",
+          address: "160 Phùng Hưng, Hà Đông, Hà Nội"
+        },
+        {
+          period: "2019 - Nay",
+          institution: "Học viện Quân y",
+          position: "Chủ nhiệm Bộ môn Toán - Tin học",
+          address: "160 Phùng Hưng, Hà Đông, Hà Nội"
+        }
+      ],
+      researchSummary: "Chuyên gia về trí tuệ nhân tạo trong y tế với hơn 20 năm kinh nghiệm nghiên cứu và giảng dạy tại Học viện Quân y. Đã chủ nhiệm và tham gia 8 đề tài nghiên cứu khoa học các cấp, công bố hơn 35 bài báo quốc tế thuộc danh mục ISI/Scopus và nhiều công trình tiêu biểu phục vụ y học quân sự.",
+      publications: [
+        {
+          category: "Tạp chí quốc tế ISI/Scopus",
+          title: "A multimodal deep learning framework for brain trauma outcome prediction",
+          year: "2024",
+          journalOrPublisher: "IEEE Journal of Biomedical and Health Informatics",
+          issnOrIsbn: "2168-2194",
+          role: "Tác giả chính"
+        },
+        {
+          category: "Tạp chí uy tín trong nước",
+          title: "Nghiên cứu ứng dụng mạng học sâu nhận dạng tổn thương xuất huyết sọ não trên phim cắt lớp vi tính",
+          year: "2025",
+          journalOrPublisher: "Tạp chí Y - Dược học Quân sự",
+          issnOrIsbn: "1859-1892",
+          role: "Tác giả chính"
+        },
+        {
+          category: "Sách chuyên khảo / Giáo trình",
+          title: "Giáo trình Tin học ứng dụng trong Y học lâm sàng",
+          year: "2023",
+          journalOrPublisher: "NXB Quân đội nhân dân",
+          issnOrIsbn: "978-604-51-1234-5",
+          role: "Chủ biên"
+        }
+      ],
+      intellectualProperty: [
+        {
+          category: "Bản quyền phần mềm",
+          title: "Hệ thống phần mềm hỗ trợ chẩn đoán tự động xuất huyết nội sọ trên ảnh CT",
+          number: "Số 1234/2024/QTG",
+          year: "2024",
+          authority: "Cục Bản quyền tác giả",
+          role: "Chủ trì"
+        },
+        {
+          category: "Giải pháp hữu ích",
+          title: "Quy trình phân tầng nguy cơ tổn thương đa chấn thương sử dụng mô hình học máy",
+          number: "Số 5678/GPHI",
+          year: "2023",
+          authority: "Cục Sở hữu trí tuệ",
+          role: "Đồng tác giả"
+        }
+      ],
+      awards: [
+        {
+          title: "Giải thưởng Nhân tài Đất Việt trong lĩnh vực Y Dược học",
+          year: "2024",
+          authority: "Ban Tổ chức Nhân tài Đất Việt & Bộ Y tế",
+          description: "Công trình giải pháp chuyển đổi số y tế quân sự"
+        },
+        {
+          title: "Danh hiệu Thầy thuốc Ưu tú",
+          year: "2023",
+          authority: "Chủ tịch nước CHXHCN Việt Nam",
+          description: "Đóng góp xuất sắc trong đào tạo và nghiên cứu khoa học quân y"
+        }
+      ],
+      projects: [
+        {
+          level: "Cấp Học viện",
+          code: "HVQY-2026-NC01",
+          title: "Nghiên cứu ứng dụng trí tuệ nhân tạo trong hỗ trợ chẩn đoán hình ảnh chấn thương sọ não",
+          period: "2026 - 2027",
+          role: "Chủ nhiệm đề tài",
+          status: "Đang thực hiện"
+        },
+        {
+          level: "Cấp Bộ Quốc phòng",
+          code: "BQP-2024-Y04",
+          title: "Đánh giá hiệu quả phác đồ can thiệp sớm ở bệnh nhân đa chấn thương tại tuyến quân y cơ sở",
+          period: "2024 - 2025",
+          role: "Thành viên nghiên cứu chính",
+          status: "Đã nghiệm thu Xuất sắc"
+        }
+      ]
+    }
+  }
+});
+
+const existingLinkPatuan = await prisma.researcherProfileAccountLink.findFirst({
+  where: { researcherProfileId: patuanProfile.id, status: "ACTIVE" }
+});
+if (!existingLinkPatuan) {
+  await prisma.researcherProfileAccountLink.create({
+    data: {
+      id: "link-patuan",
+      researcherProfileId: patuanProfile.id,
+      userId: "user-pi",
+      status: "ACTIVE",
+      effectiveFrom: new Date(),
+      reason: "seed-profile-link",
+      createdById: "user-admin"
+    }
+  });
+}
+
+const nmtrungProfile = await prisma.researcherProfile.upsert({
+  where: { linkedUserId: "user-reviewer" },
+  update: {
+    fullName: "TS. Đỗ Minh Trung",
+    fullNameKey: "do minh trung",
+    profileType: "INTERNAL",
+    managementOrganizationUnitId: "org-bqlkhqs",
+    academicDegreeCatalogItemId: doctorDegree?.id,
+    title: "Tiến sĩ",
+    position: "Thành viên Hội đồng - Ban Quản lý KHQS",
+    militaryRank: "Thượng tá",
+    contactEmail: "nmtrung@hvqy.edu.vn",
+    contactEmailKey: "nmtrung@hvqy.edu.vn",
+    contactPhone: "0987654321",
+    contactPhoneKey: "0987654321",
+    status: "ACTIVE"
+  },
+  create: {
+    id: "profile-nmtrung",
+    managementOrganizationUnitId: "org-bqlkhqs",
+    linkedUserId: "user-reviewer",
+    fullName: "TS. Đỗ Minh Trung",
+    fullNameKey: "do minh trung",
+    profileType: "INTERNAL",
+    academicDegreeCatalogItemId: doctorDegree?.id,
+    title: "Tiến sĩ",
+    position: "Thành viên Hội đồng - Ban Quản lý KHQS",
+    militaryRank: "Thượng tá",
+    contactEmail: "nmtrung@hvqy.edu.vn",
+    contactEmailKey: "nmtrung@hvqy.edu.vn",
+    contactPhone: "0987654321",
+    contactPhoneKey: "0987654321",
+    status: "ACTIVE",
+    createdById: "user-admin",
+    updatedById: "user-admin"
+  }
+});
+
+const existingLinkTrung = await prisma.researcherProfileAccountLink.findFirst({
+  where: { researcherProfileId: nmtrungProfile.id, status: "ACTIVE" }
+});
+if (!existingLinkTrung) {
+  await prisma.researcherProfileAccountLink.create({
+    data: {
+      id: "link-nmtrung",
+      researcherProfileId: nmtrungProfile.id,
+      userId: "user-reviewer",
+      status: "ACTIVE",
+      effectiveFrom: new Date(),
+      reason: "seed-profile-link",
+      createdById: "user-admin"
+    }
+  });
+}
+
+// Seed sample proposals
+const seedIntake = await prisma.proposalIntakePeriod.findFirst({ where: { code: "INTAKE-2026-SEED" } });
+
+const proposal1 = await prisma.researchProposal.upsert({
+  where: { code: "HVQY-2026-NC01" },
+  update: {
+    title: "Nghiên cứu ứng dụng trí tuệ nhân tạo trong hỗ trợ chẩn đoán hình ảnh chấn thương sọ não",
+    status: "in_review",
+    ownerId: "user-pi",
+    hostOrganizationUnitId: "org-khti",
+    intakePeriodId: seedIntake.id
+  },
+  create: {
+    id: "prop-seed-001",
+    code: "HVQY-2026-NC01",
+    title: "Nghiên cứu ứng dụng trí tuệ nhân tạo trong hỗ trợ chẩn đoán hình ảnh chấn thương sọ não",
+    intakePeriodId: seedIntake.id,
+    ownerId: "user-pi",
+    hostOrganizationUnitId: "org-khti",
+    status: "in_review",
+    submittedAt: new Date(),
+    submittedById: "user-pi"
+  }
+});
+
+const proposal2 = await prisma.researchProposal.upsert({
+  where: { code: "BQP-2026-Y03" },
+  update: {
+    title: "Nghiên cứu hiệu quả điều trị phục hồi chức năng sau ghép tạng tại các bệnh viện quân đội",
+    status: "in_review",
+    ownerId: "user-researcher1",
+    hostOrganizationUnitId: "org-khti",
+    intakePeriodId: seedIntake.id
+  },
+  create: {
+    id: "prop-seed-002",
+    code: "BQP-2026-Y03",
+    title: "Nghiên cứu hiệu quả điều trị phục hồi chức năng sau ghép tạng tại các bệnh viện quân đội",
+    intakePeriodId: seedIntake.id,
+    ownerId: "user-researcher1",
+    hostOrganizationUnitId: "org-khti",
+    status: "in_review",
+    submittedAt: new Date(),
+    submittedById: "user-researcher1"
+  }
+});
+
+// Seed Reviewer assignments
+const dueIn14Days = new Date();
+dueIn14Days.setDate(dueIn14Days.getDate() + 14);
+
+await prisma.proposalReviewAssignment.upsert({
+  where: { id: "assignment-patuan-002" },
+  update: {
+    status: "assigned",
+    dueDate: dueIn14Days
+  },
+  create: {
+    id: "assignment-patuan-002",
+    proposalId: proposal2.id,
+    reviewerUserId: "user-pi",
+    researcherProfileId: patuanProfile.id,
+    assignmentRole: "independent_reviewer",
+    status: "assigned",
+    assignedById: "user-staff",
+    dueDate: dueIn14Days
+  }
+});
+
+await prisma.proposalReviewAssignment.upsert({
+  where: { id: "assignment-nmtrung-001" },
+  update: {
+    status: "assigned",
+    dueDate: dueIn14Days
+  },
+  create: {
+    id: "assignment-nmtrung-001",
+    proposalId: proposal1.id,
+    reviewerUserId: "user-reviewer",
+    researcherProfileId: nmtrungProfile.id,
+    assignmentRole: "council_member",
+    status: "assigned",
+    assignedById: "user-staff",
+    dueDate: dueIn14Days
+  }
+});
+
+// Seed notifications
+await prisma.userNotification.upsert({
+  where: { id: "notif-patuan-001" },
+  update: {
+    title: "Mời phản biện đề tài: BQP-2026-Y03",
+    message: "Bạn được mời tham gia phản biện độc lập cho đề tài \"Nghiên cứu hiệu quả điều trị phục hồi chức năng sau ghép tạng tại các bệnh viện quân đội\". Thời hạn nhận xét đến ngày " + dueIn14Days.toLocaleDateString("vi-VN") + ".",
+    type: "INVITATION_TO_REVIEW",
+    link: "/invitation-to-review",
+    isRead: false
+  },
+  create: {
+    id: "notif-patuan-001",
+    userId: "user-pi",
+    title: "Mời phản biện đề tài: BQP-2026-Y03",
+    message: "Bạn được mời tham gia phản biện độc lập cho đề tài \"Nghiên cứu hiệu quả điều trị phục hồi chức năng sau ghép tạng tại các bệnh viện quân đội\". Thời hạn nhận xét đến ngày " + dueIn14Days.toLocaleDateString("vi-VN") + ".",
+    type: "INVITATION_TO_REVIEW",
+    link: "/invitation-to-review",
+    isRead: false
+  }
+});
+
+await prisma.userNotification.upsert({
+  where: { id: "notif-nmtrung-001" },
+  update: {
+    title: "Mời tham gia Hội đồng đánh giá đề tài: HVQY-2026-NC01",
+    message: "Bạn được mời làm thành viên Hội đồng đánh giá đề tài \"Nghiên cứu ứng dụng trí tuệ nhân tạo trong hỗ trợ chẩn đoán hình ảnh chấn thương sọ não\".",
+    type: "INVITATION_TO_REVIEW",
+    link: "/invitation-to-review",
+    isRead: false
+  },
+  create: {
+    id: "notif-nmtrung-001",
+    userId: "user-reviewer",
+    title: "Mời tham gia Hội đồng đánh giá đề tài: HVQY-2026-NC01",
+    message: "Bạn được mời làm thành viên Hội đồng đánh giá đề tài \"Nghiên cứu ứng dụng trí tuệ nhân tạo trong hỗ trợ chẩn đoán hình ảnh chấn thương sọ não\".",
+    type: "INVITATION_TO_REVIEW",
+    link: "/invitation-to-review",
+    isRead: false
+  }
+});
+
+// Seed scientific regulatory documents & form templates
+const minioEndpoint = process.env.MINIO_ENDPOINT || "localhost";
+const minioPort = Number(process.env.MINIO_PORT || 9000);
+const minioAccessKey = process.env.MINIO_ACCESS_KEY || "minioadmin";
+const minioSecretKey = process.env.MINIO_SECRET_KEY || "minioadmin";
+const minioBucket = process.env.MINIO_BUCKET_NAME || "rtms-files";
+
+const minioClient = new MinioClient({
+  endPoint: minioEndpoint,
+  port: minioPort,
+  useSSL: false,
+  accessKey: minioAccessKey,
+  secretKey: minioSecretKey
+});
+
+try {
+  const bucketExists = await minioClient.bucketExists(minioBucket);
+  if (!bucketExists) {
+    await minioClient.makeBucket(minioBucket, "us-east-1");
+  }
+} catch (err) {
+  console.warn("MinIO bucket check warning:", err.message);
+}
+
+const sampleDocs = [
+  {
+    id: "doc-tt-05-2023",
+    documentNumber: "05/2023/TT-BKHCN",
+    title: "Thông tư số 05/2023/TT-BKHCN quy định chi tiết một số điều của Nghị định số 70/2018/NĐ-CP và quản lý các nhiệm vụ KH&CN cấp quốc gia",
+    category: "LAW_REGULATION",
+    issuingAuthority: "Bộ Khoa học và Công nghệ",
+    issuedDate: new Date("2023-05-25"),
+    effectiveDate: new Date("2023-07-09"),
+    description: "Quy định trình tự, thủ tục xác định, tuyển chọn, giao trực tiếp và quản lý thực hiện nhiệm vụ khoa học và công nghệ cấp quốc gia sử dụng ngân sách nhà nước.",
+    fileName: "Thong_tu_05_2023_TT_BKHCN.pdf",
+    mimeType: "application/pdf",
+    sampleContent: "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n185\n%%EOF"
+  },
+  {
+    id: "doc-qc-hvqy-2024",
+    documentNumber: "1258/QC-HVQY",
+    title: "Quy chế Quản lý hoạt động Nghiên cứu khoa học và Công nghệ tại Học viện Quân y",
+    category: "INTERNAL_REGULATION",
+    issuingAuthority: "Học viện Quân y",
+    issuedDate: new Date("2024-01-15"),
+    effectiveDate: new Date("2024-02-01"),
+    description: "Quy chế toàn diện về tổ chức, quản lý, phân bổ kinh phí, đánh giá nghiệm thu các đề tài, dự án KH&CN cấp cơ sở và phối hợp nghiên cứu.",
+    fileName: "Quy_che_QLKH_Hoc_vien_Quan_y_2024.pdf",
+    mimeType: "application/pdf",
+    sampleContent: "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n185\n%%EOF"
+  },
+  {
+    id: "doc-bm-01-thuyet-minh",
+    documentNumber: "BM-01/NCKH",
+    title: "Mẫu BM-01: Thuyết minh đề tài Nghiên cứu khoa học và Công nghệ",
+    category: "PROPOSAL_TEMPLATE",
+    issuingAuthority: "Phòng Quản lý Khoa học Quân sự",
+    issuedDate: new Date("2024-01-20"),
+    effectiveDate: new Date("2024-01-20"),
+    description: "Biểu mẫu thuyết minh đề tài chuẩn quy định tính cấp thiết, mục tiêu nghiên cứu, nội dung triển khai, phương pháp tiếp cận và dự kiến sản phẩm bàn giao.",
+    fileName: "BM01_Thuyet_minh_de_tai_NCKH_CN.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    sampleContent: "PK\x03\x04\x14\x00\x06\x00\x08\x00\x00\x00!\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00_rels/.relsPK\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+  },
+  {
+    id: "doc-bm-02-du-toan",
+    documentNumber: "BM-02/DTKP",
+    title: "Mẫu BM-02: Bảng lập dự toán kinh phí thực hiện đề tài KH&CN",
+    category: "PROPOSAL_TEMPLATE",
+    issuingAuthority: "Phòng Quản lý Khoa học Quân sự",
+    issuedDate: new Date("2024-01-20"),
+    effectiveDate: new Date("2024-01-20"),
+    description: "Biểu mẫu bảng tính Excel dự toán kinh phí chi tiết theo định mức kinh tế kỹ thuật, tiền công lao động khoa học, nguyên vật liệu và hội thảo.",
+    fileName: "BM02_Du_toan_kinh_phi_de_tai.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    sampleContent: "PK\x03\x04\x14\x00\x06\x00\x08\x00\x00\x00!\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00_rels/.relsPK\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+  },
+  {
+    id: "doc-bm-06-ly-lich",
+    documentNumber: "BM-06/LLKH",
+    title: "Mẫu BM-06: Lý lịch khoa học của cá nhân thực hiện nhiệm vụ KH&CN",
+    category: "PROPOSAL_TEMPLATE",
+    issuingAuthority: "Bộ Khoa học và Công nghệ",
+    issuedDate: new Date("2023-05-25"),
+    effectiveDate: new Date("2023-07-09"),
+    description: "Mẫu chuẩn lý lịch khoa học cá nhân theo quy định Bộ KH&CN (thông tin cá nhân, quá trình đào tạo, công tác, công trình công bố, giải thưởng và bằng sáng chế).",
+    fileName: "BM06_Ly_lich_khoa_hoc_ca_nhan.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    sampleContent: "PK\x03\x04\x14\x00\x06\x00\x08\x00\x00\x00!\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00_rels/.relsPK\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+  },
+  {
+    id: "doc-bm-04-danh-gia",
+    documentNumber: "BM-04/HĐĐG",
+    title: "Mẫu BM-04: Phiếu nhận xét, đánh giá hồ sơ đề tài KH&CN của chuyên gia",
+    category: "EVALUATION_TEMPLATE",
+    issuingAuthority: "Phòng Quản lý Khoa học Quân sự",
+    issuedDate: new Date("2024-01-20"),
+    effectiveDate: new Date("2024-01-20"),
+    description: "Mẫu phiếu nhận xét dành cho chuyên gia phản biện và thành viên hội đồng đánh giá tính mới, phương pháp nghiên cứu và năng lực chủ nhiệm.",
+    fileName: "BM04_Phieu_nhan_xet_danh_gia_de_tai.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    sampleContent: "PK\x03\x04\x14\x00\x06\x00\x08\x00\x00\x00!\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x0b\x00\x00\x00_rels/.relsPK\x05\x06\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+  },
+  {
+    id: "doc-hd-01-quy-trinh",
+    documentNumber: "HD-01/QLKH",
+    title: "Hướng dẫn quy trình đăng ký, nộp hồ sơ và nghiệm thu đề tài NCKH trực tuyến",
+    category: "GUIDELINE",
+    issuingAuthority: "Phòng Quản lý Khoa học Quân sự",
+    issuedDate: new Date("2024-02-10"),
+    effectiveDate: new Date("2024-02-10"),
+    description: "Tài liệu hướng dẫn thao tác trên hệ thống DocManS: cách nộp hồ sơ thuyết minh, phản hồi yêu cầu bổ sung, nhận thông báo phản biện và theo dõi tiến độ.",
+    fileName: "Huong_dan_nop_va_theo_doi_de_tai_truc_tuyen.pdf",
+    mimeType: "application/pdf",
+    sampleContent: "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n185\n%%EOF"
+  }
+];
+
+for (const doc of sampleDocs) {
+  const objectKey = `scientific-documents/${doc.id}/${doc.fileName}`;
+  const buffer = Buffer.from(doc.sampleContent);
+
+  try {
+    await minioClient.putObject(minioBucket, objectKey, buffer, buffer.length, {
+      "Content-Type": doc.mimeType
+    });
+  } catch (err) {
+    console.warn(`MinIO putObject warning for ${objectKey}:`, err.message);
+  }
+
+  await prisma.scientificDocument.upsert({
+    where: { id: doc.id },
+    update: {
+      documentNumber: doc.documentNumber,
+      title: doc.title,
+      category: doc.category,
+      issuingAuthority: doc.issuingAuthority,
+      issuedDate: doc.issuedDate,
+      effectiveDate: doc.effectiveDate,
+      description: doc.description,
+      status: "ACTIVE",
+      fileName: doc.fileName,
+      fileSize: buffer.length,
+      mimeType: doc.mimeType,
+      storageObjectKey: objectKey,
+      deletedAt: null
+    },
+    create: {
+      id: doc.id,
+      documentNumber: doc.documentNumber,
+      title: doc.title,
+      category: doc.category,
+      issuingAuthority: doc.issuingAuthority,
+      issuedDate: doc.issuedDate,
+      effectiveDate: doc.effectiveDate,
+      description: doc.description,
+      status: "ACTIVE",
+      fileName: doc.fileName,
+      fileSize: buffer.length,
+      mimeType: doc.mimeType,
+      storageObjectKey: objectKey,
+      createdById: "user-staff"
+    }
+  });
+}
+
 await prisma.$disconnect();
+

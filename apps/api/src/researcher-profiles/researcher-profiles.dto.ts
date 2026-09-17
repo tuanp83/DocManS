@@ -2,6 +2,88 @@ import { BadRequestException, type PipeTransform } from "@nestjs/common";
 // @ts-ignore: runtime package is JavaScript; repository consumers use its TypeScript source contract.
 import { isContextVersionTokenV1, type ContextVersionTokenV1 } from "@rtms/permissions";
 
+export type ScientificCurriculumVitae = {
+  personalInfo?: {
+    avatarUrl?: string | null;
+    gender?: string | null;
+    birthDate?: string | null;
+    birthPlace?: string | null;
+    nationality?: string | null;
+    idNumber?: string | null;
+    idIssueDate?: string | null;
+    idIssuePlace?: string | null;
+    englishAcademicTitle?: string | null;
+    bankAccount?: string | null;
+    bankName?: string | null;
+    bankBranch?: string | null;
+    smartCaSerial?: string | null;
+    shareDataAgreement?: boolean | null;
+    contactAddress?: string | null;
+    languages?: Array<{ language: string; proficiency?: string | null; certificate?: string | null }> | null;
+  } | null;
+  educationHistory?: Array<{
+    id?: string;
+    degreeLevel: string;
+    major: string;
+    institution: string;
+    graduationYear?: number | null;
+    trainingMode?: string | null;
+    thesisTitle?: string | null;
+  }> | null;
+  workHistory?: {
+    summary?: string | null;
+    items?: Array<{
+      id?: string;
+      period: string;
+      organization: string;
+      position?: string | null;
+      workField?: string | null;
+    }> | null;
+  } | null;
+  researchExperience?: {
+    publications?: Array<{
+      id?: string;
+      title: string;
+      authors?: string | null;
+      publicationYear?: number | null;
+      venue?: string | null;
+      issnIsbn?: string | null;
+      classification?: string | null;
+      proofUrl?: string | null;
+      notes?: string | null;
+    }> | null;
+    intellectualProperty?: Array<{
+      id?: string;
+      title: string;
+      authors?: string | null;
+      issueYear?: number | null;
+      patentNumber?: string | null;
+      issueAgency?: string | null;
+      proofUrl?: string | null;
+      notes?: string | null;
+    }> | null;
+    awards?: Array<{
+      id?: string;
+      name: string;
+      awardYear?: number | null;
+      endYear?: number | null;
+      grantingAgency?: string | null;
+      proofUrl?: string | null;
+      notes?: string | null;
+    }> | null;
+    projects?: Array<{
+      id?: string;
+      projectTitle: string;
+      managementAgency?: string | null;
+      code?: string | null;
+      role: string;
+      period?: string | null;
+      status?: string | null;
+      notes?: string | null;
+    }> | null;
+  } | null;
+};
+
 export type CreateResearcherProfileDto = {
   fullName: string;
   managementOrganizationUnitId: string;
@@ -19,6 +101,7 @@ export type CreateResearcherProfileDto = {
   expertiseKeywords?: string[];
   publications?: ResearcherProfilePublicationInput[];
   participations?: ResearcherProfileParticipationInput[];
+  curriculumVitae?: ScientificCurriculumVitae | null;
   confirmDuplicate?: boolean;
   provisionAccount?: boolean;
 };
@@ -50,6 +133,7 @@ export type ResearcherProfileParticipationInput = {
 export type UpdateResearcherProfileDto = Partial<Omit<CreateResearcherProfileDto, "managementOrganizationUnitId" | "confirmDuplicate" | "externalAffiliation" | "academicRankCatalogItemId" | "academicDegreeCatalogItemId" | "title" | "position" | "militaryRank" | "contactEmail" | "contactPhone" | "contactNote">> & {
   externalAffiliation?: string | null; academicRankCatalogItemId?: string | null; academicDegreeCatalogItemId?: string | null; title?: string | null; position?: string | null; militaryRank?: string | null; contactEmail?: string | null; contactPhone?: string | null; contactNote?: string | null;
   username?: string | null;
+  curriculumVitae?: ScientificCurriculumVitae | null;
   contextVersion: ContextVersionTokenV1;
 };
 
@@ -209,6 +293,14 @@ function record(value: unknown) {
   return value as Record<string, unknown>;
 }
 
+function optionalCurriculumVitae(input: Record<string, unknown>) {
+  if (!("curriculumVitae" in input)) return undefined;
+  const value = input.curriculumVitae;
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "object" || Array.isArray(value)) invalid(["curriculumVitae"]);
+  return value as ScientificCurriculumVitae;
+}
+
 export const createResearcherProfilePipe: PipeTransform<unknown, CreateResearcherProfileDto> = {
   transform(value) {
     const input = record(value);
@@ -232,6 +324,7 @@ export const createResearcherProfilePipe: PipeTransform<unknown, CreateResearche
       expertiseKeywords: keywords(input),
       publications: publications(input),
       participations: participations(input),
+      curriculumVitae: optionalCurriculumVitae(input),
       confirmDuplicate: confirmDuplicate(input),
       provisionAccount: provisionAccount(input)
     };
@@ -253,6 +346,7 @@ export const updateResearcherProfilePipe: PipeTransform<unknown, UpdateResearche
     if (input.expertiseKeywords !== undefined) result.expertiseKeywords = keywords(input);
     if (input.publications !== undefined) result.publications = publications(input);
     if (input.participations !== undefined) result.participations = participations(input);
+    if (input.curriculumVitae !== undefined) result.curriculumVitae = optionalCurriculumVitae(input);
     if (Object.keys(result).length === 1) invalid(["body"]);
     return result as UpdateResearcherProfileDto;
   }
@@ -268,7 +362,7 @@ export const researcherProfileMutationPipe: PipeTransform<unknown, { contextVers
 export const updateMyProfilePipe: PipeTransform<unknown, UpdateResearcherProfileDto> = {
   transform(value) {
     const input = record(value);
-    const allowed = new Set(["contextVersion", "fullName", "externalAffiliation", "academicRankCatalogItemId", "academicDegreeCatalogItemId", "title", "position", "militaryRank", "contactEmail", "contactPhone", "contactNote", "researchFieldIds", "expertiseKeywords", "publications", "participations", "username"]);
+    const allowed = new Set(["contextVersion", "fullName", "externalAffiliation", "academicRankCatalogItemId", "academicDegreeCatalogItemId", "title", "position", "militaryRank", "contactEmail", "contactPhone", "contactNote", "researchFieldIds", "expertiseKeywords", "publications", "participations", "curriculumVitae", "username"]);
     if (Object.keys(input).some((key) => !allowed.has(key))) invalid(["administrativeFields"]);
     const profileKeys = Object.keys(input).filter((key) => key !== "contextVersion" && key !== "username");
     const base = profileKeys.length ? updateResearcherProfilePipe.transform(input, { type: "body" }) : researcherProfileMutationPipe.transform(input, { type: "body" });

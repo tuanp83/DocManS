@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "@/themes/hvqy1.css";
+import "@/themes/science-profile.css";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { AppShell } from "@/components/layout/app-shell";
 
 export const metadata: Metadata = {
-  title: "Hệ thống quản lý NCKH, CN và đổi mới sáng tạo | Học viện Quân y",
+  title: "HỆ THỐNG QUẢN LÝ NGHIÊN CỨU KHOA HỌC, CÔNG NGHỆ VÀ ĐỔI MỚI SÁNG TẠO | HỌC VIỆN QUÂN Y",
   description: "Hệ thống quản lý nghiên cứu khoa học của Học viện Quân y",
   icons: {
     icon: "/logo.png",

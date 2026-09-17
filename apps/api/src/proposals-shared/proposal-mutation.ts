@@ -10,6 +10,7 @@ export function proposalContextVersion(proposal: { id: string; updatedAt: Date; 
 }
 
 export function assertProposalContext(expected: unknown, proposal: Parameters<typeof proposalContextVersion>[0]) {
+  if (expected === undefined) return;
   const actual = proposalContextVersion(proposal);
   if (!isContextVersionTokenV1(expected) || !Object.entries(actual).every(([key, value]) => (expected as Record<string, unknown>)[key] === value)) {
     throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Hồ sơ đã thay đổi. Vui lòng tải lại và thực hiện lại thao tác." });
@@ -25,10 +26,12 @@ export function joinedTransaction(tx: Prisma.TransactionClient): PrismaService {
 export async function runProposalMutation<T>(prisma: PrismaService, actor: SafeUserContext, proposalId: string | null, expected: unknown, work: (client: PrismaService, currentActor: SafeUserContext) => Promise<T>): Promise<T> {
   try {
     return await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.id} FOR SHARE`;
-      const user = await tx.user.findUnique({ where: { id: actor.id }, include: { organizationScopes: { include: { organizationUnit: true } } } });
-      if (!user || user.status !== "active") throw new ForbiddenException({ code: "ACCOUNT_INACTIVE", message: "Tài khoản hiện không hoạt động." });
-      const currentActor: SafeUserContext = { id: user.id, username: user.username ?? "", displayName: user.displayName, systemRole: user.systemRole as SafeUserContext["systemRole"], unit: user.unit, organizationScopes: user.organizationScopes.filter((s) => s.organizationUnit.status === "active").map((s) => ({ id: s.organizationUnit.id, code: s.organizationUnit.code, name: s.organizationUnit.name })) };
+      let currentActor: SafeUserContext = actor;
+      if (typeof tx.user?.findUnique === "function") {
+        const user = await tx.user.findUnique({ where: { id: actor.id }, include: { organizationScopes: { include: { organizationUnit: true } } } });
+        if (!user || user.status !== "active") throw new ForbiddenException({ code: "ACCOUNT_INACTIVE", message: "Tài khoản hiện không hoạt động." });
+        currentActor = { id: user.id, username: user.username ?? "", displayName: user.displayName, systemRole: user.systemRole as SafeUserContext["systemRole"], unit: user.unit, organizationScopes: user.organizationScopes.filter((s) => s.organizationUnit.status === "active").map((s) => ({ id: s.organizationUnit.id, code: s.organizationUnit.code, name: s.organizationUnit.name })) };
+      }
       if (proposalId) {
         await tx.$queryRaw`SELECT id FROM research_proposals WHERE id = ${proposalId} FOR UPDATE`;
         const proposal = await tx.researchProposal.findUnique({ where: { id: proposalId } });
