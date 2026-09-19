@@ -935,8 +935,8 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
               <table className="data-table timeline-table">
                 <thead>
                   <tr>
-                    <th>Người thực hiện</th>
-                    <th>Thời gian</th>
+                    <th>Người nộp</th>
+                    <th>Thời gian nộp</th>
                     <th>Nội dung</th>
                   </tr>
                 </thead>

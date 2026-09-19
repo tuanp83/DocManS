@@ -78,6 +78,7 @@ type ResearchProposalRecord = {
   createdAt: Date;
   updatedAt: Date;
   owner?: { displayName: string } | null;
+  hostOrganizationUnit?: { id: string; code: string; name: string } | null;
 };
 
 type ProposalMemberRecord = {
@@ -167,7 +168,10 @@ export class ResearchProposalsService {
     const asOf = new Date();
     const records = (await this.prisma.researchProposal.findMany({
       orderBy: { createdAt: "desc" },
-      include: { owner: { select: { displayName: true } } }
+      include: {
+        owner: { select: { displayName: true } },
+        hostOrganizationUnit: { select: { id: true, code: true, name: true } }
+      }
     })) as ResearchProposalRecord[];
 
     const [participationByProposal, reviewAccessByProposal, completenessEvents] = await Promise.all([
@@ -563,7 +567,7 @@ export class ResearchProposalsService {
   }
 
   async listCatalogs() {
-    return this.prisma.catalogItem.findMany({ where: { status: "active", deletedAt: null, type: { in: ["research-field", "proposal-type"] } }, select: { id: true, type: true, code: true, name: true, status: true }, orderBy: [{ type: "asc" }, { name: "asc" }] });
+    return this.prisma.catalogItem.findMany({ where: { status: "active", deletedAt: null, type: { in: ["research-field", "proposal-type", "military-scope"] } }, select: { id: true, type: true, code: true, name: true, status: true }, orderBy: [{ type: "asc" }, { name: "asc" }] });
   }
 
   private async validateCatalogs(input: Record<string, unknown>) {
@@ -605,7 +609,10 @@ export class ResearchProposalsService {
   private async findProposal(proposalId: string) {
     const proposal = (await this.prisma.researchProposal.findUnique({
       where: { id: proposalId },
-      include: { owner: { select: { displayName: true } } }
+      include: {
+        owner: { select: { displayName: true } },
+        hostOrganizationUnit: { select: { id: true, code: true, name: true } }
+      }
     })) as ResearchProposalRecord | null;
 
     if (!proposal) {
@@ -1059,6 +1066,7 @@ export class ResearchProposalsService {
       intakePeriodId: proposal.intakePeriodId,
       ...(reviewAccess?.isAssignedReviewer && !participation?.isParticipant ? {} : { ownerId: proposal.ownerId, ownerDisplayName: proposal.owner?.displayName ?? "" }),
       hostOrganizationUnitId: proposal.hostOrganizationUnitId,
+      hostOrganizationUnitName: proposal.hostOrganizationUnit?.name ?? proposal.hostOrganizationUnitId,
       researchFieldCode: proposal.researchFieldCode ?? "",
       proposalTypeCode: proposal.proposalTypeCode ?? "",
       title: proposal.title,

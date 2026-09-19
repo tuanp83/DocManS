@@ -9,7 +9,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 
 const catalogTypes = [
   { value: "research-field", label: "Lĩnh vực nghiên cứu" },
-  { value: "proposal-type", label: "Loại hồ sơ" },
+  { value: "proposal-type", label: "Loại hồ sơ / Cấp đề tài" },
+  { value: "military-scope", label: "Tính chất Quân sự / Dân sự" },
   { value: "priority", label: "Mức ưu tiên" },
   { value: "report-type", label: "Loại báo cáo" },
   { value: "scoring-criterion", label: "Tiêu chí chấm điểm" }
