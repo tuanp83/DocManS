@@ -68,6 +68,7 @@ type ResearchProposalRecord = {
   startDate: Date | null;
   endDate: Date | null;
   budgetMetadata: unknown;
+  councilMetadata?: unknown;
   status: string;
   submittedAt: Date | null;
   submittedById: string | null;
@@ -1075,6 +1076,7 @@ export class ResearchProposalsService {
       startDate: proposal.startDate?.toISOString() ?? "",
       endDate: proposal.endDate?.toISOString() ?? "",
       budgetMetadata: proposal.budgetMetadata ?? {},
+      councilMetadata: proposal.councilMetadata ?? null,
       status: proposal.status,
       submittedAt: proposal.submittedAt?.toISOString() ?? "",
       ...(reviewAccess?.isAssignedReviewer && !participation?.isParticipant ? {} : { submittedById: proposal.submittedById ?? "" }),

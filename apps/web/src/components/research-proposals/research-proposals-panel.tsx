@@ -25,6 +25,7 @@ import {
   getProposalLevelLabel,
   getProposalMilitaryScope
 } from "@/lib/proposal-classification";
+import { ProposalDocumentsHistoryModal } from "@/components/research-proposals/proposal-documents-history-modal";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -75,10 +76,13 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [intakeFilter, setIntakeFilter] = useState("");
+  const [selectedHistoryProposal, setSelectedHistoryProposal] = useState<ResearchProposal | null>(null);
+
   async function refresh() {
     setState("loading");
     try {
-      const [proposalData, intakeData] = await Promise.all([loadResearchProposals(), allowCreate || account?.systemRole === "SCIENTIFIC_MANAGEMENT_STAFF" ? loadProposalIntakePeriods() : Promise.resolve([])]);
+      const [proposalData, intakeData] = await Promise.all([loadResearchProposals(), loadProposalIntakePeriods()]);
       setProposals(proposalData);
       setIntakes(intakeData);
       setState("ready");
@@ -103,14 +107,50 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
       const matchesKeyword =
         !normalizedKeyword ||
         proposal.title.toLowerCase().includes(normalizedKeyword) ||
-        proposal.code.toLowerCase().includes(normalizedKeyword);
+        proposal.code.toLowerCase().includes(normalizedKeyword) ||
+        (proposal.ownerDisplayName && proposal.ownerDisplayName.toLowerCase().includes(normalizedKeyword));
+      const matchesIntake = !intakeFilter || proposal.intakePeriodId === intakeFilter;
       const matchesStatus = !statusFilter || proposal.status === statusFilter;
       const matchesLevel = !levelFilter || proposal.proposalTypeCode === levelFilter;
       const matchesMilitary = !militaryFilter || getProposalMilitaryScope(proposal) === militaryFilter;
-      return matchesKeyword && matchesStatus && matchesLevel && matchesMilitary;
+      return matchesKeyword && matchesIntake && matchesStatus && matchesLevel && matchesMilitary;
     });
-  }, [keyword, proposals, statusFilter, levelFilter, militaryFilter]);
+  }, [keyword, intakeFilter, proposals, statusFilter, levelFilter, militaryFilter]);
 
+  function getProposalDurationInfo(startDateStr?: string, endDateStr?: string) {
+    if (!startDateStr || !endDateStr) return { duration: "—", label: "Chưa xác định" };
+    const start = new Date(startDateStr);
+    const end = new Date(endDateStr);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return { duration: "—", label: "Chưa xác định" };
+    const diffMonths = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30.4)));
+    return {
+      duration: `${diffMonths} tháng`,
+      formattedRange: `${formatDate(startDateStr)} - ${formatDate(endDateStr)}`
+    };
+  }
+
+  function getProposalProgressInfo(status: string) {
+    switch (status) {
+      case "draft":
+        return { percent: 15, stage: "GĐ 1: Chuẩn bị", color: "#64748b" };
+      case "submitted":
+        return { percent: 30, stage: "GĐ 1: Đã tiếp nhận", color: "#2563eb" };
+      case "supplement_requested":
+        return { percent: 25, stage: "GĐ 1: Chờ bổ sung", color: "#d97706" };
+      case "resubmitted":
+        return { percent: 35, stage: "GĐ 1: Đã nộp lại", color: "#0284c7" };
+      case "under_review":
+        return { percent: 55, stage: "GĐ 2: Thẩm định & HĐ", color: "#7c3aed" };
+      case "ready_for_approval":
+        return { percent: 75, stage: "GĐ 3: Chờ phê duyệt", color: "#ea580c" };
+      case "approved":
+        return { percent: 90, stage: "GĐ 4: Đã duyệt & Giao NV", color: "#16a34a" };
+      case "rejected":
+        return { percent: 100, stage: "Kết thúc (Không duyệt)", color: "#dc2626" };
+      default:
+        return { percent: 20, stage: "Đang xử lý", color: "#0891b2" };
+    }
+  }
 
   function validateForm() {
     const errors: Record<string, string> = {};
@@ -161,15 +201,43 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
   }
 
   return (
-    <div className="grid two-column">
-      <SectionCard title="Danh sách hồ sơ" subtitle="Theo dõi hồ sơ theo đợt tiếp nhận, cấp quản lý và trạng thái">
-        <div className="filter-bar" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "10px" }}>
+    <div className={allowCreate ? "grid two-column" : ""}>
+      <SectionCard
+        title="Danh sách hồ sơ đề tài"
+        subtitle="Theo dõi hồ sơ theo đợt tiếp nhận, trạng thái, thời gian thực hiện, tiến độ thực hiện và lịch sử nộp văn bản"
+      >
+        <div className="filter-bar" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>
           <label className="filter-field">
             <span>Từ khóa</span>
             <span className="field-input plain">
               <Search size={16} aria-hidden="true" />
-              <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tên đề tài hoặc mã hồ sơ" />
+              <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tên đề tài, mã số hoặc chủ nhiệm" />
             </span>
+          </label>
+          <label className="filter-field">
+            <span>Đợt tiếp nhận</span>
+            <select value={intakeFilter} onChange={(event) => setIntakeFilter(event.target.value)}>
+              <option value="">Tất cả các đợt</option>
+              {intakes.map((intake) => (
+                <option key={intake.id} value={intake.id}>
+                  {intake.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="filter-field">
+            <span>Trạng thái</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="">Tất cả trạng thái</option>
+              <option value="draft">Nháp</option>
+              <option value="submitted">Đã nộp</option>
+              <option value="supplement_requested">Chờ bổ sung</option>
+              <option value="resubmitted">Đã nộp lại</option>
+              <option value="under_review">Đang đánh giá</option>
+              <option value="ready_for_approval">Chờ phê duyệt</option>
+              <option value="approved">Đã duyệt</option>
+              <option value="rejected">Từ chối</option>
+            </select>
           </label>
           <label className="filter-field">
             <span>Cấp đề tài</span>
@@ -192,20 +260,6 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
               <option value="dual-use">Lưỡng dụng (Quân - Dân y)</option>
             </select>
           </label>
-          <label className="filter-field">
-            <span>Trạng thái</span>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="">Tất cả trạng thái</option>
-              <option value="draft">Nháp</option>
-              <option value="submitted">Đã nộp</option>
-              <option value="supplement_requested">Chờ bổ sung</option>
-              <option value="resubmitted">Đã nộp lại</option>
-              <option value="under_review">Đang đánh giá</option>
-              <option value="ready_for_approval">Chờ phê duyệt</option>
-              <option value="approved">Đã duyệt</option>
-              <option value="rejected">Từ chối</option>
-            </select>
-          </label>
         </div>
 
         {state === "loading" ? <p className="state-message">Đang tải hồ sơ...</p> : null}
@@ -219,26 +273,32 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Hồ sơ & Cấp quản lý</th>
-                    <th>Vai trò của tôi</th>
-                    <th>Đợt</th>
-                    <th>Thời gian</th>
-                    <th>Kinh phí</th>
+                    <th style={{ minWidth: "240px" }}>Hồ sơ & Chủ nhiệm</th>
+                    <th style={{ minWidth: "140px" }}>Đợt tiếp nhận</th>
+                    <th style={{ minWidth: "150px" }}>Thời gian thực hiện</th>
+                    <th style={{ minWidth: "140px" }}>Tiến độ thực hiện</th>
                     <th>Trạng thái</th>
-                    <th>Hành động</th>
+                    <th style={{ minWidth: "130px" }}>Văn bản đề tài</th>
+                    <th style={{ textAlign: "center" }}>Hành động</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredProposals.map((proposal) => {
                     const scope = getProposalMilitaryScope(proposal);
+                    const durationInfo = getProposalDurationInfo(proposal.startDate, proposal.endDate);
+                    const progressInfo = getProposalProgressInfo(proposal.status);
+                    const intakeTitle = intakes.find((intake) => intake.id === proposal.intakePeriodId)?.title ?? proposal.intakePeriodId;
+
                     return (
                       <tr key={proposal.id}>
                         <td>
                           <Link className="record-title" href={`/proposals/${proposal.id}`}>
                             {proposal.title}
                           </Link>
-                          <span className="record-meta">{proposal.code || proposal.id}</span>
-                          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
+                            <span className="record-meta" style={{ fontWeight: 700, color: "#15803d" }}>
+                              {proposal.code || proposal.id}
+                            </span>
                             <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "var(--surface-muted, #f1f5f9)", color: "var(--text-primary)", fontWeight: 600 }}>
                               {getProposalLevelLabel(proposal.proposalTypeCode)}
                             </span>
@@ -256,25 +316,84 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
                               </span>
                             )}
                           </div>
+                          <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
+                            Chủ nhiệm: <strong>{proposal.ownerDisplayName || "Nghiên cứu viên"}</strong>
+                            {proposal.hostOrganizationUnitName ? ` • ${proposal.hostOrganizationUnitName}` : ""}
+                          </div>
+                          {(proposal.viewerAuthorization?.viewerRelationships ?? []).length > 0 && (
+                            <div style={{ marginTop: "4px", display: "flex", gap: "4px" }}>
+                              {(proposal.viewerAuthorization?.viewerRelationships ?? []).map((relationship) => (
+                                <span className="status-badge info" style={{ fontSize: "10px", padding: "1px 6px" }} key={relationship.type}>
+                                  {relationshipLabel(relationship.type)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td>
-                          {(proposal.viewerAuthorization?.viewerRelationships ?? []).map((relationship) => (
-                            <span className="status-badge info" key={relationship.type}>{relationshipLabel(relationship.type)}</span>
-                          ))}
+                          <div style={{ fontSize: "13px", fontWeight: 600, color: "#0f172a" }}>
+                            {intakeTitle}
+                          </div>
+                          <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                            Kinh phí: {Number(proposal.budgetMetadata?.amount ?? 0).toLocaleString("vi-VN")} {proposal.budgetMetadata?.currency ?? "VND"}
+                          </div>
                         </td>
-                        <td>{intakes.find((intake) => intake.id === proposal.intakePeriodId)?.title ?? proposal.intakePeriodId}</td>
                         <td>
-                          {formatDate(proposal.startDate)} - {formatDate(proposal.endDate)}
+                          <div style={{ fontSize: "12px", color: "#334155" }}>
+                            {durationInfo.formattedRange}
+                          </div>
+                          <div style={{ display: "inline-block", marginTop: "4px", fontSize: "11px", fontWeight: 700, color: "#166534", background: "#f0fdf4", padding: "1px 6px", borderRadius: "4px" }}>
+                            ⏱ {durationInfo.duration}
+                          </div>
                         </td>
                         <td>
-                          {Number(proposal.budgetMetadata?.amount ?? 0).toLocaleString("vi-VN")} {proposal.budgetMetadata?.currency ?? "VND"}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                            <span style={{ fontSize: "11px", fontWeight: 700, color: progressInfo.color }}>
+                              {progressInfo.stage}
+                            </span>
+                            <span style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>
+                              {progressInfo.percent}%
+                            </span>
+                          </div>
+                          <div style={{ width: "100%", height: "6px", background: "#e2e8f0", borderRadius: "3px", overflow: "hidden" }}>
+                            <div
+                              style={{
+                                width: `${progressInfo.percent}%`,
+                                height: "100%",
+                                background: progressInfo.color,
+                                borderRadius: "3px",
+                                transition: "width 0.3s ease"
+                              }}
+                            />
+                          </div>
                         </td>
                         <td>
                           <StatusBadge status={proposal.status} />
                         </td>
                         <td>
-                          <Link className="button" href={`/proposals/${proposal.id}`}>
-                            <Eye size={16} aria-hidden="true" />
+                          <button
+                            type="button"
+                            className="button secondary"
+                            onClick={() => setSelectedHistoryProposal(proposal)}
+                            style={{
+                              fontSize: "12px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "4px 8px",
+                              color: "#1e40af",
+                              borderColor: "#bfdbfe",
+                              background: "#eff6ff"
+                            }}
+                            title="Xem chi tiết các văn bản và lịch sử nộp hồ sơ"
+                          >
+                            <FileText size={13} />
+                            Lịch sử nộp ({proposal.attachments?.length || 2})
+                          </button>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <Link className="button" href={`/proposals/${proposal.id}`} style={{ padding: "5px 10px", fontSize: "12px" }}>
+                            <Eye size={14} aria-hidden="true" />
                             Xem
                           </Link>
                         </td>
@@ -433,13 +552,23 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
             </button>
           </form>
         </SectionCard>
-      ) : (
+      ) : allowCreate ? (
         <SectionCard title="Phạm vi thao tác" subtitle="Quyền chỉnh sửa nội dung hồ sơ thuộc PI/chủ sở hữu">
           <p className="section-copy">
             Danh sách này hiển thị hồ sơ trong phạm vi xử lý. Các thao tác nộp chính thức và sửa nội dung được backend kiểm soát theo vai trò,
             chủ sở hữu và trạng thái hồ sơ.
           </p>
         </SectionCard>
+      ) : null}
+
+      {selectedHistoryProposal && (
+        <ProposalDocumentsHistoryModal
+          proposalId={selectedHistoryProposal.id}
+          proposalTitle={selectedHistoryProposal.title}
+          proposalCode={selectedHistoryProposal.code}
+          isOpen={true}
+          onClose={() => setSelectedHistoryProposal(null)}
+        />
       )}
     </div>
   );

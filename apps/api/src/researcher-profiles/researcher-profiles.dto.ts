@@ -19,6 +19,7 @@ export type ScientificCurriculumVitae = {
     smartCaSerial?: string | null;
     shareDataAgreement?: boolean | null;
     contactAddress?: string | null;
+    organization?: string | null;
     languages?: Array<{ language: string; proficiency?: string | null; certificate?: string | null }> | null;
   } | null;
   educationHistory?: Array<{
@@ -130,7 +131,8 @@ export type ResearcherProfileParticipationInput = {
   sourceRecordId?: string | null;
 };
 
-export type UpdateResearcherProfileDto = Partial<Omit<CreateResearcherProfileDto, "managementOrganizationUnitId" | "confirmDuplicate" | "externalAffiliation" | "academicRankCatalogItemId" | "academicDegreeCatalogItemId" | "title" | "position" | "militaryRank" | "contactEmail" | "contactPhone" | "contactNote">> & {
+export type UpdateResearcherProfileDto = Partial<Omit<CreateResearcherProfileDto, "confirmDuplicate" | "externalAffiliation" | "academicRankCatalogItemId" | "academicDegreeCatalogItemId" | "title" | "position" | "militaryRank" | "contactEmail" | "contactPhone" | "contactNote">> & {
+  managementOrganizationUnitId?: string;
   externalAffiliation?: string | null; academicRankCatalogItemId?: string | null; academicDegreeCatalogItemId?: string | null; title?: string | null; position?: string | null; militaryRank?: string | null; contactEmail?: string | null; contactPhone?: string | null; contactNote?: string | null;
   username?: string | null;
   curriculumVitae?: ScientificCurriculumVitae | null;
@@ -339,6 +341,7 @@ export const updateResearcherProfilePipe: PipeTransform<unknown, UpdateResearche
       if (input[field] !== undefined) result[field] = updateText(input, field, maxLength);
     }
     if (input.fullName !== undefined) result.fullName = text(input, "fullName", 240, true);
+    if (input.managementOrganizationUnitId !== undefined) result.managementOrganizationUnitId = text(input, "managementOrganizationUnitId", 80, true);
     if (input.profileType !== undefined) result.profileType = profileType(input);
     if (input.contactEmail !== undefined) result.contactEmail = input.contactEmail === null || input.contactEmail === "" ? null : optionalEmail(input);
     if (input.contactPhone !== undefined) result.contactPhone = input.contactPhone === null || input.contactPhone === "" ? null : optionalPhone(input);
@@ -362,7 +365,7 @@ export const researcherProfileMutationPipe: PipeTransform<unknown, { contextVers
 export const updateMyProfilePipe: PipeTransform<unknown, UpdateResearcherProfileDto> = {
   transform(value) {
     const input = record(value);
-    const allowed = new Set(["contextVersion", "fullName", "externalAffiliation", "academicRankCatalogItemId", "academicDegreeCatalogItemId", "title", "position", "militaryRank", "contactEmail", "contactPhone", "contactNote", "researchFieldIds", "expertiseKeywords", "publications", "participations", "curriculumVitae", "username"]);
+    const allowed = new Set(["contextVersion", "managementOrganizationUnitId", "fullName", "externalAffiliation", "academicRankCatalogItemId", "academicDegreeCatalogItemId", "title", "position", "militaryRank", "contactEmail", "contactPhone", "contactNote", "researchFieldIds", "expertiseKeywords", "publications", "participations", "curriculumVitae", "username"]);
     if (Object.keys(input).some((key) => !allowed.has(key))) invalid(["administrativeFields"]);
     const profileKeys = Object.keys(input).filter((key) => key !== "contextVersion" && key !== "username");
     const base = profileKeys.length ? updateResearcherProfilePipe.transform(input, { type: "body" }) : researcherProfileMutationPipe.transform(input, { type: "body" });
