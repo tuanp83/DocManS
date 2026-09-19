@@ -9,11 +9,11 @@ These credentials are for local development only. All seeded accounts share the 
 | `admin` | `1234` | Quản trị hệ thống | Khoa Toán - Tin học |
 | `admin2` | `1234` | Quản trị hệ thống | Khoa Toán - Tin học |
 | `tvtien` | `1234` | Giám Đốc | Ban Giám Đốc |
-| `nmphuong` | `1234` | Trưởng phòng | Phòng KHQS |
+| `nmphuong` | `1234` | Trưởng Phòng KHQS | Trưởng Phòng KHQS |
+| `dmtrung` | `1234` | Trưởng Ban QLKH | Trưởng Ban QLKH, Phòng KHQS |
+| `hdtien1` | `1234` | Chuyên viên QLKH | Chuyên viên QLKH, Phòng KHQS |
 | `patuan` | `1234` | Chủ nhiệm đề tài | Khoa Toán - Tin học |
-| `nmtrung` | `1234` | Thành viên Hội đồng | Ban Quản lý KHQS |
-| `hdtien1` | `1234` | Chuyên viên | Phòng KHQS |
-| `hdtien2` | `1234` | Chuyên viên | Phòng KHQS |
+| `hdtien2` | `1234` | Chuyên viên QLKH | Chuyên viên QLKH, Phòng KHQS |
 
 The seed file stores precomputed `scrypt` password hashes only. Plaintext credentials are documented here for local development and are not returned through auth endpoints.
 
@@ -22,20 +22,16 @@ The seed file stores precomputed `scrypt` password hashes only. Plaintext creden
 The `Unit` column above is each account's home unit. Backend authorization checks the account's
 **organization scopes**, which are not always just that one unit.
 
-The three scientific-management accounts (`nmphuong`, `hdtien1`, `hdtien2`) are additionally scoped
-to `org-khti` (Khoa Toán - Tin học) and `org-bqlkhqs` (Ban Quản lý KHQS), because staff operate the
-intake, supplement, reviewer-assignment and consolidation flows for the units they oversee rather
-than only for their own department. Without those extra scopes the seeded PI (`patuan`, Khoa Toán -
-Tin học) files proposals no seeded staff account may act on, and the EP-02/EP-03 demo stalls at the
-first scope-checked staff action.
+The scientific-management accounts (`nmphuong`, `dmtrung`, `hdtien1`, `hdtien2`) are scoped
+to the entire Academy (10/10 organization units) so they operate intake, supplement, reviewer-assignment,
+project tracking, and consolidation flows across all units.
 
 | Username | Organization scopes |
 | --- | --- |
 | `admin`, `admin2` | `org-khti` |
 | `tvtien` | `org-bgq` |
-| `nmphuong`, `hdtien1`, `hdtien2` | `org-khqs`, `org-khti`, `org-bqlkhqs` |
+| `nmphuong`, `dmtrung`, `hdtien1`, `hdtien2` | Toàn Học viện (10/10 units) |
 | `patuan` | `org-khti` |
-| `nmtrung` | `org-bqlkhqs` |
 
 Leadership (`tvtien`) does not need a matching organization scope to read or decide a proposal:
 approval authority is evaluated from the `leadership` role plus the proposal's workflow state, and

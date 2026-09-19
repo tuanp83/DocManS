@@ -52,10 +52,10 @@ const users = [
     username: "nmphuong",
     passwordHash:
       "scrypt:user-staff:ea925bf5f31fe306cb863a45afec44a4e67d84423e431cb93de5af91425c6723cb66ac59963afe1f47ad86d3c16aec95f73bffc74c22d75b032fd1093f7a71d5",
-    displayName: "TS. Nguyễn Minh Phương",
+    displayName: "PGS. TS. Nguyễn Minh Phương",
     status: "active",
     systemRole: "SCIENTIFIC_MANAGEMENT_STAFF",
-    unit: "Phòng KHQS"
+    unit: "Trưởng Phòng KHQS"
   },
   {
     id: "user-pi",
@@ -69,13 +69,13 @@ const users = [
   },
   {
     id: "user-reviewer",
-    username: "nmtrung",
+    username: "dmtrung",
     passwordHash:
       "scrypt:user-reviewer:b0782812a1c75cef9db6596a7c88ae497fac0d08b7c7230c908d3c413fc08c2bed386eccfc0cbc10a64a088f1ad9bf6a2f6507410ea3d833bbb0907d958ac12a",
     displayName: "TS. Đỗ Minh Trung",
     status: "active",
-    systemRole: "RESEARCHER_INTERNAL_USER",
-    unit: "Ban Quản lý KHQS"
+    systemRole: "SCIENTIFIC_MANAGEMENT_STAFF",
+    unit: "Trưởng Ban QLKH, Phòng KHQS"
   },
   {
     id: "user-researcher1",
@@ -142,35 +142,134 @@ const users = [
     username: "hdtien1",
     passwordHash:
       "scrypt:user-staff-hdtien1:0ca10cf0ed59766007948d5e2010afb69514a438a457e62f20eb392bfae619b1d91f2fed126c591a8a9f2d945e1d0705fbf6545f1e371e3ce692d19ab1ecdea0",
-    displayName: "HD Tiến 1",
+    displayName: "ThS. Hoàng Đình Tiến",
     status: "active",
     systemRole: "SCIENTIFIC_MANAGEMENT_STAFF",
-    unit: "Phòng KHQS"
+    unit: "Chuyên viên QLKH, Phòng KHQS"
   },
   {
     id: "user-staff-hdtien2",
     username: "hdtien2",
     passwordHash:
       "scrypt:user-staff-hdtien2:3fcf32d5cd6957b752759325f0ee8c06f19db00e53ba051225606826fe336f7fe8bf4655570b109ee0a59eb1e90bf02c40e9a5f7d67f93562cbbac1774e7ad74",
-    displayName: "HD Tiến 2",
+    displayName: "Chuyên viên HD Tiến 2",
     status: "active",
     systemRole: "SCIENTIFIC_MANAGEMENT_STAFF",
-    unit: "Phòng KHQS"
+    unit: "Chuyên viên QLKH, Phòng KHQS"
   }
 ];
 
 const organizationUnits = [
+  // Ban Giám đốc & Cơ quan chỉ đạo
   ["org-hvqy", "HVQY", "Học viện Quân y"],
   ["org-bgq", "BGD", "Ban Giám Đốc"],
-  ["org-khti", "KHTI", "Khoa Toán - Tin học"],
-  ["org-khqs", "KHQS", "Phòng KHQS"],
+
+  // Khối Bệnh viện, Viện
+  ["org-bv103", "BV103", "Bệnh viện Quân y 103"],
+  ["org-bvbong", "BVBONG", "Bệnh viện Bỏng Quốc gia Lê Hữu Trác"],
+  ["org-vmps", "VMPS", "Viện Mô phôi lâm sàng Quân đội"],
+
+  // Khối Cơ quan
+  ["org-pct", "PCT", "Phòng Chính trị"],
+  ["org-vp", "VP", "Văn phòng"],
+  ["org-phckt", "PHCKT", "Phòng Hậu cần – Kỹ thuật"],
+  ["org-pdt", "PDT", "Phòng Đào tạo"],
+  ["org-khqs", "KHQS", "Phòng Khoa học Quân sự"],
   ["org-bqlkhqs", "BQLKHQS", "Ban Quản lý KHQS"],
-  ["org-k30", "K30", "Công tác Đảng, Công tác Chính trị"],
-  ["org-k81", "K81", "Vật lý"],
-  ["org-k82", "K82", "Hóa học"],
-  ["org-k84", "K84", "Ngoại ngữ"],
+  ["org-ptbvt", "PTBVT", "Phòng Trang bị – Vật tư"],
+  ["org-ptc", "PTC", "Phòng Tài chính"],
+  ["org-pttkhqs", "PTTKHQS", "Phòng Thông tin Khoa học Quân sự"],
+  ["org-psdh", "PSDH", "Phòng Sau đại học"],
+  ["org-pktbdcl", "PKTBDCL", "Phòng Khảo thí và Bảo đảm chất lượng GD&ĐT"],
+  ["org-tcydqs", "TCYDQS", "Tạp chí Y dược học Quân sự"],
+  ["org-bqlda", "BQLDA", "Ban Quản lý dự án"],
+  ["org-tthra", "TTHRA", "Thanh tra"],
+
+  // Khối Phân hiệu, Viện, Trung tâm Nghiên cứu
+  ["org-phpn", "PHPN", "Phân hiệu phía Nam"],
+  ["org-ttncudt", "TTNCUDT", "Trung tâm Nghiên cứu ứng dụng sản xuất thuốc"],
+  ["org-vdtd", "VDTD", "Viện đào tạo Dược"],
+  ["org-ttdtrndhpx", "TTDTRNDHPX", "Trung tâm Đào tạo, nghiên cứu Độc học và Phóng xạ"],
+
+  // Khối Bộ môn, Khoa - Khối Khoa học cơ bản
+  ["org-llmln", "LLMLN", "Khoa Lý luận Mác – Lê-nin"],
+  ["org-k30", "K30", "Khoa Công tác Đảng, công tác chính trị"],
+  ["org-khti", "KHTI", "Khoa Toán - Tin học"],
+  ["org-k81", "K81", "Khoa Vật lý – Lý sinh"],
+  ["org-k82", "K82", "Khoa Hóa"],
+  ["org-shdtyh", "SHDTYH", "Bộ môn Sinh học và Di truyền y học"],
+  ["org-k84", "K84", "Khoa Ngoại ngữ"],
+
+  // Khối Bộ môn, Khoa - Khối Y học cơ sở
+  ["org-bmsl", "BMSL", "Bộ môn Sinh lý"],
+  ["org-bmslb", "BMSLB", "Bộ môn Sinh lý bệnh"],
+  ["org-bmgp", "BMGP", "Bộ môn Giải phẫu"],
+  ["org-bmptth", "BMPTTH", "Bộ môn Phẫu thuật thực hành, thực nghiệm"],
+  ["org-bmksc", "BMKSC", "Bộ môn Ký sinh trùng và Côn trùng"],
+  ["org-bmmd", "BMMD", "Bộ môn Miễn dịch"],
+
+  // Khối Bộ môn, Khoa - Khối Y học Quân sự
+  ["org-kchtmqy", "KCHTMQY", "Khoa Chỉ huy tham mưu Quân y"],
+  ["org-kqs", "KQS", "Khoa Quân sự"],
+  ["org-kyhqbc", "KYHQBC", "Khoa Y học Quân binh chủng"],
+  ["org-kvsqd", "KVSQD", "Khoa Vệ sinh Quân đội"],
+  ["org-kdthqs", "KDTHQS", "Khoa Dịch tễ học Quân sự"],
+
+  // Khối Bộ môn, Khoa - Khối Y học Lâm sàng – Khối Nội
+  ["org-bmkth", "BMKTH", "Bộ môn – Khoa Tiêu hóa"],
+  ["org-bmktm", "BMKTM", "Bộ môn – Khoa Tim mạch"],
+  ["org-bmkknt", "BMKKNT", "Bộ môn – Khoa Khớp – Nội tiết"],
+  ["org-bmktlm", "BMKTLM", "Bộ môn – Khoa Thận – Lọc máu"],
+  ["org-bmttnhh", "BMTTNHH", "Bộ môn – Trung tâm Nội hô hấp"],
+  ["org-bmtk", "BMTK", "Bộ môn Thần kinh"],
+  ["org-bmtn", "BMTN", "Bộ môn Truyền nhiễm"],
+  ["org-bmtt", "BMTT", "Bộ môn Tâm thần"],
+  ["org-bmndc", "BMNDC", "Bộ môn Nội dã chiến"],
+  ["org-bmkdl", "BMKDL", "Bộ môn Khoa Da liễu"],
+  ["org-bmkyhct", "BMKYHCT", "Bộ môn Khoa Y học cổ truyền"],
+  ["org-bmkn", "BMKN", "Bộ môn Khoa Nhi"],
+  ["org-bmkvltl", "BMKVLTL", "Bộ môn Khoa Vật lý trị liệu – Phục hồi chức năng"],
+  ["org-bmttub", "BMTTUB", "Bộ môn – Trung tâm Ung bướu"],
+
+  // Khối Bộ môn, Khoa - Khối Y học lâm sàng – Khối Ngoại
+  ["org-bmttctch", "BMTTCTCH", "Bộ môn Trung tâm Chấn thương chỉnh hình"],
+  ["org-bmptth2", "BMPTTH2", "Bộ môn Phẫu thuật tiêu hóa"],
+  ["org-bmbyhth", "BMBYHTH", "Bộ môn Bỏng và Y học thảm họa"],
+  ["org-bmptthtm", "BMPTTHTM", "Bộ môn Phẫu thuật tạo hình và thẩm mỹ"],
+  ["org-bmkm", "BMKM", "Bộ môn Khoa Mắt"],
+  ["org-bmkgm", "BMKGM", "Bộ môn Khoa Gây mê"],
+  ["org-bmktmh", "BMKTMH", "Bộ môn Khoa Tai – Mũi – Họng"],
+  ["org-bmkntn", "BMKNTN", "Bộ môn Khoa Ngoại Tiết niệu"],
+  ["org-bmkphm", "BMKPHM", "Bộ môn Khoa Phẫu thuật hàm mặt và Tạo hình"],
+  ["org-bmkpttk", "BMKPTTK", "Bộ môn Khoa Phẫu thuật thần kinh"],
+  ["org-bmkps", "BMKPS", "Bộ môn Khoa Phụ sản"],
+  ["org-bmtthscc", "BMTTHSCC", "Bộ môn Trung tâm Hồi sức cấp cứu và chống độc"],
+  ["org-bmkptln", "BMKPTLN", "Bộ môn Khoa Phẫu thuật lồng ngực"],
+  ["org-bmkrm", "BMKRM", "Bộ môn Khoa Răng miệng"],
+  ["org-bmkndc", "BMKNDC", "Bộ môn – Khoa Ngoại dã chiến"],
+
+  // Khối Bộ môn, Khoa - Khối Y học lâm sàng – Khối Cận lâm sàng
+  ["org-bmtthhtm", "BMTTHHTM", "Bộ môn – Trung tâm Huyết học truyền máu"],
+  ["org-bmksh", "BMKSH", "Bộ môn Khoa Sinh hóa"],
+  ["org-bmgpb", "BMGPB", "Bộ môn Giải phẫu bệnh"],
+  ["org-bmdd", "BMDD", "Bộ môn Điều dưỡng"],
+  ["org-bmkvsyh", "BMKVSYH", "Bộ môn – Khoa Vi sinh y học"],
+  ["org-bmkdd", "BMKDD", "Bộ môn – Khoa Dinh dưỡng"],
+  ["org-bmttcdha", "BMTTCDHA", "Bộ môn – Trung tâm Chẩn đoán hình ảnh"],
+  ["org-bmkcdcn", "BMKCDCN", "Bộ môn – Khoa Chẩn đoán chức năng"],
+
+  // Đơn vị Quản lý Học viên
+  ["org-he1", "HE1", "Hệ 1"],
+  ["org-he2", "HE2", "Hệ 2"],
+  ["org-he3", "HE3", "Hệ 3"],
+  ["org-he4", "HE4", "Hệ 4"],
+  ["org-he5", "HE5", "Hệ 5"],
+
+  // Đơn vị ngoài
   ["org-external", "EXT", "Đơn vị ngoài"]
 ];
+
+const allUnitIds = organizationUnits.map(([id]) => id);
 
 // Scientific management staff operate the intake, supplement, assignment and consolidation flows
 // for the units they oversee, not only for their own department. Without this the seeded staff
@@ -178,13 +277,13 @@ const organizationUnits = [
 // scope-checked staff action (ST-3.1 supplement, ST-3.2 assignment, ST-3.4 consolidation) is
 // refused and the demo cannot reach the approval step.
 const additionalOrganizationScopes = {
-  "user-admin": ["org-bgq", "org-khqs", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
-  "user-admin2": ["org-bgq", "org-khqs", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
-  "user-leadership": ["org-hvqy", "org-khti", "org-khqs", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
-  "user-staff": ["org-khti", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
-  "user-staff-hdtien1": ["org-khti", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
-  "user-staff-hdtien2": ["org-khti", "org-bqlkhqs", "org-k30", "org-k81", "org-k82", "org-k84"],
-  "user-reviewer": ["org-khti"]
+  "user-admin": allUnitIds,
+  "user-admin2": allUnitIds,
+  "user-leadership": allUnitIds,
+  "user-staff": allUnitIds,
+  "user-reviewer": allUnitIds,
+  "user-staff-hdtien1": allUnitIds,
+  "user-staff-hdtien2": allUnitIds
 };
 
 for (const [id, code, name] of organizationUnits) {
@@ -213,7 +312,17 @@ for (const user of users) {
     }
   });
 
-  const organizationUnit = await prisma.organizationUnit.findFirst({ where: { name: user.unit } });
+  let organizationUnit = await prisma.organizationUnit.findFirst({ where: { name: user.unit } });
+
+  if (!organizationUnit) {
+    if (user.unit?.includes("Phòng KHQS") || user.unit?.includes("KHQS")) {
+      organizationUnit = await prisma.organizationUnit.findUnique({ where: { id: "org-khqs" } });
+    } else if (user.unit?.includes("Ban Giám Đốc") || user.unit?.includes("Ban Giám đốc")) {
+      organizationUnit = await prisma.organizationUnit.findUnique({ where: { id: "org-bgq" } });
+    } else if (user.unit?.includes("Đơn vị ngoài")) {
+      organizationUnit = await prisma.organizationUnit.findUnique({ where: { id: "org-external" } });
+    }
+  }
 
   if (organizationUnit) {
     await prisma.userOrganizationScope.upsert({
@@ -768,10 +877,11 @@ const nmtrungProfile = await prisma.researcherProfile.upsert({
     managementOrganizationUnitId: "org-bqlkhqs",
     academicDegreeCatalogItemId: doctorDegree?.id,
     title: "Tiến sĩ",
-    position: "Thành viên Hội đồng - Ban Quản lý KHQS",
+    position: "Trưởng Ban QLKH, Phòng KHQS",
     militaryRank: "Thượng tá",
-    contactEmail: "nmtrung@hvqy.edu.vn",
-    contactEmailKey: "nmtrung@hvqy.edu.vn",
+    contactEmail: "dmtrung@hvqy.edu.vn",
+    contactEmailKey: "dmtrung@hvqy.edu.vn",
+    externalAffiliation: "Phòng KHQS - Ban QLKH",
     contactPhone: "0987654321",
     contactPhoneKey: "0987654321",
     status: "ACTIVE"
@@ -785,10 +895,11 @@ const nmtrungProfile = await prisma.researcherProfile.upsert({
     profileType: "INTERNAL",
     academicDegreeCatalogItemId: doctorDegree?.id,
     title: "Tiến sĩ",
-    position: "Thành viên Hội đồng - Ban Quản lý KHQS",
+    position: "Trưởng Ban QLKH, Phòng KHQS",
     militaryRank: "Thượng tá",
-    contactEmail: "nmtrung@hvqy.edu.vn",
-    contactEmailKey: "nmtrung@hvqy.edu.vn",
+    contactEmail: "dmtrung@hvqy.edu.vn",
+    contactEmailKey: "dmtrung@hvqy.edu.vn",
+    externalAffiliation: "Phòng KHQS - Ban QLKH",
     contactPhone: "0987654321",
     contactPhoneKey: "0987654321",
     status: "ACTIVE",
@@ -814,6 +925,61 @@ if (!existingLinkTrung) {
   });
 }
 
+const hdtien1Profile = await prisma.researcherProfile.upsert({
+  where: { linkedUserId: "user-staff-hdtien1" },
+  update: {
+    fullName: "ThS. Hoàng Đình Tiến",
+    fullNameKey: "hoang dinh tien",
+    profileType: "INTERNAL",
+    managementOrganizationUnitId: "org-khqs",
+    title: "Thạc sĩ",
+    position: "Chuyên viên QLKH, Phòng KHQS",
+    militaryRank: "Đại úy",
+    contactEmail: "hdtien1@hvqy.edu.vn",
+    contactEmailKey: "hdtien1@hvqy.edu.vn",
+    externalAffiliation: "Phòng KHQS",
+    contactPhone: "0912345678",
+    contactPhoneKey: "0912345678",
+    status: "ACTIVE"
+  },
+  create: {
+    id: "profile-hdtien1",
+    managementOrganizationUnitId: "org-khqs",
+    linkedUserId: "user-staff-hdtien1",
+    fullName: "ThS. Hoàng Đình Tiến",
+    fullNameKey: "hoang dinh tien",
+    profileType: "INTERNAL",
+    title: "Thạc sĩ",
+    position: "Chuyên viên QLKH, Phòng KHQS",
+    militaryRank: "Đại úy",
+    contactEmail: "hdtien1@hvqy.edu.vn",
+    contactEmailKey: "hdtien1@hvqy.edu.vn",
+    externalAffiliation: "Phòng KHQS",
+    contactPhone: "0912345678",
+    contactPhoneKey: "0912345678",
+    status: "ACTIVE",
+    createdById: "user-admin",
+    updatedById: "user-admin"
+  }
+});
+
+const existingLinkTien = await prisma.researcherProfileAccountLink.findFirst({
+  where: { researcherProfileId: hdtien1Profile.id, status: "ACTIVE" }
+});
+if (!existingLinkTien) {
+  await prisma.researcherProfileAccountLink.create({
+    data: {
+      id: "link-hdtien1",
+      researcherProfileId: hdtien1Profile.id,
+      userId: "user-staff-hdtien1",
+      status: "ACTIVE",
+      effectiveFrom: new Date(),
+      reason: "seed-profile-link",
+      createdById: "user-admin"
+    }
+  });
+}
+
 // Seed sample proposals
 const seedIntake = await prisma.proposalIntakePeriod.findFirst({ where: { code: "INTAKE-2026-SEED" } });
 
@@ -821,10 +987,85 @@ const proposal1 = await prisma.researchProposal.upsert({
   where: { code: "HVQY-2026-NC01" },
   update: {
     title: "Nghiên cứu ứng dụng trí tuệ nhân tạo trong hỗ trợ chẩn đoán hình ảnh chấn thương sọ não",
-    status: "in_review",
+    status: "ready_for_approval",
     ownerId: "user-pi",
     hostOrganizationUnitId: "org-khti",
-    intakePeriodId: seedIntake.id
+    intakePeriodId: seedIntake.id,
+    proposalTypeCode: "academy-level",
+    researchFieldCode: "military-medicine",
+    budgetMetadata: {
+      amount: 450000000,
+      currency: "VND",
+      note: "Ngân sách sự nghiệp NCKH Học viện Quân y năm 2026"
+    },
+    councilMetadata: {
+      status: "approved",
+      decisionNumber: "QĐ-TLHĐ-HVQY2026NC01/HVQY",
+      decidedAt: "2026-09-15T08:30:00.000Z",
+      decidedById: "user-leadership",
+      decidedByName: "GS. TS. Trần Viết Tiến",
+      approvalNote: "Nhất trí thành lập Hội đồng theo đề nghị của Trưởng phòng KHQS. Giao Hội đồng hoàn thành đánh giá trước ngày 25/09/2026.",
+      proposedAt: "2026-09-12T10:00:00.000Z",
+      proposedById: "user-staff",
+      proposedByName: "TS. Nguyễn Minh Phương",
+      meetingDate: "2026-09-18T09:00:00.000Z",
+      meetingLocation: "Phòng họp 1 - Tòa nhà Trung tâm - Học viện Quân y",
+      tentativeAgenda: "1. Tuyên bố lý do, giới thiệu đại biểu. 2. Công bố Quyết định thành lập Hội đồng. 3. Chủ nhiệm báo cáo tóm tắt thuyết minh. 4. Phản biện và thành viên cho ý kiến. 5. Hội đồng bỏ phiếu và kết luận.",
+      members: [
+        {
+          role: "chair",
+          roleLabel: "Chủ tịch Hội đồng",
+          userId: "user-leadership",
+          displayName: "GS. TS. Trần Viết Tiến",
+          academicTitle: "Giáo sư, Tiến sĩ",
+          unit: "Ban Giám đốc Học viện"
+        },
+        {
+          role: "secretary",
+          roleLabel: "Thư ký khoa học",
+          userId: "user-staff",
+          displayName: "TS. Nguyễn Minh Phương",
+          academicTitle: "Tiến sĩ",
+          unit: "Phòng Khoa học Quân sự"
+        },
+        {
+          role: "reviewer_1",
+          roleLabel: "Ủy viên Phản biện 1",
+          userId: "user-reviewer",
+          displayName: "TS. Đỗ Minh Trung",
+          academicTitle: "Tiến sĩ",
+          unit: "Ban Quản lý KHQS"
+        },
+        {
+          role: "reviewer_2",
+          roleLabel: "Ủy viên Phản biện 2",
+          userId: "user-researcher2",
+          displayName: "Nhà nghiên cứu nội bộ 2",
+          academicTitle: "Tiến sĩ",
+          unit: "Khoa Toán - Tin học"
+        },
+        {
+          role: "member",
+          roleLabel: "Ủy viên",
+          userId: "user-researcher3",
+          displayName: "Nhà nghiên cứu nội bộ 3",
+          academicTitle: "Thạc sĩ, Bác sĩ CKII",
+          unit: "Trung tâm Chẩn đoán hình ảnh"
+        }
+      ],
+      councilMinutes: {
+        meetingConductedAt: "2026-09-18T09:00:00.000Z",
+        attendance: ["user-leadership", "user-staff", "user-reviewer", "user-researcher2", "user-researcher3"],
+        conclusion: "approved",
+        conclusionLabel: "Đạt yêu cầu (Đề nghị phê duyệt)",
+        averageScore: 88.5,
+        summaryComments: "Đề tài có tính thời sự cao trong điều kiện y học quân sự và dã chiến. Thuyết minh rõ ràng, phương pháp nghiên cứu chặt chẽ.",
+        modificationsRequired: "Cần bổ sung thêm cỡ mẫu lâm sàng tại các Bệnh viện Quân y tuyến dưới.",
+        recordedById: "user-staff",
+        recordedByName: "TS. Nguyễn Minh Phương",
+        recordedAt: "2026-09-18T11:30:00.000Z"
+      }
+    }
   },
   create: {
     id: "prop-seed-001",
@@ -833,9 +1074,103 @@ const proposal1 = await prisma.researchProposal.upsert({
     intakePeriodId: seedIntake.id,
     ownerId: "user-pi",
     hostOrganizationUnitId: "org-khti",
-    status: "in_review",
+    status: "ready_for_approval",
+    proposalTypeCode: "academy-level",
+    researchFieldCode: "military-medicine",
+    budgetMetadata: {
+      amount: 450000000,
+      currency: "VND",
+      note: "Ngân sách sự nghiệp NCKH Học viện Quân y năm 2026"
+    },
+    councilMetadata: {
+      status: "approved",
+      decisionNumber: "QĐ-TLHĐ-HVQY2026NC01/HVQY",
+      decidedAt: "2026-09-15T08:30:00.000Z",
+      decidedById: "user-leadership",
+      decidedByName: "GS. TS. Trần Viết Tiến",
+      approvalNote: "Nhất trí thành lập Hội đồng theo đề nghị của Trưởng phòng KHQS. Giao Hội đồng hoàn thành đánh giá trước ngày 25/09/2026.",
+      proposedAt: "2026-09-12T10:00:00.000Z",
+      proposedById: "user-staff",
+      proposedByName: "TS. Nguyễn Minh Phương",
+      meetingDate: "2026-09-18T09:00:00.000Z",
+      meetingLocation: "Phòng họp 1 - Tòa nhà Trung tâm - Học viện Quân y",
+      tentativeAgenda: "1. Tuyên bố lý do, giới thiệu đại biểu. 2. Công bố Quyết định thành lập Hội đồng. 3. Chủ nhiệm báo cáo tóm tắt thuyết minh. 4. Phản biện và thành viên cho ý kiến. 5. Hội đồng bỏ phiếu và kết luận.",
+      members: [
+        {
+          role: "chair",
+          roleLabel: "Chủ tịch Hội đồng",
+          userId: "user-leadership",
+          displayName: "GS. TS. Trần Viết Tiến",
+          academicTitle: "Giáo sư, Tiến sĩ",
+          unit: "Ban Giám đốc Học viện"
+        },
+        {
+          role: "secretary",
+          roleLabel: "Thư ký khoa học",
+          userId: "user-staff",
+          displayName: "TS. Nguyễn Minh Phương",
+          academicTitle: "Tiến sĩ",
+          unit: "Phòng Khoa học Quân sự"
+        },
+        {
+          role: "reviewer_1",
+          roleLabel: "Ủy viên Phản biện 1",
+          userId: "user-reviewer",
+          displayName: "TS. Đỗ Minh Trung",
+          academicTitle: "Tiến sĩ",
+          unit: "Ban Quản lý KHQS"
+        },
+        {
+          role: "reviewer_2",
+          roleLabel: "Ủy viên Phản biện 2",
+          userId: "user-researcher2",
+          displayName: "Nhà nghiên cứu nội bộ 2",
+          academicTitle: "Tiến sĩ",
+          unit: "Khoa Toán - Tin học"
+        },
+        {
+          role: "member",
+          roleLabel: "Ủy viên",
+          userId: "user-researcher3",
+          displayName: "Nhà nghiên cứu nội bộ 3",
+          academicTitle: "Thạc sĩ, Bác sĩ CKII",
+          unit: "Trung tâm Chẩn đoán hình ảnh"
+        }
+      ],
+      councilMinutes: {
+        meetingConductedAt: "2026-09-18T09:00:00.000Z",
+        attendance: ["user-leadership", "user-staff", "user-reviewer", "user-researcher2", "user-researcher3"],
+        conclusion: "approved",
+        conclusionLabel: "Đạt yêu cầu (Đề nghị phê duyệt)",
+        averageScore: 88.5,
+        summaryComments: "Đề tài có tính thời sự cao trong điều kiện y học quân sự và dã chiến. Thuyết minh rõ ràng, phương pháp nghiên cứu chặt chẽ.",
+        modificationsRequired: "Cần bổ sung thêm cỡ mẫu lâm sàng tại các Bệnh viện Quân y tuyến dưới.",
+        recordedById: "user-staff",
+        recordedByName: "TS. Nguyễn Minh Phương",
+        recordedAt: "2026-09-18T11:30:00.000Z"
+      }
+    },
     submittedAt: new Date(),
     submittedById: "user-pi"
+  }
+});
+
+await prisma.proposalEvaluationSummary.upsert({
+  where: { proposalId: "prop-seed-001" },
+  update: {
+    summary: "Hồ sơ đã được Hội đồng tư vấn đánh giá sơ tuyển thông qua với điểm trung bình 88.5/100, xếp loại Xuất sắc. Các tiêu chí về tính cấp thiết quân sự, tính khả thi và dự toán phù hợp quy định.",
+    recommendation: "Kính trình Giám đốc Học viện xem xét phê duyệt thực hiện đề tài.",
+    status: "ready",
+    markedReadyAt: new Date()
+  },
+  create: {
+    proposalId: "prop-seed-001",
+    summary: "Hồ sơ đã được Hội đồng tư vấn đánh giá sơ tuyển thông qua với điểm trung bình 88.5/100, xếp loại Xuất sắc. Các tiêu chí về tính cấp thiết quân sự, tính khả thi và dự toán phù hợp quy định.",
+    recommendation: "Kính trình Giám đốc Học viện xem xét phê duyệt thực hiện đề tài.",
+    status: "ready",
+    createdById: "user-staff",
+    updatedById: "user-staff",
+    markedReadyAt: new Date()
   }
 });
 
@@ -843,10 +1178,17 @@ const proposal2 = await prisma.researchProposal.upsert({
   where: { code: "BQP-2026-Y03" },
   update: {
     title: "Nghiên cứu hiệu quả điều trị phục hồi chức năng sau ghép tạng tại các bệnh viện quân đội",
-    status: "in_review",
+    status: "approved",
     ownerId: "user-researcher1",
     hostOrganizationUnitId: "org-khti",
-    intakePeriodId: seedIntake.id
+    intakePeriodId: seedIntake.id,
+    proposalTypeCode: "ministry-level",
+    researchFieldCode: "military-medicine",
+    budgetMetadata: {
+      amount: 1200000000,
+      currency: "VND",
+      note: "Ngân sách sự nghiệp NCKH - Quốc phòng giao kế hoạch năm 2026"
+    }
   },
   create: {
     id: "prop-seed-002",
@@ -855,7 +1197,193 @@ const proposal2 = await prisma.researchProposal.upsert({
     intakePeriodId: seedIntake.id,
     ownerId: "user-researcher1",
     hostOrganizationUnitId: "org-khti",
-    status: "in_review",
+    status: "approved",
+    proposalTypeCode: "ministry-level",
+    researchFieldCode: "military-medicine",
+    budgetMetadata: {
+      amount: 1200000000,
+      currency: "VND",
+      note: "Ngân sách sự nghiệp NCKH - Quốc phòng giao kế hoạch năm 2026"
+    },
+    submittedAt: new Date(),
+    submittedById: "user-researcher1"
+  }
+});
+
+await prisma.proposalEvaluationSummary.upsert({
+  where: { proposalId: "prop-seed-002" },
+  update: {
+    summary: "Hội đồng đánh giá độc lập và chuyên môn Cục Quân y thống nhất thông qua đề tài với tỷ lệ 100% đồng thuận.",
+    recommendation: "Kính trình Thủ trưởng phê duyệt chính thức giao nhiệm vụ.",
+    status: "ready",
+    markedReadyAt: new Date()
+  },
+  create: {
+    proposalId: "prop-seed-002",
+    summary: "Hội đồng đánh giá độc lập và chuyên môn Cục Quân y thống nhất thông qua đề tài với tỷ lệ 100% đồng thuận.",
+    recommendation: "Kính trình Thủ trưởng phê duyệt chính thức giao nhiệm vụ.",
+    status: "ready",
+    createdById: "user-staff",
+    updatedById: "user-staff",
+    markedReadyAt: new Date()
+  }
+});
+
+await prisma.proposalDecision.upsert({
+  where: { id: "decision-seed-002" },
+  update: {
+    decision: "approved",
+    note: "Đồng ý phê duyệt đề tài theo kết luận của Hội đồng đánh giá và dự toán đã được thẩm định.",
+    decidedById: "user-leadership",
+    decidedAt: new Date(),
+    fromStatus: "ready_for_approval",
+    toStatus: "approved"
+  },
+  create: {
+    id: "decision-seed-002",
+    proposalId: "prop-seed-002",
+    decision: "approved",
+    note: "Đồng ý phê duyệt đề tài theo kết luận của Hội đồng đánh giá và dự toán đã được thẩm định.",
+    decidedById: "user-leadership",
+    decidedAt: new Date(),
+    fromStatus: "ready_for_approval",
+    toStatus: "approved"
+  }
+});
+
+const proposal3 = await prisma.researchProposal.upsert({
+  where: { id: "prop-seed-003" },
+  update: {
+    title: "Nghiên cứu ứng dụng cảm biến y sinh thông minh trong theo dõi sức khỏe bộ đội cơ động dã chiến",
+    status: "submitted",
+    ownerId: "user-researcher1",
+    hostOrganizationUnitId: "org-khti",
+    intakePeriodId: seedIntake.id,
+    proposalTypeCode: "ministry-level",
+    researchFieldCode: "military-medicine",
+    budgetMetadata: {
+      amount: 850000000,
+      currency: "VND",
+      note: "Ngân sách sự nghiệp NCKH - Quốc phòng giao kế hoạch năm 2026"
+    },
+    councilMetadata: {
+      status: "submitted",
+      proposedAt: "2026-09-18T14:30:00.000Z",
+      proposedById: "user-staff",
+      proposedByName: "TS. Nguyễn Minh Phương",
+      meetingDate: "2026-09-24T08:30:00.000Z",
+      meetingLocation: "Phòng họp Ban Giám đốc (Tầng 3, Nhà Trung tâm)",
+      tentativeAgenda: "1. Công bố Quyết định thành lập Hội đồng. 2. Chủ nhiệm báo cáo tóm tắt thuyết minh. 3. Các thành viên phản biện và ủy viên nhận xét. 4. Hội đồng thảo luận và bỏ phiếu đánh giá.",
+      members: [
+        {
+          role: "chair",
+          roleLabel: "Chủ tịch Hội đồng",
+          userId: "user-leadership",
+          displayName: "GS. TS. Trần Viết Tiến",
+          academicTitle: "Giáo sư, Tiến sĩ",
+          unit: "Ban Giám đốc Học viện"
+        },
+        {
+          role: "secretary",
+          roleLabel: "Thư ký khoa học",
+          userId: "user-staff",
+          displayName: "TS. Nguyễn Minh Phương",
+          academicTitle: "Tiến sĩ",
+          unit: "Phòng Khoa học Quân sự"
+        },
+        {
+          role: "reviewer_1",
+          roleLabel: "Ủy viên Phản biện 1",
+          userId: "user-reviewer",
+          displayName: "TS. Đỗ Minh Trung",
+          academicTitle: "Tiến sĩ",
+          unit: "Ban Quản lý KHQS"
+        },
+        {
+          role: "reviewer_2",
+          roleLabel: "Ủy viên Phản biện 2",
+          userId: "user-pi",
+          displayName: "TS. Phạm Anh Tuấn",
+          academicTitle: "Tiến sĩ",
+          unit: "Khoa Toán - Tin học"
+        },
+        {
+          role: "member",
+          roleLabel: "Ủy viên",
+          userId: "user-researcher2",
+          displayName: "Nhà nghiên cứu nội bộ 2",
+          academicTitle: "Thạc sĩ",
+          unit: "Khoa Toán - Tin học"
+        }
+      ]
+    }
+  },
+  create: {
+    id: "prop-seed-003",
+    code: "HVQY-2026-NC03",
+    title: "Nghiên cứu ứng dụng cảm biến y sinh thông minh trong theo dõi sức khỏe bộ đội cơ động dã chiến",
+    intakePeriodId: seedIntake.id,
+    ownerId: "user-researcher1",
+    hostOrganizationUnitId: "org-khti",
+    status: "submitted",
+    proposalTypeCode: "ministry-level",
+    researchFieldCode: "military-medicine",
+    budgetMetadata: {
+      amount: 850000000,
+      currency: "VND",
+      note: "Ngân sách sự nghiệp NCKH - Quốc phòng giao kế hoạch năm 2026"
+    },
+    councilMetadata: {
+      status: "submitted",
+      proposedAt: "2026-09-18T14:30:00.000Z",
+      proposedById: "user-staff",
+      proposedByName: "TS. Nguyễn Minh Phương",
+      meetingDate: "2026-09-24T08:30:00.000Z",
+      meetingLocation: "Phòng họp Ban Giám đốc (Tầng 3, Nhà Trung tâm)",
+      tentativeAgenda: "1. Công bố Quyết định thành lập Hội đồng. 2. Chủ nhiệm báo cáo tóm tắt thuyết minh. 3. Các thành viên phản biện và ủy viên nhận xét. 4. Hội đồng thảo luận và bỏ phiếu đánh giá.",
+      members: [
+        {
+          role: "chair",
+          roleLabel: "Chủ tịch Hội đồng",
+          userId: "user-leadership",
+          displayName: "GS. TS. Trần Viết Tiến",
+          academicTitle: "Giáo sư, Tiến sĩ",
+          unit: "Ban Giám đốc Học viện"
+        },
+        {
+          role: "secretary",
+          roleLabel: "Thư ký khoa học",
+          userId: "user-staff",
+          displayName: "TS. Nguyễn Minh Phương",
+          academicTitle: "Tiến sĩ",
+          unit: "Phòng Khoa học Quân sự"
+        },
+        {
+          role: "reviewer_1",
+          roleLabel: "Ủy viên Phản biện 1",
+          userId: "user-reviewer",
+          displayName: "TS. Đỗ Minh Trung",
+          academicTitle: "Tiến sĩ",
+          unit: "Ban Quản lý KHQS"
+        },
+        {
+          role: "reviewer_2",
+          roleLabel: "Ủy viên Phản biện 2",
+          userId: "user-pi",
+          displayName: "TS. Phạm Anh Tuấn",
+          academicTitle: "Tiến sĩ",
+          unit: "Khoa Toán - Tin học"
+        },
+        {
+          role: "member",
+          roleLabel: "Ủy viên",
+          userId: "user-researcher2",
+          displayName: "Nhà nghiên cứu nội bộ 2",
+          academicTitle: "Thạc sĩ",
+          unit: "Khoa Toán - Tin học"
+        }
+      ]
+    },
     submittedAt: new Date(),
     submittedById: "user-researcher1"
   }

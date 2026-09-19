@@ -39,6 +39,8 @@ import {
 } from "@/lib/research-proposals-api";
 
 type LoadState = "loading" | "ready" | "error";
+const ST23A_ALLOWED_FILE_TYPES = ".doc, .docx, .pdf, .xls, .xlsx";
+const ST23A_FILE_ACCEPT = ".doc,.docx,.pdf,.xls,.xlsx";
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   "proposal-form": "Thuyết minh đề tài",
   proposalForm: "Thuyết minh đề tài",
@@ -680,7 +682,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
           <ProposalEvaluationPanel contextVersion={proposal.viewerAuthorization?.contextVersion} proposalId={proposal.id} onWorkflowChange={() => void refreshWorkflowState()} canAssignReviewers={canPerformProposalAction(capabilityState, "proposal.review.assign")} canConsolidate={canPerformProposalAction(capabilityState, "proposal.review.consolidate")} blockedReason={blockedProposalAction(capabilityState, "proposal.review.assign")?.reason ?? capabilityState.reason} consolidateBlockedReason={blockedProposalAction(capabilityState, "proposal.review.consolidate")?.reason ?? capabilityState.reason} />
         ) : null}
 
-        {showDecisionPanel ? <ProposalDecisionPanel proposalId={proposal.id} onDecision={() => void refreshWorkflowState()} canDecide={canPerformProposalAction(capabilityState, "proposal.decision.approve")} blockedReason={blockedProposalAction(capabilityState, "proposal.decision.approve")?.reason ?? capabilityState.reason} /> : null}
+        {showDecisionPanel ? <ProposalDecisionPanel proposal={proposal} proposalId={proposal.id} onDecision={() => void refreshWorkflowState()} canDecide={canPerformProposalAction(capabilityState, "proposal.decision.approve")} blockedReason={blockedProposalAction(capabilityState, "proposal.decision.approve")?.reason ?? capabilityState.reason} /> : null}
 
         <SectionCard title="Tệp tài liệu" subtitle="Theo dõi từng tài liệu bắt buộc và metadata nộp hồ sơ">
           {uploadError ? <p className="form-error">{uploadError}</p> : null}
@@ -707,7 +709,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
                         disabled={!canUpload}
                         key={fileInputKeys[group.code] ?? 0}
                         type="file"
-                        accept={group.allowedMimeTypes.join(",")}
+                        accept={ST23A_FILE_ACCEPT}
                         onChange={(event) => setUploadFiles((current) => ({ ...current, [group.code]: event.target.files?.[0] ?? null }))}
                       />
                     </label>

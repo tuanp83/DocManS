@@ -106,14 +106,41 @@ export class ResearcherProfilesService {
       ...(query.profileType ? { profileType: query.profileType } : {}),
       ...(query.researchFieldId ? { researchFields: { some: { catalogItemId: query.researchFieldId } } } : {}),
       ...(query.status ? { status: query.status } : {}),
-      ...(keyword ? { OR: [{ fullNameKey: { contains: keyword } }, { contactEmailKey: { contains: keyword } }, { expertiseKeywords: { some: { keywordKey: { contains: keyword } } } }] } : {})
+      ...(keyword ? { OR: [{ fullNameKey: { contains: keyword } }, { contactEmailKey: { contains: keyword } }, { expertiseKeywords: { some: { keywordKey: { contains: keyword } } } }, { externalAffiliation: { contains: keyword, mode: "insensitive" } }] } : {})
     } as never;
     const [profiles, total] = await Promise.all([
-      this.prisma.researcherProfile.findMany({ where, select: { id: true, fullName: true, profileType: true, status: true, managementOrganizationUnitId: true, linkedUserId: true, aggregateVersion: true, managementOrganizationUnit: profileInclude.managementOrganizationUnit, linkedUser: profileInclude.linkedUser }, orderBy: [{ fullNameKey: "asc" }, { id: "asc" }], skip: (page - 1) * pageSize, take: pageSize }),
+      this.prisma.researcherProfile.findMany({
+        where,
+        select: {
+          id: true,
+          fullName: true,
+          profileType: true,
+          status: true,
+          externalAffiliation: true,
+          curriculumVitae: true,
+          managementOrganizationUnitId: true,
+          linkedUserId: true,
+          aggregateVersion: true,
+          managementOrganizationUnit: profileInclude.managementOrganizationUnit,
+          linkedUser: profileInclude.linkedUser
+        },
+        orderBy: [{ fullNameKey: "asc" }, { id: "asc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize
+      }),
       this.prisma.researcherProfile.count({ where })
     ]);
     return {
-      profiles: profiles.map((profile) => ({ id: profile.id, fullName: profile.fullName, profileType: profile.profileType, status: profile.status, managementOrganization: profile.managementOrganizationUnit, account: profile.linkedUser ? this.safeAccount(profile.linkedUser) : null, viewerAuthorization: projectResearcherProfileAuthorization(actor, profile) })),
+      profiles: profiles.map((profile) => ({
+        id: profile.id,
+        fullName: profile.fullName,
+        profileType: profile.profileType,
+        externalAffiliation: profile.externalAffiliation || (profile.curriculumVitae as any)?.personalInfo?.organization || null,
+        status: profile.status,
+        managementOrganization: profile.managementOrganizationUnit,
+        account: profile.linkedUser ? this.safeAccount(profile.linkedUser) : null,
+        viewerAuthorization: projectResearcherProfileAuthorization(actor, profile)
+      })),
       organizationOptions: actor.organizationScopes,
       page,
       pageSize,
@@ -124,11 +151,15 @@ export class ResearcherProfilesService {
 
   async listCatalogs(actor: SafeUserContext) {
     if (!canManageResearcherProfiles(actor)) await this.getMyProfile(actor);
-    const items = await this.prisma.catalogItem.findMany({ where: { status: "active", deletedAt: null, type: { in: ["research-field", "academic-rank", "academic-degree"] } }, orderBy: [{ type: "asc" }, { name: "asc" }] });
+    const [items, orgs] = await Promise.all([
+      this.prisma.catalogItem.findMany({ where: { status: "active", deletedAt: null, type: { in: ["research-field", "academic-rank", "academic-degree"] } }, orderBy: [{ type: "asc" }, { name: "asc" }] }),
+      this.prisma.organizationUnit.findMany({ where: { status: "active" }, select: { id: true, code: true, name: true }, orderBy: { name: "asc" } })
+    ]);
     return {
       researchFields: items.filter((item) => item.type === "research-field"),
       academicRanks: items.filter((item) => item.type === "academic-rank"),
-      academicDegrees: items.filter((item) => item.type === "academic-degree")
+      academicDegrees: items.filter((item) => item.type === "academic-degree"),
+      organizations: orgs
     };
   }
 
@@ -352,6 +383,7 @@ export class ResearcherProfilesService {
     const correlationId = randomUUID();
     const safeInput: UpdateResearcherProfileDto = {
       contextVersion: input.contextVersion,
+      managementOrganizationUnitId: input.managementOrganizationUnitId,
       fullName: input.fullName,
       externalAffiliation: input.externalAffiliation,
       academicRankCatalogItemId: input.academicRankCatalogItemId,
@@ -573,6 +605,10 @@ export class ResearcherProfilesService {
   }
 
   private async validateCatalogs(tx: Prisma.TransactionClient, input: Partial<UpdateResearcherProfileDto>) {
+    if (input.managementOrganizationUnitId) {
+      const org = await tx.organizationUnit.findFirst({ where: { id: input.managementOrganizationUnitId, status: "active" } });
+      if (!org) throw new BadRequestException({ message: "managementOrganizationUnitId không hợp lệ.", errors: [{ field: "managementOrganizationUnitId", message: "Đơn vị quản lý không hợp lệ hoặc không còn hoạt động." }] });
+    }
     const checks = [
       [input.academicRankCatalogItemId, "academic-rank", "academicRankCatalogItemId"],
       [input.academicDegreeCatalogItemId, "academic-degree", "academicDegreeCatalogItemId"]
@@ -594,10 +630,12 @@ export class ResearcherProfilesService {
   }
 
   private createData(input: CreateResearcherProfileDto, actorId: string) {
+    const cvOrg = (input.curriculumVitae as any)?.personalInfo?.organization;
+    const effectiveAffiliation = input.externalAffiliation || cvOrg || null;
     return {
       managementOrganizationUnitId: input.managementOrganizationUnitId,
       profileType: input.profileType ?? "INTERNAL",
-      externalAffiliation: input.externalAffiliation,
+      externalAffiliation: effectiveAffiliation,
       fullName: input.fullName,
       fullNameKey: normalizeResearcherKey(input.fullName),
       academicRankCatalogItemId: input.academicRankCatalogItemId,
@@ -623,8 +661,12 @@ export class ResearcherProfilesService {
 
   private updateData(input: UpdateResearcherProfileDto) {
     const data: Record<string, unknown> = {};
-    for (const field of ["fullName", "externalAffiliation", "academicRankCatalogItemId", "academicDegreeCatalogItemId", "title", "position", "militaryRank", "contactEmail", "contactPhone", "contactNote", "profileType"] as const) {
+    for (const field of ["fullName", "externalAffiliation", "academicRankCatalogItemId", "academicDegreeCatalogItemId", "title", "position", "militaryRank", "contactEmail", "contactPhone", "contactNote", "profileType", "managementOrganizationUnitId"] as const) {
       if (input[field] !== undefined) data[field] = input[field] ?? null;
+    }
+    const cvOrg = (input.curriculumVitae as any)?.personalInfo?.organization;
+    if (input.externalAffiliation === undefined && cvOrg) {
+      data.externalAffiliation = cvOrg;
     }
     if (input.fullName !== undefined) data.fullNameKey = normalizeResearcherKey(input.fullName);
     if (input.contactEmail !== undefined) data.contactEmailKey = normalizeEmail(input.contactEmail) ?? null;
@@ -726,7 +768,7 @@ export class ResearcherProfilesService {
       id: profile.id,
       fullName: profile.fullName,
       profileType: profile.profileType,
-      externalAffiliation: profile.externalAffiliation,
+      externalAffiliation: profile.externalAffiliation || (profile.curriculumVitae as any)?.personalInfo?.organization || null,
       academicRank: profile.academicRankCatalogItem,
       academicDegree: profile.academicDegreeCatalogItem,
       title: profile.title,

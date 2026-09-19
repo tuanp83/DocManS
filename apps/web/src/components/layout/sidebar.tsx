@@ -13,7 +13,7 @@ export function Sidebar() {
     return null;
   }
 
-  const navigationItems = getNavigationItems(account.systemRole);
+  const navigationItems = getNavigationItems(account.systemRole, account);
 
   return (
     <aside className="sidebar" aria-label="Điều hướng chính">
@@ -32,7 +32,9 @@ export function Sidebar() {
       <div className="sidebar-note">
         <strong>Phạm vi truy cập hiện hành</strong>
         <span>
-          {account.systemRoleLabel} - {account.unit}
+          {account.unit && !account.systemRoleLabel.toLowerCase().includes(account.unit.toLowerCase())
+            ? `${account.systemRoleLabel} - ${account.unit}`
+            : account.systemRoleLabel}
         </span>
       </div>
     </aside>

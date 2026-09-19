@@ -13,6 +13,10 @@ export type EvaluationProposalRecord = {
   ownerId: string;
   hostOrganizationUnitId: string;
   status: string;
+  proposalTypeCode?: string | null;
+  researchFieldCode?: string | null;
+  budgetMetadata?: unknown;
+  councilMetadata?: unknown;
   submittedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -97,7 +101,11 @@ export async function findEvaluationProposal(prisma: PrismaService, proposalId: 
  */
 export function assertScientificManagementScope(actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
   if (!actor || !isScientificManagement(actor)) {
-    throw new ForbiddenException({ message: "Chỉ chuyên viên quản lý khoa học được thực hiện thao tác này." });
+    throw new ForbiddenException({ message: "Chỉ cán bộ quản lý khoa học được thực hiện thao tác này." });
+  }
+
+  if ((actor.unit || "").toLowerCase().includes("chuyên viên")) {
+    throw new ForbiddenException({ message: "Chuyên viên QLKH không có quyền thực hiện đánh giá hồ sơ hoặc phân công hội đồng." });
   }
 
   assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
@@ -126,6 +134,9 @@ export function assertCanReadEvaluation(actor: SafeUserContext | undefined, prop
   }
 
   if (actor && isScientificManagement(actor)) {
+    if ((actor.unit || "").toLowerCase().includes("chuyên viên")) {
+      throw new ForbiddenException({ message: "Chuyên viên QLKH không có quyền xem thông tin đánh giá hồ sơ." });
+    }
     assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
     return actor;
   }

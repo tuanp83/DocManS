@@ -37,6 +37,8 @@ export class ProposalDecisionDto {
   [key: string]: unknown;
 
   note?: string;
+  approvedBudget?: number;
+  budgetNote?: string;
 }
 
 /** Revocation requires a nonblank reason, bounded at 2000 characters. */
@@ -144,6 +146,9 @@ export const proposalDecisionPipe: PipeTransform<unknown, ProposalDecisionDto> =
     // reject-needs-a-reason rule lives in the service where the decision type is known.
     const input = value === undefined || value === null || value === "" ? {} : assertRecord(value);
     assertOptionalText(input.note, "note", 2000);
+    if (input.budgetNote !== undefined && input.budgetNote !== null) {
+      assertOptionalText(input.budgetNote, "budgetNote", 500);
+    }
     return input as ProposalDecisionDto;
   }
 };
@@ -156,3 +161,27 @@ export const revokeReviewAssignmentPipe: PipeTransform<unknown, RevokeReviewAssi
     return { ...input, contextVersion: readContextVersion(input) } as RevokeReviewAssignmentDto;
   }
 };
+
+export class ApproveProposalBudgetDto {
+  [key: string]: unknown;
+
+  approvedBudget!: number;
+  budgetNote?: string;
+}
+
+export const approveProposalBudgetPipe: PipeTransform<unknown, ApproveProposalBudgetDto> = {
+  transform(value: unknown) {
+    const input = assertRecord(value);
+    if (input.approvedBudget === undefined || input.approvedBudget === null || isNaN(Number(input.approvedBudget))) {
+      throw new BadRequestException({ message: "Nhập mức kinh phí phê duyệt hợp lệ." });
+    }
+    if (input.budgetNote !== undefined && input.budgetNote !== null) {
+      assertOptionalText(input.budgetNote, "budgetNote", 500);
+    }
+    return {
+      ...input,
+      approvedBudget: Number(input.approvedBudget)
+    } as ApproveProposalBudgetDto;
+  }
+};
+

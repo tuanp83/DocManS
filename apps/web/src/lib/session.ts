@@ -43,7 +43,9 @@ export function toShellAccount(user: CurrentUser): ShellAccount {
     username: user.username,
     name: user.displayName,
     systemRole: user.systemRole,
-    systemRoleLabel: getSystemRoleLabel(user.systemRole),
+    systemRoleLabel: user.unit && (user.unit.toLowerCase().includes("trưởng") || user.unit.toLowerCase().includes("giám đốc") || user.unit.toLowerCase().includes("chuyên viên"))
+      ? user.unit
+      : getSystemRoleLabel(user.systemRole),
     unit: user.unit,
     initials: user.displayName.trim().charAt(0).toUpperCase() || "U",
     organizationScopes: user.organizationScopes

@@ -150,6 +150,17 @@ export type ProposalDecisionPackage = {
   proposalId: string;
   proposalStatus: string;
   proposalStatusLabel: string;
+  title?: string;
+  code?: string;
+  proposalTypeCode?: string;
+  researchFieldCode?: string;
+  budgetMetadata?: {
+    amount?: number;
+    currency?: string;
+    note?: string;
+    approvedAmount?: number;
+    approvedNote?: string;
+  };
   canDecide: boolean;
   conflict: {
     conflicted: boolean;
@@ -353,12 +364,53 @@ export async function loadProposalDecisionPackage(proposalId: string) {
   return response.decisionPackage;
 }
 
-export async function decideProposal(proposalId: string, decision: "approve" | "reject", note: string) {
+export async function decideProposal(
+  proposalId: string,
+  decision: "approve" | "reject",
+  payload: string | { note?: string; approvedBudget?: number; budgetNote?: string }
+) {
+  const body = typeof payload === "string" ? { note: payload } : payload;
   return requestJson<{ decision: ProposalDecisionRecord; proposalStatus: string; proposalStatusLabel: string }>(
     `/research-proposals/${proposalId}/${decision}`,
-    { method: "POST", body: JSON.stringify({ note }) }
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function approveProposalBudget(
+  proposalId: string,
+  payload: { approvedBudget: number; budgetNote?: string }
+) {
+  return requestJson<{ success: boolean; proposalId: string; approvedAmount: number; budgetMetadata: Record<string, unknown> }>(
+    `/research-proposals/${proposalId}/approve-budget`,
+    { method: "POST", body: JSON.stringify(payload) }
   );
 }
 
 export type ReviewerCandidates = { profiles: Array<{ id: string; fullName: string; linkedUserId: string; linkedAccountUsername: string; linkedAccountDisplayName: string }> };
 export function loadReviewerCandidates(proposalId: string, query = "") { return requestJson<ReviewerCandidates>(`/research-proposals/${proposalId}/assignable-reviewers?q=${encodeURIComponent(query)}`); }
+
+export type CouncilCandidate = {
+  id: string;
+  userId: string | null;
+  fullName: string;
+  username: string;
+  systemRole: string;
+  academicTitle: string;
+  unit: string;
+  militaryRank?: string;
+  position?: string;
+  profileType: string;
+  isConflicted: boolean;
+  conflictReason?: string;
+};
+
+export type CouncilCandidatesResponse = {
+  proposalId: string;
+  candidates: CouncilCandidate[];
+};
+
+export function loadCouncilCandidates(proposalId: string) {
+  return requestJson<CouncilCandidatesResponse>(`/research-proposals/${proposalId}/council-candidates`);
+}
+
+

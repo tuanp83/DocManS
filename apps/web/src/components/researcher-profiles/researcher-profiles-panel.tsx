@@ -94,6 +94,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
   const [researchFieldQuery, setResearchFieldQuery] = useState("");
   const [researchFieldOpen, setResearchFieldOpen] = useState(false);
   const [keywords, setKeywords] = useState("");
+  const [organizationUnitName, setOrganizationUnitName] = useState("");
   const [filters, setFilters] = useState({ keyword: "", profileType: "", status: "", organizationUnitId: "", researchFieldId: "", page: "1" });
   const [total, setTotal] = useState(0);
   const [canCreate, setCanCreate] = useState(false);
@@ -119,11 +120,13 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
   function select(profile: ResearcherProfile) {
     setEditing(profile);
     const cv = (profile.curriculumVitae as ScientificCurriculumVitae | null) ?? initialCv;
+    const initialUnit = profile.externalAffiliation || cv.personalInfo?.organization || profile.managementOrganization?.name || "";
+    setOrganizationUnitName(initialUnit);
     setForm({
       fullName: profile.fullName,
       profileType: profile.profileType,
       managementOrganizationUnitId: profile.managementOrganization.id,
-      externalAffiliation: profile.externalAffiliation,
+      externalAffiliation: initialUnit,
       academicRankCatalogItemId: profile.academicRank?.id ?? "",
       academicDegreeCatalogItemId: profile.academicDegree?.id ?? "",
       title: profile.title,
@@ -147,7 +150,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
           notes
         })),
       curriculumVitae: {
-        personalInfo: { ...initialCv.personalInfo, ...(cv.personalInfo ?? {}) },
+        personalInfo: { ...initialCv.personalInfo, ...(cv.personalInfo ?? {}), organization: initialUnit },
         educationHistory: cv.educationHistory ?? [],
         workHistory: { summary: cv.workHistory?.summary ?? "", items: cv.workHistory?.items ?? [] },
         researchExperience: {
@@ -179,6 +182,9 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
         if (version !== loadVersion.current) return;
         select(result.profile);
         setCatalogs(nextCatalogs);
+        if (nextCatalogs.organizations) {
+          setOrganizations(nextCatalogs.organizations);
+        }
       } else {
         const [data, nextCatalogs] = await Promise.all([loadResearcherProfiles(filters), loadResearcherProfileCatalogs()]);
         if (version !== loadVersion.current) return;
@@ -189,8 +195,10 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
         setCanCreate(data.canCreate);
         setForm((current) => ({
           ...current,
-          managementOrganizationUnitId: current.managementOrganizationUnitId || data.organizationOptions[0]?.id || ""
+          managementOrganizationUnitId: current.managementOrganizationUnitId || data.organizationOptions[0]?.id || "",
+          externalAffiliation: current.externalAffiliation || data.organizationOptions[0]?.name || ""
         }));
+        setOrganizationUnitName((current) => current || data.organizationOptions[0]?.name || "");
       }
     } catch (cause) {
       if (version === loadVersion.current) setError(cause instanceof Error ? cause.message : "Không thể tải hồ sơ.");
@@ -211,9 +219,11 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
     setForm({
       ...emptyForm,
       managementOrganizationUnitId: organizations[0]?.id ?? "",
+      externalAffiliation: organizations[0]?.name ?? "",
       provisionAccount: false,
       curriculumVitae: initialCv
     });
+    setOrganizationUnitName(organizations[0]?.name ?? "");
     setKeywords("");
     setResearchFieldQuery("");
     setResearchFieldOpen(false);
@@ -267,6 +277,29 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
     }));
   }
 
+  function handleOrganizationUnitChange(value: string) {
+    setOrganizationUnitName(value);
+    const normalized = value.trim().toLowerCase();
+    const matched = organizations.find((item) =>
+      item.name.toLowerCase().trim() === normalized ||
+      item.code.toLowerCase().trim() === normalized ||
+      normalized.includes(item.name.toLowerCase()) ||
+      item.name.toLowerCase().includes(normalized)
+    );
+    setForm((current) => ({
+      ...current,
+      externalAffiliation: value,
+      managementOrganizationUnitId: matched ? matched.id : (current.managementOrganizationUnitId || organizations[0]?.id || ""),
+      curriculumVitae: {
+        ...current.curriculumVitae,
+        personalInfo: {
+          ...current.curriculumVitae?.personalInfo,
+          organization: value
+        }
+      }
+    }));
+  }
+
   async function save(confirmDuplicate = false) {
     if (form.researchFieldIds.length === 0) {
       setError("Cần chọn ít nhất một lĩnh vực nghiên cứu.");
@@ -274,16 +307,44 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
     }
     await perform(async () => {
       const { managementOrganizationUnitId, profileType, provisionAccount, username: nextUsername, ...personal } = form;
-      const input = { ...personal, expertiseKeywords: keywords.split(",").map((value) => value.trim()).filter(Boolean) };
+      const unitText = (form.externalAffiliation?.trim() || organizationUnitName.trim() || (form.curriculumVitae?.personalInfo as any)?.organization?.trim() || "");
+      const normalized = unitText.toLowerCase();
+      const matched = organizations.find((item) =>
+        item.name.toLowerCase().trim() === normalized ||
+        item.code.toLowerCase().trim() === normalized ||
+        normalized.includes(item.name.toLowerCase()) ||
+        item.name.toLowerCase().includes(normalized)
+      );
+      const effectiveOrgUnitId = matched?.id || managementOrganizationUnitId || organizations[0]?.id || "";
+      const effectiveAffiliation = unitText || undefined;
+      const input = {
+        ...personal,
+        externalAffiliation: effectiveAffiliation,
+        curriculumVitae: {
+          ...form.curriculumVitae,
+          personalInfo: {
+            ...form.curriculumVitae?.personalInfo,
+            organization: effectiveAffiliation
+          }
+        },
+        expertiseKeywords: keywords.split(",").map((value) => value.trim()).filter(Boolean)
+      };
       if (editing) {
         const result = await updateResearcherProfile(self ? "my-profile" : editing.id, {
           ...input,
+          managementOrganizationUnitId: effectiveOrgUnitId,
           ...(self ? { username: nextUsername } : { profileType }),
           contextVersion: editing.viewerAuthorization.contextVersion
         });
         select(result.profile);
       } else {
-        const result = await createResearcherProfile({ ...input, managementOrganizationUnitId, profileType, provisionAccount, confirmDuplicate });
+        const result = await createResearcherProfile({
+          ...input,
+          managementOrganizationUnitId: effectiveOrgUnitId,
+          profileType,
+          provisionAccount,
+          confirmDuplicate
+        });
         if (result.requiresConfirmation) {
           setDuplicates(result.duplicateCandidates);
           return;
@@ -647,7 +708,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                       <td>
                         {profile.profileType === "EXTERNAL" ? "Nước ngoài" : "Trong nước"}
                         <br />
-                        <small className="text-secondary">{profile.managementOrganization.name}</small>
+                        <small className="text-secondary">{profile.externalAffiliation || (profile as any).curriculumVitae?.personalInfo?.organization || profile.managementOrganization.name}</small>
                       </td>
                       <td>
                         <span className={`status-badge ${profile.status === "ACTIVE" ? "success" : "neutral"}`}>
@@ -868,8 +929,12 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                       <input value={pInfo.idIssuePlace ?? ""} onChange={(event) => cvPersonalInfo("idIssuePlace", event.target.value)} placeholder="Cục CSQLHC về TTXH" />
                     </label>
                     <label className="field">
-                      <span>Cơ quan / Đơn vị công tác</span>
-                      <input value={form.externalAffiliation ?? ""} onChange={(event) => field("externalAffiliation", event.target.value)} placeholder="Học viện Quân y, Bệnh viện Quân y 103..." />
+                      <span>Cơ quan / Đơn vị công tác cụ thể (theo lý lịch khoa học)</span>
+                      <input
+                        value={form.externalAffiliation ?? organizationUnitName ?? ""}
+                        onChange={(event) => handleOrganizationUnitChange(event.target.value)}
+                        placeholder="VD: Ban Giám Đốc, Bệnh viện Quân y 103, Viện Y học Cổ truyền..."
+                      />
                     </label>
                     <label className="field">
                       <span>Chức vụ hiện tại</span>
@@ -895,21 +960,27 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                       <span>Địa chỉ liên hệ</span>
                       <input value={pInfo.contactAddress ?? ""} onChange={(event) => cvPersonalInfo("contactAddress", event.target.value)} placeholder="Số nhà, đường phố, Quận/Huyện, Tỉnh/Thành phố hoặc địa chỉ cơ quan" />
                     </label>
-                    {!self ? (
-                      <label className="field" style={{ gridColumn: "1 / -1" }}>
-                        <span>Đơn vị quản lý trực thuộc *</span>
-                        <select required value={form.managementOrganizationUnitId} disabled={!!editing} onChange={(event) => field("managementOrganizationUnitId", event.target.value)}>
-                          <option value="">Chọn đơn vị</option>
-                          {organizations.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : (
-                      <p className="record-meta col-span-2">Đơn vị quản lý: {editing?.managementOrganization.name}</p>
-                    )}
+                    <label className="field" style={{ gridColumn: "1 / -1" }}>
+                      <span>Đơn vị quản lý / Đơn vị công tác *</span>
+                      <input
+                        type="text"
+                        required
+                        list="management-org-suggestions"
+                        value={organizationUnitName || form.externalAffiliation || ""}
+                        onChange={(event) => handleOrganizationUnitChange(event.target.value)}
+                        placeholder="Nhà khoa học tự nhập tên đơn vị (VD: Ban Giám Đốc, Bộ môn Sinh lý học, Khoa Ngoại, Bệnh viện Quân y 103, Học viện Quân y...)"
+                      />
+                      <datalist id="management-org-suggestions">
+                        {organizations.map((item) => (
+                          <option key={item.id} value={item.name}>
+                            {item.code}
+                          </option>
+                        ))}
+                      </datalist>
+                      <small className="field-hint" style={{ color: "var(--color-text-secondary, #64748b)", marginTop: 4 }}>
+                        Nhà khoa học tự đánh tên đơn vị trực tiếp theo lý lịch khoa học thay vì bắt buộc lựa chọn dropdown.
+                      </small>
+                    </label>
                   </div>
 
                   {/* C. Học hàm, học vị & Lĩnh vực nghiên cứu */}
@@ -1719,7 +1790,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                               <div className="cv-field-row">
                                 <span className="cv-field-label">6. Cơ quan công tác:</span>
                                 <span className="cv-field-value">
-                                  {form.externalAffiliation || editing?.managementOrganization.name || "Học viện Quân y"}
+                                   {form.externalAffiliation || (form.curriculumVitae?.personalInfo as any)?.organization || organizationUnitName || editing?.managementOrganization.name || "Học viện Quân y"}
                                 </span>
                               </div>
                               <div className="cv-field-row">

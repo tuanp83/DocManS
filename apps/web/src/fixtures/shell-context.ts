@@ -62,30 +62,39 @@ export const accountProfiles: AccountProfile[] = [
     initials: "T"
   },
   {
-    id: "staff-vu-lan",
-    username: "vlan_qlkh",
-    name: "TS. Nguyễn Minh Phương",
+    id: "staff-nmphuong",
+    username: "nmphuong",
+    name: "PGS. TS. Nguyễn Minh Phương",
     role: "SCIENTIFIC_MANAGEMENT_STAFF",
-    roleLabel: "Trưởng phòng",
-    unit: "Trưởng phòng KHQS",
+    roleLabel: "Trưởng Phòng KHQS",
+    unit: "Trưởng Phòng KHQS",
     initials: "P"
   },
   {
+    id: "staff-dmtrung",
+    username: "dmtrung",
+    name: "TS. Đỗ Minh Trung",
+    role: "SCIENTIFIC_MANAGEMENT_STAFF",
+    roleLabel: "Trưởng Ban QLKH, Phòng KHQS",
+    unit: "Trưởng Ban QLKH, Phòng KHQS",
+    initials: "T"
+  },
+  {
+    id: "staff-hdtien1",
+    username: "hdtien1",
+    name: "ThS. Hoàng Đình Tiến",
+    role: "SCIENTIFIC_MANAGEMENT_STAFF",
+    roleLabel: "Chuyên viên QLKH, Phòng KHQS",
+    unit: "Chuyên viên QLKH, Phòng KHQS",
+    initials: "T"
+  },
+  {
     id: "pi-pham-anh-tuan",
-    username: "patuan_pi",
+    username: "patuan",
     name: "TS. Phạm Anh Tuấn",
     role: "RESEARCHER_INTERNAL_USER",
     roleLabel: "Chủ nhiệm đề tài",
     unit: "Khoa Toán - Tin học",
-    initials: "T"
-  },
-  {
-    id: "reviewer-tran-thu-ha",
-    username: "ttha_reviewer",
-    name: "TS. Đỗ Minh Trung",
-    role: "RESEARCHER_INTERNAL_USER",
-    roleLabel: "Thành viên Hội đồng",
-    unit: "Ban Quản lý KHQS",
     initials: "T"
   },
   {
@@ -278,7 +287,6 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/approvals", label: "Hồ sơ chờ phê duyệt", icon: FileClock },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
-    { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 }
   ],
   SCIENTIFIC_MANAGEMENT_STAFF: [
@@ -297,6 +305,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/my-tasks", label: "Nhiệm vụ", icon: ListTodo },
     { href: "/invitation-to-review", label: "Được mời phản biện", icon: FileCheck2 },
     { href: "/my-proposals", label: "Hồ sơ của tôi", icon: FileText },
+    { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch },
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/notifications", label: "Thông báo", icon: Bell }
@@ -315,6 +324,8 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/my-tasks", label: "Nhiệm vụ", icon: ListTodo },
     { href: "/invitation-to-review", label: "Được mời phản biện", icon: FileCheck2 },
+    { href: "/my-proposals", label: "Hồ sơ của tôi", icon: FileText },
+    { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch },
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/notifications", label: "Thông báo", icon: Bell }

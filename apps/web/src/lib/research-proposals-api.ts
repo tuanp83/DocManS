@@ -130,6 +130,50 @@ export type ProposalSupplementRequest = {
   status: string;
 };
 
+export type CouncilMemberRole = "chair" | "vice_chair" | "secretary" | "reviewer_1" | "reviewer_2" | "reviewer" | "member";
+
+export type CouncilMember = {
+  role: CouncilMemberRole;
+  roleLabel: string;
+  userId?: string;
+  displayName: string;
+  academicTitle?: string;
+  unit?: string;
+  organization?: string;
+};
+
+export type CouncilMinutes = {
+  meetingConductedAt?: string;
+  attendance?: string[];
+  conclusion: "approved" | "revision_required" | "rejected";
+  conclusionLabel?: string;
+  averageScore?: number;
+  summaryComments?: string;
+  modificationsRequired?: string;
+  minutesAttachment?: { fileName: string; fileUrl?: string; uploadedAt?: string } | null;
+  recordedById?: string;
+  recordedByName?: string;
+  recordedAt?: string;
+};
+
+export type CouncilMetadata = {
+  status: "draft" | "submitted" | "approved" | "rejected";
+  decisionNumber?: string;
+  decidedAt?: string;
+  decidedById?: string;
+  decidedByName?: string;
+  approvalNote?: string;
+  rejectionReason?: string;
+  proposedAt?: string;
+  proposedById?: string;
+  proposedByName?: string;
+  meetingDate?: string;
+  meetingLocation?: string;
+  tentativeAgenda?: string;
+  members: CouncilMember[];
+  councilMinutes?: CouncilMinutes;
+};
+
 export type ResearchProposal = {
   versions?: Array<{ id: string; version: number; submittedAt: string; content: { title: string; objectives: string; summary: string; attachments: ProposalAttachment[] } }>;
   id: string;
@@ -151,6 +195,7 @@ export type ResearchProposal = {
     currency?: string;
     note?: string;
   };
+  councilMetadata?: CouncilMetadata | null;
   status: ProposalWorkflowStatus;
   /** Vietnamese label for `status`, resolved by the backend so both apps read the same wording. */
   statusLabel?: string;
@@ -358,3 +403,44 @@ export async function loadProposalCatalogs() {
   const response = await requestJson<{ items: import("./admin-api").CatalogItem[] }>("/research-proposals/catalogs");
   return response.items;
 }
+
+export async function proposeProposalCouncil(proposalId: string, payload: Record<string, unknown>) {
+  return requestJson<{ success: boolean; proposalId: string; councilMetadata: CouncilMetadata }>(
+    `/research-proposals/${proposalId}/propose-council`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function approveProposalCouncil(proposalId: string, payload: Record<string, unknown> = {}) {
+  return requestJson<{ success: boolean; proposalId: string; councilMetadata: CouncilMetadata }>(
+    `/research-proposals/${proposalId}/approve-council`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function rejectProposalCouncil(proposalId: string, payload: Record<string, unknown> = {}) {
+  return requestJson<{ success: boolean; proposalId: string; councilMetadata: CouncilMetadata }>(
+    `/research-proposals/${proposalId}/reject-council`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
+export async function recordProposalCouncilMinutes(proposalId: string, payload: Record<string, unknown>) {
+  return requestJson<{ success: boolean; proposalId: string; councilMetadata: CouncilMetadata }>(
+    `/research-proposals/${proposalId}/council-minutes`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }
+  );
+}
+

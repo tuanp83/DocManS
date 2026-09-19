@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const navigationItems = getNavigationItems(account.systemRole);
+  const navigationItems = getNavigationItems(account.systemRole, account);
 
   return (
     <div className="app-shell">
@@ -62,7 +62,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <div>
                   <span className="user-name">{account.name}</span>
                   <span className="user-role">
-                    {account.systemRoleLabel} - {account.unit}
+                    {account.unit && !account.systemRoleLabel.toLowerCase().includes(account.unit.toLowerCase())
+                      ? `${account.systemRoleLabel} - ${account.unit}`
+                      : account.systemRoleLabel}
                   </span>
                 </div>
                 <ChevronDown className="user-caret" size={16} aria-hidden="true" />
@@ -70,7 +72,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="user-menu-panel">
                 <p className="user-menu-heading">{account.name}</p>
                 <p className="user-menu-meta">
-                  {account.systemRoleLabel} - {account.unit}
+                  {account.unit && !account.systemRoleLabel.toLowerCase().includes(account.unit.toLowerCase())
+                    ? `${account.systemRoleLabel} - ${account.unit}`
+                    : account.systemRoleLabel}
                 </p>
                 {account.systemRole === "RESEARCHER_INTERNAL_USER" || account.systemRole === "EXTERNAL_RESEARCHER_USER" || account.researcherProfileId ? (
                   <>

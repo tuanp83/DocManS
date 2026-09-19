@@ -4,11 +4,13 @@ import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.
 import { PROPOSAL_DECISIONS, ProposalDecisionsService } from "./proposal-decisions.service.js";
 import { ProposalEvaluationSummaryService } from "./proposal-evaluation-summary.service.js";
 import {
+  approveProposalBudgetPipe,
   assignProposalReviewerPipe,
   proposalDecisionPipe,
   revokeReviewAssignmentPipe,
   saveEvaluationSummaryPipe,
   saveProposalReviewPipe,
+  type ApproveProposalBudgetDto,
   type AssignProposalReviewerDto,
   type ProposalDecisionDto,
   type RevokeReviewAssignmentDto,
@@ -139,5 +141,60 @@ export class ProposalEvaluationsController {
     @Body(proposalDecisionPipe) body: ProposalDecisionDto
   ) {
     return this.decisions.decide(request.currentUser!, id, PROPOSAL_DECISIONS.rejected, body);
+  }
+
+  @Post(":id/approve-budget")
+  async approveBudget(
+    @Req() request: RequestWithCurrentUser,
+    @Param("id") id: string,
+    @Body(approveProposalBudgetPipe) body: ApproveProposalBudgetDto
+  ) {
+    return this.decisions.approveBudget(request.currentUser!, id, body);
+  }
+
+  // Council Workflow (Stage 1 & Stage 2) ---------------------------------------
+
+  @Get(":id/council-candidates")
+  async getCouncilCandidates(
+    @Req() request: RequestWithCurrentUser,
+    @Param("id") id: string
+  ) {
+    return this.decisions.getCouncilCandidates(request.currentUser!, id);
+  }
+
+  @Post(":id/propose-council")
+  async proposeCouncil(
+    @Req() request: RequestWithCurrentUser,
+    @Param("id") id: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    return this.decisions.proposeCouncil(request.currentUser!, id, body);
+  }
+
+  @Post(":id/approve-council")
+  async approveCouncil(
+    @Req() request: RequestWithCurrentUser,
+    @Param("id") id: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    return this.decisions.approveCouncil(request.currentUser!, id, body);
+  }
+
+  @Post(":id/reject-council")
+  async rejectCouncil(
+    @Req() request: RequestWithCurrentUser,
+    @Param("id") id: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    return this.decisions.rejectCouncil(request.currentUser!, id, body);
+  }
+
+  @Post(":id/council-minutes")
+  async recordCouncilMinutes(
+    @Req() request: RequestWithCurrentUser,
+    @Param("id") id: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    return this.decisions.recordCouncilMinutes(request.currentUser!, id, body);
   }
 }

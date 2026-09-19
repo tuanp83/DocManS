@@ -215,7 +215,7 @@ export class AuthStore {
       passwordHash: user.passwordHash,
       status: user.status === "active" ? "active" : "disabled",
       systemRole,
-      unit: organizationScopes[0].name,
+      unit: user.unit || organizationScopes[0]?.name || "",
       organizationScopes,
       mustChangePassword: user.mustChangePassword ?? false,
       credentialVersion: user.credentialVersion ?? 0,
