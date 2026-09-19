@@ -1844,3 +1844,82 @@ summary:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12pt !important;
+  }
+
+  .sidebar,
+  .top-bar,
+  .user-menu,
+  .breadcrumb,
+  .no-print,
+  button,
+  .button {
+    display: none !important;
+  }
+
+  .content-area,
+  .content,
+  .budget-report-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .print-only-header,
+  .print-only-signatures {
+    display: block !important;
+  }
+
+  .section-card {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+
+  .section-header {
+    display: none !important;
+  }
+
+  .table-wrap {
+    border: 1px solid #333333 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  .data-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 11pt !important;
+  }
+
+  .data-table th,
+  .data-table td {
+    border: 1px solid #555555 !important;
+    padding: 6px 8px !important;
+    color: #000000 !important;
+  }
+
+  .data-table th {
+    background-color: #f1f5f9 !important;
+    font-weight: 700 !important;
+  }
+
+  .data-table a {
+    color: #000000 !important;
+    text-decoration: none !important;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 15mm 15mm 15mm 15mm;
+  }
+}
+

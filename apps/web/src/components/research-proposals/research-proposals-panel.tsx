@@ -19,6 +19,12 @@ import {
   type ProposalDraftInput,
   type ResearchProposal
 } from "@/lib/research-proposals-api";
+import {
+  PROPOSAL_LEVEL_LABELS,
+  MILITARY_SCOPE_LABELS,
+  getProposalLevelLabel,
+  getProposalMilitaryScope
+} from "@/lib/proposal-classification";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -62,6 +68,8 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
   const [intakes, setIntakes] = useState<ProposalIntakePeriod[]>([]);
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [levelFilter, setLevelFilter] = useState("");
+  const [militaryFilter, setMilitaryFilter] = useState("");
   const [form, setForm] = useState<ProposalDraftInput>(() => defaultForm(initialHostScope));
   const [formError, setFormError] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
@@ -97,9 +105,11 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
         proposal.title.toLowerCase().includes(normalizedKeyword) ||
         proposal.code.toLowerCase().includes(normalizedKeyword);
       const matchesStatus = !statusFilter || proposal.status === statusFilter;
-      return matchesKeyword && matchesStatus;
+      const matchesLevel = !levelFilter || proposal.proposalTypeCode === levelFilter;
+      const matchesMilitary = !militaryFilter || getProposalMilitaryScope(proposal) === militaryFilter;
+      return matchesKeyword && matchesStatus && matchesLevel && matchesMilitary;
     });
-  }, [keyword, proposals, statusFilter]);
+  }, [keyword, proposals, statusFilter, levelFilter, militaryFilter]);
 
 
   function validateForm() {
@@ -152,8 +162,8 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
 
   return (
     <div className="grid two-column">
-      <SectionCard title="Danh sách hồ sơ" subtitle="Theo dõi hồ sơ theo đợt tiếp nhận và trạng thái">
-        <div className="filter-bar">
+      <SectionCard title="Danh sách hồ sơ" subtitle="Theo dõi hồ sơ theo đợt tiếp nhận, cấp quản lý và trạng thái">
+        <div className="filter-bar" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "10px" }}>
           <label className="filter-field">
             <span>Từ khóa</span>
             <span className="field-input plain">
@@ -162,9 +172,30 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
             </span>
           </label>
           <label className="filter-field">
+            <span>Cấp đề tài</span>
+            <select value={levelFilter} onChange={(event) => setLevelFilter(event.target.value)}>
+              <option value="">Tất cả các cấp</option>
+              <option value="national-level">Cấp Quốc gia</option>
+              <option value="ministry-level">Cấp Bộ Quốc phòng</option>
+              <option value="branch-level">Cấp Ngành / Cục</option>
+              <option value="academy-level">Cấp Học viện</option>
+              <option value="grassroots-level">Cấp Cơ sở</option>
+              <option value="student-level">Sinh viên / Học viên NCKH</option>
+            </select>
+          </label>
+          <label className="filter-field">
+            <span>Quân sự / Dân sự</span>
+            <select value={militaryFilter} onChange={(event) => setMilitaryFilter(event.target.value)}>
+              <option value="">Tất cả tính chất</option>
+              <option value="military">Quân sự - Quốc phòng</option>
+              <option value="civilian">Ngoài quân đội (Dân sự)</option>
+              <option value="dual-use">Lưỡng dụng (Quân - Dân y)</option>
+            </select>
+          </label>
+          <label className="filter-field">
             <span>Trạng thái</span>
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-              <option value="">Tất cả</option>
+              <option value="">Tất cả trạng thái</option>
               <option value="draft">Nháp</option>
               <option value="submitted">Đã nộp</option>
               <option value="supplement_requested">Chờ bổ sung</option>
@@ -188,7 +219,7 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Hồ sơ</th>
+                    <th>Hồ sơ & Cấp quản lý</th>
                     <th>Vai trò của tôi</th>
                     <th>Đợt</th>
                     <th>Thời gian</th>
@@ -198,64 +229,106 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredProposals.map((proposal) => (
-                    <tr key={proposal.id}>
-                      <td>
-                        <Link className="record-title" href={`/proposals/${proposal.id}`}>
-                          {proposal.title}
-                        </Link>
-                        <span className="record-meta">{proposal.code || proposal.id}</span>
-                      </td>
-                      <td>
-                        {(proposal.viewerAuthorization?.viewerRelationships ?? []).map((relationship) => (
-                          <span className="status-badge info" key={relationship.type}>{relationshipLabel(relationship.type)}</span>
-                        ))}
-                      </td>
-                      <td>{intakes.find((intake) => intake.id === proposal.intakePeriodId)?.title ?? proposal.intakePeriodId}</td>
-                      <td>
-                        {formatDate(proposal.startDate)} - {formatDate(proposal.endDate)}
-                      </td>
-                      <td>
-                        {Number(proposal.budgetMetadata?.amount ?? 0).toLocaleString("vi-VN")} {proposal.budgetMetadata?.currency ?? "VND"}
-                      </td>
-                      <td>
-                        <StatusBadge status={proposal.status} />
-                      </td>
-                      <td>
-                        <Link className="button" href={`/proposals/${proposal.id}`}>
-                          <Eye size={16} aria-hidden="true" />
-                          Xem
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredProposals.map((proposal) => {
+                    const scope = getProposalMilitaryScope(proposal);
+                    return (
+                      <tr key={proposal.id}>
+                        <td>
+                          <Link className="record-title" href={`/proposals/${proposal.id}`}>
+                            {proposal.title}
+                          </Link>
+                          <span className="record-meta">{proposal.code || proposal.id}</span>
+                          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px" }}>
+                            <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "var(--surface-muted, #f1f5f9)", color: "var(--text-primary)", fontWeight: 600 }}>
+                              {getProposalLevelLabel(proposal.proposalTypeCode)}
+                            </span>
+                            {scope === "military" ? (
+                              <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "#f0fdf4", color: "#166534", fontWeight: 600 }}>
+                                Quân sự - QP
+                              </span>
+                            ) : scope === "dual-use" ? (
+                              <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "#fefce8", color: "#854d0e", fontWeight: 600 }}>
+                                Lưỡng dụng
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "#eff6ff", color: "#1e40af", fontWeight: 600 }}>
+                                Ngoài QĐ (Dân sự)
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          {(proposal.viewerAuthorization?.viewerRelationships ?? []).map((relationship) => (
+                            <span className="status-badge info" key={relationship.type}>{relationshipLabel(relationship.type)}</span>
+                          ))}
+                        </td>
+                        <td>{intakes.find((intake) => intake.id === proposal.intakePeriodId)?.title ?? proposal.intakePeriodId}</td>
+                        <td>
+                          {formatDate(proposal.startDate)} - {formatDate(proposal.endDate)}
+                        </td>
+                        <td>
+                          {Number(proposal.budgetMetadata?.amount ?? 0).toLocaleString("vi-VN")} {proposal.budgetMetadata?.currency ?? "VND"}
+                        </td>
+                        <td>
+                          <StatusBadge status={proposal.status} />
+                        </td>
+                        <td>
+                          <Link className="button" href={`/proposals/${proposal.id}`}>
+                            <Eye size={16} aria-hidden="true" />
+                            Xem
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             <div className="mobile-list">
-              {filteredProposals.map((proposal) => (
-                <article className="list-card" key={proposal.id}>
-                  <div className="list-card-header">
-                    <div>
-                      <Link className="record-title" href={`/proposals/${proposal.id}`}>
-                        {proposal.title}
-                      </Link>
-                      <span className="record-meta">{proposal.code || proposal.id}</span>
+              {filteredProposals.map((proposal) => {
+                const scope = getProposalMilitaryScope(proposal);
+                return (
+                  <article className="list-card" key={proposal.id}>
+                    <div className="list-card-header">
+                      <div>
+                        <Link className="record-title" href={`/proposals/${proposal.id}`}>
+                          {proposal.title}
+                        </Link>
+                        <span className="record-meta">{proposal.code || proposal.id}</span>
+                        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px" }}>
+                          <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "var(--surface-muted, #f1f5f9)", color: "var(--text-primary)", fontWeight: 600 }}>
+                            {getProposalLevelLabel(proposal.proposalTypeCode)}
+                          </span>
+                          {scope === "military" ? (
+                            <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "#f0fdf4", color: "#166534", fontWeight: 600 }}>
+                              Quân sự - QP
+                            </span>
+                          ) : scope === "dual-use" ? (
+                            <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "#fefce8", color: "#854d0e", fontWeight: 600 }}>
+                              Lưỡng dụng
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "#eff6ff", color: "#1e40af", fontWeight: 600 }}>
+                              Ngoài QĐ (Dân sự)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <StatusBadge status={proposal.status} />
                     </div>
-                    <StatusBadge status={proposal.status} />
-                  </div>
-                  {(proposal.viewerAuthorization?.viewerRelationships ?? []).map((relationship) => (
-                    <span className="status-badge info" key={relationship.type}>{relationshipLabel(relationship.type)}</span>
-                  ))}
-                  <span className="record-meta">
-                    {formatDate(proposal.startDate)} - {formatDate(proposal.endDate)}
-                  </span>
-                  <Link className="button" href={`/proposals/${proposal.id}`}>
-                    <Eye size={16} aria-hidden="true" />
-                    Xem chi tiết
-                  </Link>
-                </article>
-              ))}
+                    {(proposal.viewerAuthorization?.viewerRelationships ?? []).map((relationship) => (
+                      <span className="status-badge info" key={relationship.type}>{relationshipLabel(relationship.type)}</span>
+                    ))}
+                    <span className="record-meta">
+                      {formatDate(proposal.startDate)} - {formatDate(proposal.endDate)}
+                    </span>
+                    <Link className="button" href={`/proposals/${proposal.id}`}>
+                      <Eye size={16} aria-hidden="true" />
+                      Xem chi tiết
+                    </Link>
+                  </article>
+                );
+              })}
             </div>
           </>
         ) : null}

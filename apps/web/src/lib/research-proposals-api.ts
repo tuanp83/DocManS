@@ -138,6 +138,7 @@ export type ResearchProposal = {
   ownerId: string;
   ownerDisplayName?: string;
   hostOrganizationUnitId: string;
+  hostOrganizationUnitName?: string;
   researchFieldCode: string;
   proposalTypeCode: string;
   title: string;
