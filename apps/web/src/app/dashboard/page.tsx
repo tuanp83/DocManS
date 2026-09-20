@@ -26,17 +26,37 @@ interface DashboardKpis {
   submittedThisMonth: number;
 }
 
+import { getApiBaseUrl } from "@/lib/session";
+
 export default function DashboardPage() {
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
 
   useEffect(() => {
-    fetch("/api/v1/dashboard/stats", { credentials: "include" })
+    fetch(`${getApiBaseUrl()}/dashboard/stats`, { credentials: "include" })
       .then(res => res.json())
       .then(data => {
         if (data.kpis) setKpis(data.kpis);
       })
       .catch(console.error);
   }, []);
+
+  const handleExport = async () => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/dashboard/export-proposals`, { credentials: "include" });
+      if (!response.ok) throw new Error("Export failed");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Danh_sach_de_tai.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert("Lỗi khi tải báo cáo Excel.");
+    }
+  };
 
   return (
     <>
@@ -46,9 +66,14 @@ export default function DashboardPage() {
         title="Dashboard — Quản lý Nghiên cứu Khoa học"
         description="Theo dõi tình hình đề tài, đánh giá, và quyết định phê duyệt tại Học viện Quân Y."
         actions={
-          <Link className="button primary" href="/my-proposals">
-            Hồ sơ của tôi
-          </Link>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button className="button secondary" onClick={handleExport}>
+              Tải báo cáo Excel
+            </button>
+            <Link className="button primary" href="/my-proposals">
+              Hồ sơ của tôi
+            </Link>
+          </div>
         }
       />
 
