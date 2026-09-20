@@ -1,0 +1,455 @@
+/**
+ * Styles for Acceptance Council, Milestone Disbursement, and IRB Approval Modals
+ * Conforms to DocManS Design System & Military Science Standards
+ */
+
+.cmd-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(6px);
+  z-index: 99999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.cmd-modal {
+  background: #0f172a;
+  color: #f8fafc;
+  width: 100%;
+  max-width: 1040px;
+  max-height: 90vh;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: inherit;
+}
+
+.cmd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #334155;
+  background: #1e293b;
+}
+
+.cmd-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cmd-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cmd-header-icon.green {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.cmd-header-icon.blue {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.cmd-header-icon.rose {
+  background: rgba(244, 63, 94, 0.2);
+  color: #fb7185;
+}
+
+.cmd-header-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.cmd-header-subtitle {
+  margin: 2px 0 0 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.cmd-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.cmd-close-btn:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
+.cmd-tabs {
+  display: flex;
+  border-bottom: 1px solid #334155;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0 20px;
+}
+
+.cmd-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cmd-tab-btn:hover {
+  color: #e2e8f0;
+}
+
+.cmd-tab-btn.active {
+  color: #34d399;
+  border-bottom-color: #34d399;
+}
+
+.cmd-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cmd-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-top: 1px solid #334155;
+  background: #1e293b;
+}
+
+/* Alert Banner */
+.cmd-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.cmd-alert.success {
+  background: rgba(6, 78, 59, 0.5);
+  border: 1px solid #065f46;
+  color: #a7f3d0;
+}
+
+.cmd-alert.error {
+  background: rgba(136, 19, 55, 0.5);
+  border: 1px solid #9f1239;
+  color: #fecdd3;
+}
+
+.cmd-alert.warning {
+  background: rgba(120, 53, 15, 0.5);
+  border: 1px solid #92400e;
+  color: #fde68a;
+}
+
+/* Grid Forms */
+.cmd-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.cmd-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+.cmd-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .cmd-grid-2, .cmd-grid-3, .cmd-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cmd-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cmd-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cmd-input, .cmd-select, .cmd-textarea {
+  background: #1e293b;
+  border: 1px solid #475569;
+  color: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.cmd-input:focus, .cmd-select:focus, .cmd-textarea:focus {
+  border-color: #34d399;
+}
+
+/* Tables */
+.cmd-table-card {
+  border: 1px solid #334155;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(30, 41, 59, 0.4);
+}
+
+.cmd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+.cmd-table th {
+  background: #1e293b;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  border-bottom: 1px solid #334155;
+}
+
+.cmd-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #1e293b;
+  color: #e2e8f0;
+}
+
+.cmd-table tr:hover td {
+  background: rgba(30, 41, 59, 0.6);
+}
+
+/* KPI Card */
+.cmd-kpi-card {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cmd-kpi-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.cmd-kpi-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+/* Buttons */
+.cmd-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.cmd-btn.primary {
+  background: #059669;
+  color: #ffffff;
+}
+
+.cmd-btn.primary:hover {
+  background: #10b981;
+}
+
+.cmd-btn.blue {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.cmd-btn.blue:hover {
+  background: #3b82f6;
+}
+
+.cmd-btn.rose {
+  background: #e11d48;
+  color: #ffffff;
+}
+
+.cmd-btn.rose:hover {
+  background: #f43f5e;
+}
+
+.cmd-btn.outline {
+  background: transparent;
+  border: 1px solid #475569;
+  color: #e2e8f0;
+}
+
+.cmd-btn.outline:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
+.cmd-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* COI Badges */
+.coi-badge-clean {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(6, 78, 59, 0.6);
+  border: 1px solid #065f46;
+  color: #6ee7b7;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.coi-badge-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(120, 53, 15, 0.6);
+  border: 1px solid #92400e;
+  color: #fde68a;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.coi-badge-blocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(136, 19, 55, 0.6);
+  border: 1px solid #9f1239;
+  color: #fecdd3;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Milestone Attachments */
+.cmd-attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.cmd-attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid #475569;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #e2e8f0;
+}
+
+.cmd-attachment-chip a {
+  color: #38bdf8;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.cmd-attachment-chip a:hover {
+  text-decoration: underline;
+}
+
+.cmd-attachment-del {
+  background: transparent;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.cmd-attachment-del:hover {
+  color: #ef4444;
+}
+
+.cmd-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px dashed rgba(56, 189, 248, 0.4);
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cmd-upload-btn:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+}

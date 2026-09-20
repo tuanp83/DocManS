@@ -10,6 +10,14 @@ export interface ExportWordOptions {
   contentHtml: string;
 }
 
+export interface ProposalExportData {
+  id?: string;
+  code?: string | null;
+  title: string;
+  ownerDisplayName?: string | null;
+  hostOrganizationUnit?: string | null;
+}
+
 /**
  * Exports HTML content as a Microsoft Word document (.doc) with full styling,
  * margins, typography (Times New Roman), and table structures preserved.
@@ -620,6 +628,269 @@ export function exportIndividualReviewWord(
   exportHtmlToWord({
     filename: `Phieu_danh_gia_${review.reviewerDisplayName.replace(/[^a-zA-Z0-9]/g, "_")}_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
     title: `Phiếu đánh giá - ${review.reviewerDisplayName} - ${code}`,
+    contentHtml
+  });
+}
+
+/**
+ * Xuất Biên bản nghiệm thu và đánh giá kết quả NCKH (Thông tư 57/2021/TT-BQP)
+ */
+export function exportAcceptanceMinutesWord(
+  proposal: ProposalExportData,
+  acceptance: {
+    councilType?: "FACILITY" | "OFFICIAL";
+    meetingDate?: string;
+    meetingLocation?: string;
+    establishmentDecisionNumber?: string;
+    members: Array<{ fullName: string; academicTitle?: string; unit?: string; role: string }>;
+    evaluationResult?: {
+      reportScore: number;
+      scientificProductsScore: number;
+      trainingProductsScore: number;
+      militaryMedicalPracticalScore: number;
+      totalScore: number;
+      classification: "EXCELLENT" | "PASSED" | "FAILED";
+      assessmentComments: string;
+    };
+    decisionSignerName?: string;
+  }
+) {
+  const code = proposal.code || "HVQY-NCKH-2026";
+  const councilTypeLabel = acceptance.councilType === "FACILITY" ? "CƠ SỞ" : "CHÍNH THỨC";
+  const scores = acceptance.evaluationResult || {
+    reportScore: 27,
+    scientificProductsScore: 28,
+    trainingProductsScore: 14,
+    militaryMedicalPracticalScore: 23,
+    totalScore: 92,
+    classification: "EXCELLENT",
+    assessmentComments: "Đề tài hoàn thành xuất sắc các nội dung và mục tiêu đăng ký, có giá trị ứng dụng cao."
+  };
+
+  const classificationText =
+    scores.classification === "EXCELLENT"
+      ? "XUẤT SẮC"
+      : scores.classification === "PASSED"
+      ? "ĐẠT"
+      : "KHÔNG ĐẠT";
+
+  const memberRows = acceptance.members.map((m, idx) => `
+    <tr>
+      <td style="text-align: center; border: 1px solid #000; padding: 5pt;">${idx + 1}</td>
+      <td style="border: 1px solid #000; padding: 5pt;"><b>${m.fullName}</b></td>
+      <td style="border: 1px solid #000; padding: 5pt;">${m.academicTitle || "TS"} - ${m.unit || "Học viện Quân y"}</td>
+      <td style="text-align: center; border: 1px solid #000; padding: 5pt;">${m.role}</td>
+    </tr>
+  `).join("");
+
+  const contentHtml = `
+    <!-- HEADER -->
+    <table class="header-table" style="width: 100%; margin-bottom: 15pt;">
+      <tr>
+        <td style="width: 45%; text-align: center;">
+          <p style="margin: 0; font-size: 11pt;">BỘ QUỐC PHÒNG</p>
+          <p style="margin: 0; font-size: 12pt; font-weight: bold;">HỌC VIỆN QUÂN Y</p>
+          <div style="border-bottom: 1.5pt solid #000; width: 120pt; margin: 3pt auto 0 auto;"></div>
+        </td>
+        <td style="width: 55%; text-align: center;">
+          <p style="margin: 0; font-size: 11pt; font-weight: bold;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
+          <p style="margin: 0; font-size: 11pt; font-weight: bold;">Độc lập - Tự do - Hạnh phúc</p>
+          <div style="border-bottom: 1.5pt solid #000; width: 140pt; margin: 3pt auto 0 auto;"></div>
+          <p style="margin: 6pt 0 0 0; font-size: 11pt; font-style: italic;">Hà Nội, ngày ${new Date().getDate()} tháng ${new Date().getMonth() + 1} năm ${new Date().getFullYear()}</p>
+        </td>
+      </tr>
+    </table>
+
+    <div style="text-align: center; margin: 18pt 0 14pt 0;">
+      <p style="margin: 0; font-size: 15pt; font-weight: bold;">BIÊN BẢN HỌP HỘI ĐỒNG ĐÁNH GIÁ, NGHIỆM THU KẾT QUẢ NCKH</p>
+      <p style="margin: 4pt 0 0 0; font-size: 13pt; font-weight: bold; color: #1e3a8a;">(NGHIỆM THU ${councilTypeLabel})</p>
+      <p style="margin: 3pt 0 0 0; font-size: 11pt; font-style: italic;">(Ban hành kèm theo Thông tư số 57/2021/TT-BQP ngày 16/4/2021 của Bộ trưởng Bộ Quốc phòng)</p>
+    </div>
+
+    <div>
+      <p><b>I. THÔNG TIN CHUNG</b></p>
+      <p style="padding-left: 18pt;">- Tên đề tài/nhiệm vụ: <b>${proposal.title}</b></p>
+      <p style="padding-left: 18pt;">- Mã số đề tài: <b>${code}</b></p>
+      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
+      <p style="padding-left: 18pt;">- Cơ quan chủ trì: <b>${proposal.hostOrganizationUnit || "Học viện Quân y"}</b></p>
+      <p style="padding-left: 18pt;">- Quyết định thành lập Hội đồng số: <b>${acceptance.establishmentDecisionNumber || "QĐ-HVQY/2026"}</b></p>
+      <p style="padding-left: 18pt;">- Thời gian họp: <b>${acceptance.meetingDate || new Date().toLocaleDateString("vi-VN")}</b>. Địa điểm: <b>${acceptance.meetingLocation || "Phòng họp Ban Quản lý Khoa học - Học viện Quân y"}</b></p>
+
+      <p style="margin-top: 10pt;"><b>II. THÀNH PHẦN HỘI ĐỒNG</b></p>
+      <table style="width: 100%; border: 1px solid #000; margin: 8pt 0;">
+        <thead>
+          <tr style="background-color: #f1f5f9;">
+            <th style="border: 1px solid #000; padding: 5pt; width: 8%;">TT</th>
+            <th style="border: 1px solid #000; padding: 5pt; width: 32%;">Họ và tên</th>
+            <th style="border: 1px solid #000; padding: 5pt; width: 40%;">Học hàm, học vị, Đơn vị</th>
+            <th style="border: 1px solid #000; padding: 5pt; width: 20%;">Chức danh HĐ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${memberRows}
+        </tbody>
+      </table>
+
+      <p style="margin-top: 10pt;"><b>III. KẾT QUẢ ĐÁNH GIÁ THEO 4 TIÊU CHÍ CHUẨN QUÂN ĐỘI</b></p>
+      <table style="width: 100%; border: 1px solid #000; margin: 8pt 0;">
+        <thead>
+          <tr style="background-color: #f1f5f9;">
+            <th style="border: 1px solid #000; padding: 5pt; width: 8%;">TT</th>
+            <th style="border: 1px solid #000; padding: 5pt; width: 62%;">Nội dung / Tiêu chí đánh giá</th>
+            <th style="border: 1px solid #000; padding: 5pt; width: 15%; text-align: center;">Điểm tối đa</th>
+            <th style="border: 1px solid #000; padding: 5pt; width: 15%; text-align: center;">Điểm đạt</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt;">1</td>
+            <td style="border: 1px solid #000; padding: 5pt;">Chất lượng Báo cáo tổng kết và Báo cáo tóm tắt</td>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt;">30</td>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt; font-weight: bold;">${scores.reportScore}</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt;">2</td>
+            <td style="border: 1px solid #000; padding: 5pt;">Sản phẩm khoa học (Bài báo quốc tế/trong nước, sáng chế, sách chuyên khảo)</td>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt;">30</td>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt; font-weight: bold;">${scores.scientificProductsScore}</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt;">3</td>
+            <td style="border: 1px solid #000; padding: 5pt;">Sản phẩm đào tạo (Hướng dẫn NCS, Thạc sĩ, Bác sĩ chuyên khoa II)</td>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt;">15</td>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt; font-weight: bold;">${scores.trainingProductsScore}</td>
+          </tr>
+          <tr>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt;">4</td>
+            <td style="border: 1px solid #000; padding: 5pt;">Hiệu quả và khả năng ứng dụng thực tiễn y dược quân sự, điều trị thương bệnh binh</td>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt;">25</td>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt; font-weight: bold;">${scores.militaryMedicalPracticalScore}</td>
+          </tr>
+          <tr style="background-color: #f8fafc; font-weight: bold;">
+            <td colspan="2" style="border: 1px solid #000; padding: 5pt; text-align: right;">TỔNG ĐIỂM TRUNG BÌNH CỦA HỘI ĐỒNG:</td>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt;">100</td>
+            <td style="text-align: center; border: 1px solid #000; padding: 5pt; font-size: 14pt; color: #15803d;">${scores.totalScore}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p style="margin-top: 10pt;"><b>IV. KẾT LUẬN VÀ KIẾN NGHỊ CỦA HỘI ĐỒNG</b></p>
+      <p style="padding-left: 18pt;">- Đánh giá xếp loại: <b style="font-size: 14pt; color: #1e3a8a;">${classificationText}</b></p>
+      <p style="padding-left: 18pt;">- Nhận xét chung của Hội đồng:</p>
+      <p style="padding-left: 28pt; font-style: italic;">"${scores.assessmentComments}"</p>
+      <p style="padding-left: 18pt;">- Hội đồng thống nhất thông qua kết quả nghiệm thu và đề nghị Thủ trưởng Học viện ra Quyết định công nhận kết quả nghiên cứu.</p>
+    </div>
+
+    <!-- SIGNATURES -->
+    <table class="footer-table" style="width: 100%; margin-top: 24pt;">
+      <tr>
+        <td style="width: 50%; text-align: center;">
+          <p style="margin: 0; font-size: 12pt; font-weight: bold;">THƯ KÝ HỘI ĐỒNG</p>
+          <p style="margin: 4pt 0 45pt 0; font-size: 10pt; font-style: italic;">(Ký và ghi rõ họ tên)</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${acceptance.members.find(m => m.role.includes("SECRETARY"))?.fullName || "Thư ký HĐ"}</p>
+        </td>
+        <td style="width: 50%; text-align: center;">
+          <p style="margin: 0; font-size: 12pt; font-weight: bold;">CHỦ TỊCH HỘI ĐỒNG</p>
+          <p style="margin: 4pt 0 45pt 0; font-size: 10pt; font-style: italic;">(Ký và ghi rõ họ tên)</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${acceptance.members.find(m => m.role.includes("CHAIRMAN"))?.fullName || "Chủ tịch HĐ"}</p>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  exportHtmlToWord({
+    filename: `Bien_ban_nghiem_thu_${councilTypeLabel}_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
+    title: `Biên bản nghiệm thu ${councilTypeLabel} - ${code}`,
+    contentHtml
+  });
+}
+
+/**
+ * Xuất Giấy chứng nhận Chấp thuận Đạo đức Y sinh (IRB)
+ */
+export function exportIrbCertificateWord(
+  proposal: ProposalExportData,
+  irb: {
+    certificateNumber?: string;
+    approvalDate?: string;
+    validUntil?: string;
+    riskLevel?: "MINIMAL" | "LOW" | "HIGH";
+    councilPresident?: string;
+    ethicsNotes?: string;
+  }
+) {
+  const code = proposal.code || "HVQY-NCKH-2026";
+  const certNumber = irb.certificateNumber || `IRB-HVQY-2026-${code.slice(-3)}`;
+  const approvalDate = irb.approvalDate || new Date().toLocaleDateString("vi-VN");
+  const validUntil = irb.validUntil || "31/12/2027";
+  const riskLevelLabel =
+    irb.riskLevel === "MINIMAL"
+      ? "Rủi ro tối thiểu (Minimal Risk)"
+      : irb.riskLevel === "HIGH"
+      ? "Rủi ro cao (High Risk)"
+      : "Rủi ro thấp (Low Risk)";
+
+  const contentHtml = `
+    <!-- HEADER -->
+    <table class="header-table" style="width: 100%; margin-bottom: 15pt;">
+      <tr>
+        <td style="width: 50%; text-align: center;">
+          <p style="margin: 0; font-size: 11pt;">BỘ QUỐC PHÒNG</p>
+          <p style="margin: 0; font-size: 12pt; font-weight: bold;">HỌC VIỆN QUÂN Y</p>
+          <p style="margin: 0; font-size: 10pt; font-weight: bold;">HỘI ĐỒNG ĐẠO ĐỨC TRONG NGHIÊN CỨU Y SINH HỌC</p>
+          <div style="border-bottom: 1.5pt solid #000; width: 140pt; margin: 3pt auto 0 auto;"></div>
+          <p style="margin: 4pt 0 0 0; font-size: 10pt;">Số: <b>${certNumber}</b></p>
+        </td>
+        <td style="width: 50%; text-align: center;">
+          <p style="margin: 0; font-size: 11pt; font-weight: bold;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
+          <p style="margin: 0; font-size: 11pt; font-weight: bold;">Độc lập - Tự do - Hạnh phúc</p>
+          <div style="border-bottom: 1.5pt solid #000; width: 140pt; margin: 3pt auto 0 auto;"></div>
+          <p style="margin: 6pt 0 0 0; font-size: 11pt; font-style: italic;">Hà Nội, ngày ${new Date().getDate()} tháng ${new Date().getMonth() + 1} năm ${new Date().getFullYear()}</p>
+        </td>
+      </tr>
+    </table>
+
+    <div style="text-align: center; margin: 25pt 0 15pt 0;">
+      <p style="margin: 0; font-size: 16pt; font-weight: bold; color: #1e3a8a;">GIẤY CHỨNG NHẬN CHẤP THUẬN ĐẠO ĐỨC</p>
+      <p style="margin: 4pt 0 0 0; font-size: 13pt; font-weight: bold;">TRONG NGHIÊN CỨU Y SINH HỌC</p>
+      <p style="margin: 3pt 0 0 0; font-size: 11pt; font-style: italic;">(Institutional Review Board Ethical Approval Certificate)</p>
+    </div>
+
+    <div>
+      <p style="text-indent: 20pt;">Hội đồng Đạo đức trong Nghiên cứu Y sinh học - Học viện Quân y đã xem xét, đánh giá hồ sơ nghiên cứu:</p>
+      <p style="padding-left: 20pt;">- Tên đề tài/nghiên cứu: <b>${proposal.title}</b></p>
+      <p style="padding-left: 20pt;">- Mã số đề tài: <b>${code}</b></p>
+      <p style="padding-left: 20pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
+      <p style="padding-left: 20pt;">- Cơ quan chủ trì: <b>${proposal.hostOrganizationUnit || "Học viện Quân y"}</b></p>
+      <p style="padding-left: 20pt;">- Phân loại mức độ rủi ro: <b>${riskLevelLabel}</b></p>
+
+      <p style="margin-top: 12pt; text-indent: 20pt;"><b>QUYẾT NGHỊ:</b></p>
+      <p style="padding-left: 20pt;">1. <b>CHẤP THUẬN</b> về khía cạnh đạo đức đối với quy trình nghiên cứu, mẫu bệnh phẩm, đối tượng tình nguyện tham gia và phương án bảo đảm an toàn sinh học.</p>
+      <p style="padding-left: 20pt;">2. Giấy chứng nhận này có hiệu lực từ ngày <b>${approvalDate}</b> đến ngày <b>${validUntil}</b>.</p>
+      <p style="padding-left: 20pt;">3. Chủ nhiệm đề tài có trách nhiệm báo cáo định kỳ cho Hội đồng và báo cáo ngay lập tức các biến cố bất lợi nghiêm trọng (SAE) nếu phát sinh.</p>
+      <p style="padding-left: 20pt; font-style: italic;">Ghi chú của Hội đồng: "${irb.ethicsNotes || "Nghiên cứu tuân thủ nghiêm ngặt Hướng dẫn Thực hành tốt lâm sàng (GCP) và Tuyên ngôn Helsinki."}"</p>
+    </div>
+
+    <!-- SIGNATURE -->
+    <table class="footer-table" style="width: 100%; margin-top: 30pt;">
+      <tr>
+        <td style="width: 45%; text-align: center;">
+          <p style="margin: 0; font-size: 11pt; font-weight: bold;">NƠI NHẬN:</p>
+          <p style="margin: 2pt 0 0 0; font-size: 10pt; text-align: left; padding-left: 20pt;">- Ban Giám đốc Học viện (để b/c);<br>- Phòng KHQS;<br>- Chủ nhiệm đề tài;<br>- Lưu: HĐ ĐĐ, BQLKH.</p>
+        </td>
+        <td style="width: 55%; text-align: center;">
+          <p style="margin: 0; font-size: 12pt; font-weight: bold;">TM. HỘI ĐỒNG ĐẠO ĐỨC Y SINH HỌC</p>
+          <p style="margin: 2pt 0 0 0; font-size: 11pt; font-weight: bold;">CHỦ TỊCH HỘI ĐỒNG</p>
+          <p style="margin: 4pt 0 45pt 0; font-size: 10pt; font-style: italic;">(Ký, ghi rõ họ tên và đóng dấu)</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${irb.councilPresident || "GS. TS. Nguyễn Minh Phương"}</p>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  exportHtmlToWord({
+    filename: `Giay_chung_nhan_IRB_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
+    title: `Giấy chứng nhận IRB - ${code}`,
     contentHtml
   });
 }

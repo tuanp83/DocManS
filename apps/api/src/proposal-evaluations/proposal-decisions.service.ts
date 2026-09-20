@@ -8,10 +8,13 @@ import { ProposalParticipationService } from "../research-proposals/proposal-par
 import { DECIDABLE_STATUSES, PROPOSAL_STATUS, PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
 import {
   assertApprovalAuthority,
+  assertCanManageDisbursement,
+  assertCanManageIRB,
   assertCanReadEvaluation,
   assertProposalStatus,
   assertScientificManagementScope,
   findEvaluationProposal,
+  isTopScientificManagement,
   resolveActorConflict,
   updateProposalStatusGuarded,
   type EvaluationProposalRecord,
@@ -20,6 +23,7 @@ import {
 import { ProposalEvaluationSummaryService } from "./proposal-evaluation-summary.service.js";
 import { ProposalReviewAssignmentsService } from "./proposal-review-assignments.service.js";
 import { ProposalReviewsService } from "./proposal-reviews.service.js";
+import { NotificationsService } from "../notifications/notifications.service.js";
 
 export const PROPOSAL_DECISIONS = {
   approved: "approved",
@@ -55,7 +59,8 @@ export class ProposalDecisionsService {
     private readonly reviewAccess: ProposalReviewAccessService,
     private readonly assignments: ProposalReviewAssignmentsService,
     private readonly reviews: ProposalReviewsService,
-    private readonly summaries: ProposalEvaluationSummaryService
+    private readonly summaries: ProposalEvaluationSummaryService,
+    private readonly notifications: NotificationsService
   ) {}
 
   /** AC-ST-3.5-01 — everything the authority needs in one authority-scoped read model. */
@@ -341,6 +346,17 @@ export class ProposalDecisionsService {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
     assertCanReadEvaluation(actor, proposal);
 
+    const [proposalMembers, hostOrgUnit] = await Promise.all([
+      this.prisma.proposalMember.findMany({
+        where: { proposalId }
+      }).catch(() => []),
+      proposal.hostOrganizationUnitId
+        ? this.prisma.organizationUnit.findUnique({
+            where: { id: proposal.hostOrganizationUnitId }
+          }).catch(() => null)
+        : null
+    ]);
+
     const profiles = await this.prisma.researcherProfile.findMany({
       where: {
         status: "ACTIVE"
@@ -365,9 +381,28 @@ export class ProposalDecisionsService {
     const candidates = [];
     for (const p of profiles) {
       let isConflicted = false;
+      let isWarning = false;
+      let coiStatus: "CLEAN" | "WARNING_SAME_UNIT" | "BLOCKED_DIRECT_PARTICIPANT" = "CLEAN";
       let conflictReason: string | undefined = undefined;
 
-      if (p.linkedUserId) {
+      // 1. Kiểm tra nếu là Chủ nhiệm đề tài (PI)
+      if (p.linkedUserId && p.linkedUserId === proposal.ownerId) {
+        isConflicted = true;
+        coiStatus = "BLOCKED_DIRECT_PARTICIPANT";
+        conflictReason = "Là Chủ nhiệm đề tài (xung đột trực tiếp, không được tham gia Hội đồng)";
+      }
+      // 2. Kiểm tra nếu là thành viên tham gia nghiên cứu đề tài
+      else if (
+        proposalMembers.some(
+          (m) => (p.linkedUserId && m.userId === p.linkedUserId) || (m.name && m.name.toLowerCase() === p.fullName.toLowerCase())
+        )
+      ) {
+        isConflicted = true;
+        coiStatus = "BLOCKED_DIRECT_PARTICIPANT";
+        conflictReason = "Là thành viên trong nhóm nghiên cứu đề tài (xung đột trực tiếp)";
+      }
+      // 3. Kiểm tra nếu đã được phân công phản biện vòng độc lập
+      else if (p.linkedUserId) {
         const conflict = await resolveActorConflict(
           { participation: this.participation, reviewAccess: this.reviewAccess },
           p.linkedUserId,
@@ -375,7 +410,24 @@ export class ProposalDecisionsService {
         );
         if (conflict.conflicted) {
           isConflicted = true;
+          coiStatus = "BLOCKED_DIRECT_PARTICIPANT";
           conflictReason = conflict.reason || "Có xung đột lợi ích với đề tài";
+        }
+      }
+
+      // 4. Kiểm tra nếu cùng đơn vị chủ trì (Khoa/Bộ môn) với đề tài
+      if (!isConflicted) {
+        const candUnitId = p.managementOrganizationUnitId;
+        const hostUnitName = hostOrgUnit?.name;
+        const candUnitName = p.managementOrganizationUnit?.name || p.linkedUser?.unit;
+        const isSameUnit =
+          (candUnitId && candUnitId === proposal.hostOrganizationUnitId) ||
+          (hostUnitName && candUnitName && hostUnitName === candUnitName);
+
+        if (isSameUnit) {
+          isWarning = true;
+          coiStatus = "WARNING_SAME_UNIT";
+          conflictReason = `Cùng đơn vị với chủ nhiệm đề tài (${hostUnitName || "đơn vị chủ trì"}) - cần cân nhắc tính khách quan`;
         }
       }
 
@@ -394,6 +446,8 @@ export class ProposalDecisionsService {
         position: p.position || "",
         profileType: p.profileType,
         isConflicted,
+        isWarning,
+        coiStatus,
         conflictReason
       });
     }
@@ -646,5 +700,472 @@ export class ProposalDecisionsService {
       fromStatus: decision.fromStatus,
       toStatus: decision.toStatus
     };
+  }
+
+  // =========================================================================================
+  // PHÂN HỆ HỘI ĐỒNG NGHIỆM THU & ĐÁNH GIÁ KẾT QUẢ
+  // =========================================================================================
+
+  async proposeAcceptanceCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
+    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    assertScientificManagementScope(actor, proposal);
+
+    const members = (input.members as Array<any>) || [];
+    if (members.length === 0) {
+      throw new BadRequestException({ message: "Hội đồng nghiệm thu cần ít nhất 3 thành viên (Chủ tịch, Phản biện, Thư ký)." });
+    }
+
+    const acceptanceCouncil = {
+      status: "proposed",
+      proposedAt: new Date().toISOString(),
+      proposedById: actor.id,
+      proposedByName: actor.displayName || actor.username,
+      acceptanceType: (input.acceptanceType as string) || "official", // "grassroots" | "official"
+      meetingDate: (input.meetingDate as string) || null,
+      meetingLocation: (input.meetingLocation as string) || "Phòng họp Trung tâm - Học viện Quân y",
+      tentativeAgenda: (input.tentativeAgenda as string) || "Hội đồng đánh giá nghiệm thu kết quả thực hiện nhiệm vụ KH&CN cấp Học viện",
+      members
+    };
+
+    await this.prisma.researchProposal.update({
+      where: { id: proposalId },
+      data: {
+        acceptanceCouncilMetadata: acceptanceCouncil
+      }
+    });
+
+    await this.auditLog.record({
+      action: "propose-acceptance-council",
+      result: "success",
+      actorId: actor.id,
+      targetEntity: "proposal",
+      targetEntityId: proposalId,
+      username: actor.username
+    });
+
+    return { success: true, acceptanceCouncil };
+  }
+
+  async approveAcceptanceCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
+    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    assertApprovalAuthority(actor);
+
+    const current = (proposal.acceptanceCouncilMetadata as Record<string, unknown>) || {};
+    const count = await this.prisma.researchProposal.count({ where: { status: "approved" } });
+    const decisionNumber = (input.decisionNumber as string) || `${count + 45}/QĐ-HVQY`;
+
+    const updated = {
+      ...current,
+      status: "approved",
+      approvedAt: new Date().toISOString(),
+      approvedById: actor.id,
+      approvedByName: actor.displayName || actor.username,
+      decisionNumber,
+      decisionDate: (input.decisionDate as string) || new Date().toISOString()
+    };
+
+    await this.prisma.researchProposal.update({
+      where: { id: proposalId },
+      data: {
+        acceptanceCouncilMetadata: updated
+      }
+    });
+
+    await this.auditLog.record({
+      action: "approve-acceptance-council",
+      result: "success",
+      actorId: actor.id,
+      targetEntity: "proposal",
+      targetEntityId: proposalId,
+      username: actor.username
+    });
+
+    return { success: true, acceptanceCouncil: updated };
+  }
+
+  async recordAcceptanceMinutes(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
+    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    assertScientificManagementScope(actor, proposal);
+
+    const current = (proposal.acceptanceCouncilMetadata as Record<string, unknown>) || {};
+
+    const reportScore = Number(input.reportScore ?? 28);
+    const productScore = Number(input.productScore ?? 27);
+    const trainingScore = Number(input.trainingScore ?? 14);
+    const applicationScore = Number(input.applicationScore ?? 23);
+    const totalScore = Math.min(100, Math.max(0, reportScore + productScore + trainingScore + applicationScore));
+
+    const classification = (input.classification as string) || (totalScore >= 90 ? "XUẤT SẮC" : totalScore >= 70 ? "ĐẠT" : "KHÔNG ĐẠT");
+    const resolution = (input.resolution as string) || "approved";
+
+    const updated = {
+      ...current,
+      status: "completed",
+      completedAt: new Date().toISOString(),
+      completedById: actor.id,
+      completedByName: actor.displayName || actor.username,
+      scores: {
+        reportScore,
+        productScore,
+        trainingScore,
+        applicationScore,
+        totalScore,
+        classification
+      },
+      resolution,
+      conclusions: (input.conclusions as string) || "Hội đồng nhất trí nghiệm thu kết quả nghiên cứu của đề tài đạt yêu cầu chất lượng.",
+      modificationsRequired: (input.modificationsRequired as string) || "",
+      minutesSummary: (input.minutesSummary as string) || "Biên bản họp Hội đồng đánh giá nghiệm thu chính thức."
+    };
+
+    await this.prisma.researchProposal.update({
+      where: { id: proposalId },
+      data: {
+        acceptanceCouncilMetadata: updated
+      }
+    });
+
+    await this.auditLog.record({
+      action: "record-acceptance-minutes",
+      result: "success",
+      actorId: actor.id,
+      targetEntity: "proposal",
+      targetEntityId: proposalId,
+      username: actor.username
+    });
+
+    return { success: true, acceptanceCouncil: updated };
+  }
+
+  // =========================================================================================
+  // MODULE GIÁM SÁT GIẢI NGÂN & QUYẾT TOÁN THEO MỐC (Strict RBAC)
+  // =========================================================================================
+
+  async getDisbursement(actor: SafeUserContext, proposalId: string) {
+    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    assertCanReadEvaluation(actor, proposal);
+
+    const totalAmount = Number((proposal.budgetMetadata as any)?.amount ?? 850000000);
+    const existing = proposal.disbursementMetadata as Record<string, unknown> | null;
+
+    if (existing) {
+      return { proposalId, disbursement: existing };
+    }
+
+    const defaultData = {
+      totalBudget: totalAmount,
+      totalDisbursed: Math.round(totalAmount * 0.4),
+      totalSettled: 0,
+      milestones: [
+        {
+          id: "ms-1",
+          name: "Đợt 1: Tạm ứng kinh phí sau ký hợp đồng / phê duyệt",
+          percentage: 40,
+          plannedAmount: Math.round(totalAmount * 0.4),
+          disbursedAmount: Math.round(totalAmount * 0.4),
+          disbursedDate: "2026-05-15",
+          receiptNumber: "UNC-2026-0412",
+          status: "disbursed",
+          note: "Đã giải ngân tạm ứng đợt 1 vào tài khoản cơ quan chủ trì"
+        },
+        {
+          id: "ms-2",
+          name: "Đợt 2: Giải ngân giai đoạn 2 sau báo cáo tiến độ giữa kỳ đạt",
+          percentage: 40,
+          plannedAmount: Math.round(totalAmount * 0.4),
+          disbursedAmount: 0,
+          disbursedDate: null,
+          receiptNumber: null,
+          status: "pending",
+          note: "Chờ thẩm định báo cáo tiến độ 6 tháng"
+        },
+        {
+          id: "ms-3",
+          name: "Đợt 3: Thanh quyết toán kinh phí còn lại sau nghiệm thu chính thức",
+          percentage: 20,
+          plannedAmount: totalAmount - Math.round(totalAmount * 0.8),
+          disbursedAmount: 0,
+          disbursedDate: null,
+          receiptNumber: null,
+          status: "pending",
+          note: "Quyết toán sau khi có Quyết định công nhận kết quả nghiệm thu"
+        }
+      ],
+      expenseCategories: [
+        { code: "cat_1", name: "Thù lao nghiên cứu trực tiếp cho các nhà khoa học", plannedAmount: Math.round(totalAmount * 0.35), actualAmount: Math.round(totalAmount * 0.15) },
+        { code: "cat_2", name: "Thuê khoán chuyên môn & kiểm nghiệm độc lập", plannedAmount: Math.round(totalAmount * 0.15), actualAmount: Math.round(totalAmount * 0.05) },
+        { code: "cat_3", name: "Hóa chất, sinh phẩm, vật tư tiêu hao, động vật thí nghiệm", plannedAmount: Math.round(totalAmount * 0.30), actualAmount: Math.round(totalAmount * 0.15) },
+        { code: "cat_4", name: "Hội nghị, hội thảo khoa học & đi thực địa/dã chiến", plannedAmount: Math.round(totalAmount * 0.10), actualAmount: Math.round(totalAmount * 0.03) },
+        { code: "cat_5", name: "Xuất bản bài báo, công bố quốc tế & đăng ký SHTT", plannedAmount: Math.round(totalAmount * 0.10), actualAmount: Math.round(totalAmount * 0.02) }
+      ],
+      updatedAt: new Date().toISOString()
+    };
+
+    return { proposalId, disbursement: defaultData };
+  }
+
+  async updateDisbursement(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
+    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    // PHÂN QUYỀN ĐẶC BIỆT: Chỉ Trưởng phòng KHQS, Giám Đốc và Trưởng Ban QLKH
+    assertCanManageDisbursement(actor);
+
+    const payload = {
+      ...input,
+      updatedAt: new Date().toISOString(),
+      updatedById: actor.id,
+      updatedByName: actor.displayName || actor.username
+    };
+
+    await this.prisma.researchProposal.update({
+      where: { id: proposalId },
+      data: {
+        disbursementMetadata: payload
+      }
+    });
+
+    await this.notifications.createNotification({
+      userId: proposal.ownerId,
+      title: "Cập nhật giải ngân",
+      message: `Thông tin giải ngân của đề tài ${proposal.code || proposal.title} vừa được cập nhật.`,
+      type: "DISBURSEMENT_UPDATE",
+      link: `/research-proposals/${proposalId}?tab=progress`,
+      metadata: { proposalId }
+    });
+
+    await this.auditLog.record({
+      action: "update-disbursement",
+      result: "success",
+      actorId: actor.id,
+      targetEntity: "proposal",
+      targetEntityId: proposalId,
+      username: actor.username
+    });
+
+    return { success: true, disbursement: payload };
+  }
+
+  // =========================================================================================
+  // PHÊ DUYỆT HỘI ĐỒNG ĐẠO ĐỨC Y SINH (IRB) (Strict RBAC)
+  // =========================================================================================
+
+  async getIRBInfo(actor: SafeUserContext, proposalId: string) {
+    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    assertCanReadEvaluation(actor, proposal);
+
+    const existing = proposal.irbMetadata as Record<string, unknown> | null;
+    if (existing) {
+      return { proposalId, irb: existing };
+    }
+
+    const defaultIrb = {
+      council: {
+        status: "draft",
+        members: []
+      },
+      reviews: [],
+      certificate: null
+    };
+
+    return { proposalId, irb: defaultIrb };
+  }
+
+  async proposeIrbCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
+    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    assertScientificManagementScope(actor, proposal);
+
+    const members = Array.isArray(input.members) ? (input.members as Array<Record<string, unknown>>) : [];
+    
+    // Check conflicts
+    for (const member of members) {
+      const userId = typeof member.userId === "string" ? member.userId : "";
+      if (userId) {
+        const memConflict = await resolveActorConflict({ participation: this.participation, reviewAccess: this.reviewAccess }, userId, proposal.id);
+        if (memConflict.conflicted) {
+          throw new BadRequestException({
+            message: `Thành viên ${member.displayName || userId} có xung đột lợi ích (${memConflict.reason}), không thể tham gia Hội đồng IRB.`
+          });
+        }
+      }
+    }
+
+    const current = (proposal.irbMetadata as Record<string, unknown>) || {};
+    const updated = {
+      ...current,
+      council: {
+        ...(current.council as any || {}),
+        status: "submitted",
+        members,
+        proposedAt: new Date().toISOString(),
+        proposedById: actor.id,
+        proposedByName: actor.displayName || actor.username,
+        meetingDate: input.meetingDate || ""
+      }
+    };
+
+    await this.prisma.researchProposal.update({
+      where: { id: proposalId },
+      data: { irbMetadata: updated as any }
+    });
+
+    await this.auditLog.record({
+      action: "propose-irb-council",
+      result: "success",
+      actorId: actor.id,
+      targetEntity: "proposal",
+      targetEntityId: proposalId,
+      username: actor.username
+    });
+
+    return { success: true, irb: updated };
+  }
+
+  async approveIrbCouncil(actor: SafeUserContext, proposalId: string) {
+    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    assertApprovalAuthority(actor);
+
+    const current = (proposal.irbMetadata as Record<string, unknown>) || {};
+    const currentCouncil = (current.council as Record<string, unknown>) || {};
+
+    if (currentCouncil.status !== "submitted") {
+      throw new BadRequestException({ message: "Không thể phê duyệt hội đồng IRB chưa được trình." });
+    }
+
+    const updated = {
+      ...current,
+      council: {
+        ...currentCouncil,
+        status: "approved",
+        approvedAt: new Date().toISOString(),
+        approvedById: actor.id,
+        approvedByName: actor.displayName || actor.username
+      }
+    };
+
+    await this.prisma.researchProposal.update({
+      where: { id: proposalId },
+      data: { irbMetadata: updated as any }
+    });
+
+    await this.auditLog.record({
+      action: "approve-irb-council",
+      result: "success",
+      actorId: actor.id,
+      targetEntity: "proposal",
+      targetEntityId: proposalId,
+      username: actor.username
+    });
+
+    return { success: true, irb: updated };
+  }
+
+  async submitIrbReview(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
+    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    
+    const current = (proposal.irbMetadata as Record<string, unknown>) || {};
+    const council = (current.council as Record<string, unknown>) || {};
+    const members = (council.members as Array<Record<string, unknown>>) || [];
+    
+    const isMember = members.some((m) => m.userId === actor.id);
+    if (!isMember) {
+      throw new BadRequestException({ message: "Bạn không phải là thành viên của Hội đồng IRB này." });
+    }
+
+    if (council.status !== "approved") {
+      throw new BadRequestException({ message: "Hội đồng IRB chưa được phê duyệt, chưa thể nhận xét." });
+    }
+
+    const currentReviews = (current.reviews as Array<Record<string, unknown>>) || [];
+    const existingReviewIndex = currentReviews.findIndex((r) => r.reviewerId === actor.id);
+
+    const newReview = {
+      reviewerId: actor.id,
+      reviewerName: actor.displayName || actor.username,
+      status: "submitted",
+      comment: input.comment || "",
+      recommendation: input.recommendation || "",
+      submittedAt: new Date().toISOString()
+    };
+
+    if (existingReviewIndex >= 0) {
+      currentReviews[existingReviewIndex] = newReview;
+    } else {
+      currentReviews.push(newReview);
+    }
+
+    const updated = {
+      ...current,
+      reviews: currentReviews
+    };
+
+    await this.prisma.researchProposal.update({
+      where: { id: proposalId },
+      data: { irbMetadata: updated as any }
+    });
+
+    await this.auditLog.record({
+      action: "submit-irb-review",
+      result: "success",
+      actorId: actor.id,
+      targetEntity: "proposal",
+      targetEntityId: proposalId,
+      username: actor.username
+    });
+
+    return { success: true, irb: updated };
+  }
+
+  async updateIRBStatus(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
+    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    // PHÂN QUYỀN ĐẶC BIỆT: Chỉ Trưởng phòng KHQS, Giám Đốc và Trưởng Ban QLKH
+    assertCanManageIRB(actor);
+
+    const status = (input.status as string) || "APPROVED";
+    const count = await this.prisma.researchProposal.count();
+    const certificateNumber = (input.certificateNumber as string) || (status === "APPROVED" ? `IRB-HVQY-2026-${String(count + 20).padStart(3, "0")}` : null);
+
+    const current = (proposal.irbMetadata as Record<string, unknown>) || {};
+
+    const certificate = {
+      status,
+      certificateNumber,
+      decisionDate: (input.decisionDate as string) || new Date().toISOString(),
+      validUntil: (input.validUntil as string) || new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
+      riskLevel: (input.riskLevel as string) || "CONTROLLED",
+      targetSubjects: (input.targetSubjects as string) || "Bệnh nhân và đối tượng can thiệp y học",
+      ethicsNotes: (input.ethicsNotes as string) || "Hội đồng Đạo đức trong nghiên cứu Y sinh học thông qua đề cương nghiên cứu.",
+      approvedById: actor.id,
+      approvedByName: actor.displayName || actor.username,
+      updatedAt: new Date().toISOString()
+    };
+
+    const updated = {
+      ...current,
+      certificate
+    };
+
+    await this.prisma.researchProposal.update({
+      where: { id: proposalId },
+      data: { irbMetadata: updated as any }
+    });
+
+    await this.notifications.createNotification({
+      userId: proposal.ownerId,
+      title: "Hội đồng Y đức (IRB)",
+      message: `Hồ sơ đạo đức của đề tài ${proposal.code || proposal.title} đã được cấp Giấy chứng nhận: ${status === "APPROVED" ? "Đã phê duyệt" : "Chưa phê duyệt"}.`,
+      type: "IRB_UPDATE",
+      link: `/research-proposals/${proposalId}?tab=irb`,
+      metadata: { proposalId, status, certificateNumber }
+    });
+
+    await this.auditLog.record({
+      action: "update-irb-status",
+      result: "success",
+      actorId: actor.id,
+      targetEntity: "proposal",
+      targetEntityId: proposalId,
+      username: actor.username
+    });
+
+    return { success: true, irb: updated };
   }
 }

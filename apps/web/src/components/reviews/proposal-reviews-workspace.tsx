@@ -44,9 +44,13 @@ import {
 import { ProposalEvaluationPanel } from "@/components/research-proposals/proposal-evaluation-panel";
 import { exportCouncilDecisionWord, exportCouncilMinutesWord } from "@/lib/word-export";
 import { OfficialCouncilDecisionModal } from "@/components/research-proposals/official-council-decision-modal";
+import { AcceptanceCouncilModal } from "@/components/research-proposals/acceptance-council-modal";
+import { MilestoneDisbursementModal } from "@/components/projects/milestone-disbursement-modal";
+import { IRBApprovalModal } from "@/components/research-proposals/irb-approval-modal";
 import { useSession } from "@/components/auth/session-provider";
+import { HeartPulse, DollarSign } from "lucide-react";
 
-type ActiveTab = "progress" | "council" | "minutes";
+type ActiveTab = "progress" | "council" | "minutes" | "irb";
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return "—";
@@ -66,6 +70,12 @@ export function ProposalReviewsWorkspace() {
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isDecisionModalOpen, setIsDecisionModalOpen] = useState(false);
+
+  // New Modals for Acceptance Council, Disbursement, and IRB
+  const [isAcceptanceModalOpen, setIsAcceptanceModalOpen] = useState(false);
+  const [isDisbursementModalOpen, setIsDisbursementModalOpen] = useState(false);
+  const [isIRBModalOpen, setIsIRBModalOpen] = useState(false);
+  const [modalTargetProposal, setModalTargetProposal] = useState<ResearchProposal | null>(null);
 
   // Chuyên viên QLKH không có quyền Đánh giá hồ sơ
   if (account?.unit && account.unit.toLowerCase().includes("chuyên viên")) {
@@ -302,6 +312,26 @@ export function ProposalReviewsWorkspace() {
           <Award size={18} />
           3. Tổng hợp nhận xét & Biên bản họp
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("irb")}
+          style={{
+            padding: "14px 20px",
+            border: "none",
+            borderBottom: activeTab === "irb" ? "3px solid #15803d" : "3px solid transparent",
+            background: "transparent",
+            fontWeight: activeTab === "irb" ? 700 : 600,
+            color: activeTab === "irb" ? "#15803d" : "#64748b",
+            fontSize: "15px",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px"
+          }}
+        >
+          <HeartPulse size={18} />
+          4. Hội đồng Đạo đức (IRB)
+        </button>
       </div>
 
       {/* ======================= TAB 1: THEO DÕI TIẾN ĐỘ ĐÁNH GIÁ ======================= */}
@@ -496,21 +526,50 @@ export function ProposalReviewsWorkspace() {
                     Mã hồ sơ: <strong>{selectedProposal.code || selectedProposal.id}</strong> — Chủ nhiệm: <strong>{selectedProposal.ownerDisplayName || "Nghiên cứu viên"}</strong>
                   </span>
                 </div>
-                <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => {
+                      setModalTargetProposal(selectedProposal);
+                      setIsAcceptanceModalOpen(true);
+                    }}
+                    style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px", background: "#059669", color: "#ffffff" }}
+                    title="Quản lý Hội đồng Nghiệm thu & Chấm điểm 4 tiêu chí chuẩn Quân đội"
+                  >
+                    <Award size={14} /> Nghiệm thu kết quả (HĐNT)
+                  </button>
+
+                  {/* IRB button moved to IRB tab */}
+
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => {
+                      setModalTargetProposal(selectedProposal);
+                      setIsDisbursementModalOpen(true);
+                    }}
+                    style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                    title="Giám sát Giải ngân & Quyết toán theo 3 đợt mốc tài chính"
+                  >
+                    <DollarSign size={14} /> Giải ngân & Quyết toán
+                  </button>
+
                   <button
                     type="button"
                     className="button secondary"
                     onClick={() => setActiveTab("council")}
-                    style={{ fontSize: "13px", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
                   >
-                    <Users size={14} /> Chuyển sang Phân công Hội đồng
+                    <Users size={14} /> Phân công HĐ
                   </button>
+
                   <Link
                     href={`/proposals/${selectedProposal.id}`}
-                    className="button"
-                    style={{ fontSize: "13px", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    className="button secondary"
+                    style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
                   >
-                    <ExternalLink size={14} /> Xem hồ sơ đề tài
+                    <ExternalLink size={14} /> Xem hồ sơ
                   </Link>
                 </div>
               </div>
@@ -724,12 +783,147 @@ export function ProposalReviewsWorkspace() {
         </div>
       )}
 
+      {/* ======================= TAB 4: PHÊ DUYỆT ĐẠO ĐỨC Y SINH ======================= */}
+      {activeTab === "irb" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div
+            style={{
+              background: "#ffffff",
+              padding: "16px 20px",
+              borderRadius: "8px",
+              border: "1px solid #e2e8f0",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "14px"
+            }}
+          >
+            <div>
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#15803d" }}>CHỌN ĐỀ TÀI CẦN DUYỆT ĐẠO ĐỨC Y SINH</span>
+              <div style={{ marginTop: "4px" }}>
+                <select
+                  value={selectedProposalId}
+                  onChange={(e) => setSelectedProposalId(e.target.value)}
+                  style={{ padding: "8px 14px", fontSize: "14px", fontWeight: 600, borderRadius: "6px", border: "1px solid #cbd5e1", minWidth: "360px" }}
+                >
+                  {proposals.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      [{p.code || p.id}] {p.title.slice(0, 60)}...
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {selectedProposal && (
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    setModalTargetProposal(selectedProposal);
+                    setIsIRBModalOpen(true);
+                  }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", background: "#e11d48", color: "#ffffff", border: "none" }}
+                >
+                  <HeartPulse size={14} /> Quản lý Hội đồng Y đức
+                </button>
+              </div>
+            )}
+          </div>
+
+          {selectedProposal && (
+            <div style={{ background: "#ffffff", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+                <div style={{ background: "#ffe4e6", color: "#be123c", padding: "8px", borderRadius: "8px" }}>
+                  <HeartPulse size={24} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>Hội đồng Đạo đức trong Nghiên cứu Y sinh (IRB)</h3>
+                  <p style={{ margin: 0, fontSize: "13px", color: "#64748b" }}>Yêu cầu bắt buộc đối với các đề tài liên quan đến sức khỏe con người, động vật thử nghiệm.</p>
+                </div>
+              </div>
+
+              <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
+                  <div>
+                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Trạng thái IRB</span>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: selectedProposal.irbMetadata?.status === "APPROVED" ? "#15803d" : "#b45309" }}>
+                      {selectedProposal.irbMetadata?.status === "APPROVED" ? "Đã phê duyệt" : "Chưa phê duyệt"}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Số giấy chứng nhận</span>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>{selectedProposal.irbMetadata?.certificateNumber || "Chưa cấp"}</span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Ngày cấp</span>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>{formatDate(selectedProposal.irbMetadata?.approvedAt)}</span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Phân loại nghiên cứu</span>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>
+                      {selectedProposal.irbMetadata?.reviewType === "exempt" ? "Miễn trừ" : selectedProposal.irbMetadata?.reviewType === "expedited" ? "Rút gọn" : selectedProposal.irbMetadata?.reviewType === "full_board" ? "Đầy đủ" : "Chưa xác định"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Modal Quyết định nếu mở */}
       {selectedProposal && isDecisionModalOpen && (
         <OfficialCouncilDecisionModal
           proposal={selectedProposal}
           isOpen={isDecisionModalOpen}
           onClose={() => setIsDecisionModalOpen(false)}
+        />
+      )}
+
+      {/* Modal Hội đồng Nghiệm thu & Đánh giá kết quả */}
+      {modalTargetProposal && isAcceptanceModalOpen && (
+        <AcceptanceCouncilModal
+          isOpen={isAcceptanceModalOpen}
+          onClose={() => {
+            setIsAcceptanceModalOpen(false);
+            setModalTargetProposal(null);
+          }}
+          proposal={modalTargetProposal}
+          currentUserRole={account?.systemRole}
+          currentUserUsername={account?.username}
+          onSuccess={() => void loadData()}
+        />
+      )}
+
+      {/* Modal Giám sát Giải ngân & Quyết toán theo mốc */}
+      {modalTargetProposal && isDisbursementModalOpen && (
+        <MilestoneDisbursementModal
+          isOpen={isDisbursementModalOpen}
+          onClose={() => {
+            setIsDisbursementModalOpen(false);
+            setModalTargetProposal(null);
+          }}
+          proposal={modalTargetProposal}
+          currentUserRole={account?.systemRole}
+          currentUserUsername={account?.username}
+          onSuccess={() => void loadData()}
+        />
+      )}
+
+      {/* Modal Phê duyệt Hội đồng Đạo đức Y sinh (IRB) */}
+      {modalTargetProposal && isIRBModalOpen && (
+        <IRBApprovalModal
+          isOpen={isIRBModalOpen}
+          onClose={() => {
+            setIsIRBModalOpen(false);
+            setModalTargetProposal(null);
+          }}
+          proposal={modalTargetProposal}
+          currentUserRole={account?.systemRole}
+          currentUserUsername={account?.username}
+          onSuccess={() => void loadData()}
         />
       )}
     </div>

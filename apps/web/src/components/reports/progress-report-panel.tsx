@@ -67,11 +67,24 @@ export function ProgressReportPanel() {
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedLevel, setSelectedLevel] = useState("");
   const [selectedMilitaryScope, setSelectedMilitaryScope] = useState("");
+  const [disbursementFilter, setDisbursementFilter] = useState("");
+  const [irbFilter, setIrbFilter] = useState("");
+  const [acceptanceFilter, setAcceptanceFilter] = useState("");
 
   async function loadData() {
     setState("loading");
     try {
-      const data = await loadResearchProposals();
+      const data = await loadResearchProposals({
+        keyword,
+        unit: selectedUnit,
+        progress: progressFilter,
+        status: statusFilter,
+        level: selectedLevel,
+        military: selectedMilitaryScope,
+        disbursement: disbursementFilter,
+        irb: irbFilter,
+        acceptance: acceptanceFilter
+      });
       setProposals(data);
       setState("ready");
     } catch {
@@ -81,7 +94,7 @@ export function ProgressReportPanel() {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, []); // Initial load
 
   // Danh sách các đơn vị từ dữ liệu
   const unitOptions = useMemo(() => {
@@ -138,6 +151,23 @@ export function ProgressReportPanel() {
         }
       }
 
+      // Dữ liệu Tài chính & Giải ngân
+      const budgetTotal = proposal.budgetMetadata?.amount || proposal.disbursementMetadata?.totalBudget || 500000000;
+      const disbursedTotal = proposal.disbursementMetadata?.totalDisbursed ?? 0;
+      const disbursedPercent = budgetTotal > 0 ? Math.min(100, Math.round((disbursedTotal / budgetTotal) * 100)) : 0;
+
+      // Dữ liệu Đạo đức Y sinh (IRB)
+      const irbStatus = proposal.irbMetadata?.status || "PENDING";
+      const irbCert = proposal.irbMetadata?.certificateNumber || null;
+
+      // Dữ liệu Nghiệm thu
+      const acceptanceData = proposal.acceptanceCouncilMetadata;
+      const acceptanceMinutes = acceptanceData?.acceptanceMinutes;
+      const acceptanceScore = acceptanceMinutes?.averageScore;
+      const acceptanceResult = acceptanceMinutes?.resultClassification;
+      const isAcceptanceCompleted = acceptanceResult === "EXCELLENT" || acceptanceResult === "PASSED";
+      const isAcceptanceInProgress = acceptanceData?.status === "approved" && !acceptanceResult;
+
       return {
         ...proposal,
         start,
@@ -146,30 +176,24 @@ export function ProgressReportPanel() {
         remainingDays,
         elapsedDays,
         progressPercent,
-        assessment
+        assessment,
+        budgetTotal,
+        disbursedTotal,
+        disbursedPercent,
+        irbStatus,
+        irbCert,
+        acceptanceData,
+        acceptanceMinutes,
+        acceptanceScore,
+        acceptanceResult,
+        isAcceptanceCompleted,
+        isAcceptanceInProgress
       };
     });
   }, [proposals]);
 
-  // Lọc dữ liệu theo điều kiện
-  const filteredProposals = useMemo(() => {
-    const kw = keyword.trim().toLowerCase();
-    return enhancedProposals.filter((p) => {
-      const matchKeyword =
-        !kw ||
-        p.title.toLowerCase().includes(kw) ||
-        (p.code && p.code.toLowerCase().includes(kw)) ||
-        (p.ownerDisplayName && p.ownerDisplayName.toLowerCase().includes(kw));
-
-      const matchUnit = !selectedUnit || p.hostOrganizationUnitId === selectedUnit;
-      const matchStatus = !statusFilter || p.status === statusFilter;
-      const matchProgress = !progressFilter || p.assessment === progressFilter;
-      const matchLevel = !selectedLevel || p.proposalTypeCode === selectedLevel;
-      const matchMilitary = !selectedMilitaryScope || getProposalMilitaryScope(p) === selectedMilitaryScope;
-
-      return matchKeyword && matchUnit && matchStatus && matchProgress && matchLevel && matchMilitary;
-    });
-  }, [enhancedProposals, keyword, selectedUnit, statusFilter, progressFilter, selectedLevel, selectedMilitaryScope]);
+  // Server đã lọc dữ liệu, ta chỉ cần sử dụng danh sách enhancedProposals
+  const filteredProposals = enhancedProposals;
 
   // Thống kê KPIs
   const metrics = useMemo(() => {
@@ -178,8 +202,17 @@ export function ProgressReportPanel() {
     let overdueCount = 0;
     let notStartedCount = 0;
     let unknownCount = 0;
+    let totalBudgetSum = 0;
+    let totalDisbursedSum = 0;
+    let irbApprovedCount = 0;
+    let acceptanceCompletedCount = 0;
 
     filteredProposals.forEach((p) => {
+      totalBudgetSum += p.budgetTotal;
+      totalDisbursedSum += p.disbursedTotal;
+      if (p.irbStatus === "APPROVED") irbApprovedCount++;
+      if (p.isAcceptanceCompleted) acceptanceCompletedCount++;
+
       if (p.assessment === "on_track") onTrackCount++;
       else if (p.assessment === "ending_soon") endingSoonCount++;
       else if (p.assessment === "overdue") overdueCount++;
@@ -187,13 +220,21 @@ export function ProgressReportPanel() {
       else unknownCount++;
     });
 
+    const averageDisbursedPercent =
+      totalBudgetSum > 0 ? Math.round((totalDisbursedSum / totalBudgetSum) * 100) : 0;
+
     return {
       total: filteredProposals.length,
       onTrackCount,
       endingSoonCount,
       overdueCount,
       notStartedCount,
-      unknownCount
+      unknownCount,
+      totalBudgetSum,
+      totalDisbursedSum,
+      averageDisbursedPercent,
+      irbApprovedCount,
+      acceptanceCompletedCount
     };
   }, [filteredProposals]);
 
@@ -229,6 +270,11 @@ export function ProgressReportPanel() {
       "Đơn vị chủ trì",
       "Ngày bắt đầu",
       "Ngày kết thúc",
+      "Kinh phí duyệt (VNĐ)",
+      "Đã giải ngân (VNĐ)",
+      "Tỷ lệ giải ngân (%)",
+      "Đạo đức Y sinh (IRB)",
+      "Nghiệm thu kết quả",
       "Trạng thái hồ sơ",
       "Tình trạng tiến độ",
       "Thời hạn còn lại / Quá hạn",
@@ -253,6 +299,17 @@ export function ProgressReportPanel() {
         timeNote = `Bắt đầu sau ${Math.abs(p.elapsedDays)} ngày`;
       }
 
+      const irbText = p.irbStatus === "APPROVED" ? `Đã cấp (${p.irbCert || "IRB-HVQY"})` : "Chưa phê duyệt";
+      const acceptText = p.acceptanceResult === "EXCELLENT"
+        ? `Xuất sắc (${p.acceptanceScore}đ)`
+        : p.acceptanceResult === "PASSED"
+        ? `Đạt (${p.acceptanceScore}đ)`
+        : p.acceptanceResult === "FAILED"
+        ? `Không đạt (${p.acceptanceScore}đ)`
+        : p.acceptanceData?.status === "approved"
+        ? "Đang nghiệm thu"
+        : "Chưa nghiệm thu";
+
       return [
         idx + 1,
         `"${(p.code || p.id).replace(/"/g, '""')}"`,
@@ -263,6 +320,11 @@ export function ProgressReportPanel() {
         `"${(p.hostOrganizationUnitName || p.hostOrganizationUnitId).replace(/"/g, '""')}"`,
         formatDate(p.startDate),
         formatDate(p.endDate),
+        p.budgetTotal,
+        p.disbursedTotal,
+        `${p.disbursedPercent}%`,
+        `"${irbText}"`,
+        `"${acceptText}"`,
         `"${(STATUS_LABELS[p.status] ?? p.status).replace(/"/g, '""')}"`,
         `"${assessLabel}"`,
         `"${timeNote}"`,
@@ -280,6 +342,11 @@ export function ProgressReportPanel() {
       "",
       "",
       "",
+      metrics.totalBudgetSum,
+      metrics.totalDisbursedSum,
+      `${metrics.averageDisbursedPercent}%`,
+      `"Đã duyệt IRB: ${metrics.irbApprovedCount}"`,
+      `"Đã nghiệm thu: ${metrics.acceptanceCompletedCount}"`,
       "",
       `"Đúng hạn: ${metrics.onTrackCount} | Sắp hết hạn: ${metrics.endingSoonCount} | Quá hạn: ${metrics.overdueCount}"`,
       "",
@@ -388,6 +455,34 @@ export function ProgressReportPanel() {
           value={`${metrics.overdueCount}`}
           meta="Đã quá thời hạn kết thúc đăng ký"
           tone={metrics.overdueCount > 0 ? "danger" : "default"}
+        />
+      </div>
+
+      {/* Khối KPI Cards Tài chính & Quản trị NCKH */}
+      <div className="grid four-column no-print" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", marginBottom: "20px" }}>
+        <KpiCard
+          label="Tổng ngân sách phê duyệt"
+          value={`${(metrics.totalBudgetSum / 1e6).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tr`}
+          meta="Tổng dự toán ngân sách đề tài"
+          tone="default"
+        />
+        <KpiCard
+          label="Tổng giải ngân thực tế"
+          value={`${(metrics.totalDisbursedSum / 1e6).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tr`}
+          meta={`Tỷ lệ đạt ${metrics.averageDisbursedPercent}% tổng dự toán`}
+          tone="info"
+        />
+        <KpiCard
+          label="Chứng nhận Đạo đức Y sinh (IRB)"
+          value={`${metrics.irbApprovedCount}`}
+          meta="Đề tài can thiệp Y sinh đã cấp phép"
+          tone="info"
+        />
+        <KpiCard
+          label="Đã nghiệm thu kết quả"
+          value={`${metrics.acceptanceCompletedCount}`}
+          meta={`Đã hoàn thành đánh giá nghiệm thu`}
+          tone="default"
         />
       </div>
 
@@ -598,6 +693,51 @@ export function ProgressReportPanel() {
               <option value="draft">Bản nháp</option>
             </select>
           </div>
+          <div className="filter-field">
+            <label htmlFor="progress-disbursement">Tiến độ giải ngân</label>
+            <select
+              id="progress-disbursement"
+              value={disbursementFilter}
+              onChange={(e) => setDisbursementFilter(e.target.value)}
+            >
+              <option value="">Tất cả mức giải ngân</option>
+              <option value="zero">Chưa giải ngân (0%)</option>
+              <option value="partial">Đang giải ngân (1% - 99%)</option>
+              <option value="full">Đã giải ngân đủ / Quyết toán (100%)</option>
+            </select>
+          </div>
+          <div className="filter-field">
+            <label htmlFor="progress-irb">Hội đồng Đạo đức (IRB)</label>
+            <select
+              id="progress-irb"
+              value={irbFilter}
+              onChange={(e) => setIrbFilter(e.target.value)}
+            >
+              <option value="">Tất cả trạng thái IRB</option>
+              <option value="approved">Đã cấp chứng nhận IRB</option>
+              <option value="pending">Chưa phê duyệt / Cần sửa</option>
+            </select>
+          </div>
+          <div className="filter-field">
+            <label htmlFor="progress-acceptance">Hội đồng Nghiệm thu</label>
+            <select
+              id="progress-acceptance"
+              value={acceptanceFilter}
+              onChange={(e) => setAcceptanceFilter(e.target.value)}
+            >
+              <option value="">Tất cả trạng thái nghiệm thu</option>
+              <option value="completed">Đã nghiệm thu (Đạt / Xuất sắc)</option>
+              <option value="in_progress">Đang tổ chức hội đồng</option>
+              <option value="pending">Chưa nghiệm thu</option>
+            </select>
+          </div>
+        </div>
+        
+        <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end" }}>
+          <button type="button" className="button primary" onClick={() => void loadData()} title="Áp dụng bộ lọc lên máy chủ">
+            <Filter size={15} aria-hidden="true" style={{ marginRight: "6px" }} />
+            Áp dụng Lọc
+          </button>
         </div>
       </div>
 
@@ -627,16 +767,18 @@ export function ProgressReportPanel() {
               <thead>
                 <tr>
                   <th style={{ width: "45px", textAlign: "center" }}>STT</th>
-                  <th style={{ width: "120px" }}>Mã đề tài</th>
-                  <th style={{ minWidth: "240px" }}>Tên đề tài nghiên cứu</th>
-                  <th style={{ width: "160px" }}>Cấp & Phân loại</th>
-                  <th style={{ width: "140px" }}>Chủ nhiệm (PI)</th>
-                  <th style={{ width: "150px" }}>Đơn vị chủ trì</th>
-                  <th style={{ width: "105px" }}>Ngày bắt đầu</th>
-                  <th style={{ width: "105px" }}>Ngày kết thúc</th>
-                  <th style={{ width: "135px" }}>Thời hạn còn lại</th>
-                  <th style={{ width: "155px", textAlign: "center" }}>Tình trạng tiến độ</th>
-                  <th className="no-print" style={{ width: "70px", textAlign: "center" }}>Thao tác</th>
+                  <th style={{ width: "115px" }}>Mã đề tài</th>
+                  <th style={{ minWidth: "220px" }}>Tên đề tài nghiên cứu</th>
+                  <th style={{ width: "150px" }}>Cấp & Phân loại</th>
+                  <th style={{ width: "135px" }}>Chủ nhiệm (PI)</th>
+                  <th style={{ width: "140px" }}>Đơn vị chủ trì</th>
+                  <th style={{ width: "95px" }}>Bắt đầu</th>
+                  <th style={{ width: "95px" }}>Kết thúc</th>
+                  <th style={{ width: "155px" }}>Kinh phí & Giải ngân</th>
+                  <th style={{ width: "155px" }}>Nghiệm thu & IRB</th>
+                  <th style={{ width: "125px" }}>Thời hạn</th>
+                  <th style={{ width: "135px", textAlign: "center" }}>Tiến độ</th>
+                  <th className="no-print" style={{ width: "65px", textAlign: "center" }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -699,6 +841,67 @@ export function ProgressReportPanel() {
                       </td>
                       <td style={{ fontSize: "13px", whiteSpace: "nowrap", fontWeight: 600 }}>
                         {formatDate(p.endDate)}
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: 700 }}>
+                            <span style={{ color: "#166534" }}>
+                              {(p.disbursedTotal / 1e6).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tr
+                            </span>
+                            <span style={{ color: "var(--text-secondary)" }}>
+                              {p.disbursedPercent}%
+                            </span>
+                          </div>
+                          <div style={{ height: "6px", background: "rgba(100, 116, 139, 0.2)", borderRadius: "3px", overflow: "hidden" }}>
+                            <div
+                              style={{
+                                height: "100%",
+                                width: `${p.disbursedPercent}%`,
+                                background: p.disbursedPercent >= 100 ? "#2563eb" : p.disbursedPercent > 0 ? "#16a34a" : "#94a3b8"
+                              }}
+                            />
+                          </div>
+                          <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>
+                            Duyệt: {(p.budgetTotal / 1e6).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tr
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          {/* Nghiệm thu badge */}
+                          {p.acceptanceResult === "EXCELLENT" ? (
+                            <span style={{ fontSize: "11px", padding: "2px 6px", borderRadius: "4px", background: "#f0fdf4", color: "#166534", fontWeight: 700, border: "1px solid #bbf7d0", display: "inline-block" }}>
+                              Xuất sắc ({p.acceptanceScore}đ)
+                            </span>
+                          ) : p.acceptanceResult === "PASSED" ? (
+                            <span style={{ fontSize: "11px", padding: "2px 6px", borderRadius: "4px", background: "#eff6ff", color: "#1e40af", fontWeight: 700, border: "1px solid #bfdbfe", display: "inline-block" }}>
+                              Đạt ({p.acceptanceScore}đ)
+                            </span>
+                          ) : p.acceptanceResult === "FAILED" ? (
+                            <span style={{ fontSize: "11px", padding: "2px 6px", borderRadius: "4px", background: "#fef2f2", color: "#991b1b", fontWeight: 700, border: "1px solid #fecaca", display: "inline-block" }}>
+                              Không đạt ({p.acceptanceScore}đ)
+                            </span>
+                          ) : p.acceptanceData?.status === "approved" ? (
+                            <span style={{ fontSize: "11px", padding: "2px 6px", borderRadius: "4px", background: "#fffbeb", color: "#92400e", fontWeight: 700, border: "1px solid #fde68a", display: "inline-block" }}>
+                              Đang nghiệm thu
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: "11px", padding: "2px 6px", borderRadius: "4px", background: "var(--surface-muted, #f8fafc)", color: "var(--text-secondary)", fontWeight: 500, border: "1px solid var(--border)", display: "inline-block" }}>
+                              Chưa nghiệm thu
+                            </span>
+                          )}
+
+                          {/* IRB badge */}
+                          {p.irbStatus === "APPROVED" ? (
+                            <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "#faf5ff", color: "#6b21a8", fontWeight: 600, border: "1px solid #e9d5ff", display: "inline-block" }}>
+                              IRB: {p.irbCert ? p.irbCert.replace("IRB-HVQY-", "") : "Đã cấp"}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "var(--surface-muted, #f8fafc)", color: "var(--text-secondary)", fontWeight: 500, display: "inline-block" }}>
+                              IRB: Chưa cấp
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td>
                         {p.assessment === "on_track" ? (
@@ -769,13 +972,24 @@ export function ProgressReportPanel() {
               </tbody>
               <tfoot style={{ background: "var(--surface-muted, #f8fafc)", borderTop: "2px solid var(--border)", fontWeight: 700 }}>
                 <tr>
-                  <td colSpan={5} style={{ padding: "12px 16px", textAlign: "right", textTransform: "uppercase" }}>
+                  <td colSpan={6} style={{ padding: "12px 14px", textAlign: "right", textTransform: "uppercase", fontSize: "12px" }}>
                     TỔNG CỘNG ({filteredProposals.length} đề tài):
                   </td>
-                  <td colSpan={5} style={{ padding: "12px 16px", fontSize: "13px" }}>
-                    <span style={{ color: "#15803d", marginRight: "12px" }}>Đúng hạn: {metrics.onTrackCount}</span>
-                    <span style={{ color: "#b45309", marginRight: "12px" }}>Sắp hết hạn: {metrics.endingSoonCount}</span>
-                    <span style={{ color: "#b91c1c" }}>Chậm tiến độ: {metrics.overdueCount}</span>
+                  <td colSpan={2} style={{ padding: "12px 8px", fontSize: "11px", color: "var(--text-secondary)" }}>
+                    Thời gian: Toàn khóa
+                  </td>
+                  <td style={{ padding: "12px 8px", fontSize: "11px", color: "var(--text-primary)" }}>
+                    <div>Duyệt: {(metrics.totalBudgetSum / 1e6).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tr</div>
+                    <div style={{ color: "#166534", fontWeight: 700 }}>GN: {(metrics.totalDisbursedSum / 1e6).toLocaleString("vi-VN", { maximumFractionDigits: 0 })} tr ({metrics.averageDisbursedPercent}%)</div>
+                  </td>
+                  <td style={{ padding: "12px 8px", fontSize: "11px" }}>
+                    <div style={{ color: "#6b21a8" }}>IRB: {metrics.irbApprovedCount}</div>
+                    <div style={{ color: "#1e40af" }}>N.Thu: {metrics.acceptanceCompletedCount}</div>
+                  </td>
+                  <td colSpan={3} style={{ padding: "12px 14px", fontSize: "12px" }}>
+                    <span style={{ color: "#15803d", marginRight: "10px" }}>Đúng hạn: {metrics.onTrackCount}</span>
+                    <span style={{ color: "#b45309", marginRight: "10px" }}>Sắp hết hạn: {metrics.endingSoonCount}</span>
+                    <span style={{ color: "#b91c1c" }}>Chậm: {metrics.overdueCount}</span>
                   </td>
                 </tr>
               </tfoot>

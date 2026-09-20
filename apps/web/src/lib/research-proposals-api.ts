@@ -196,6 +196,9 @@ export type ResearchProposal = {
     note?: string;
   };
   councilMetadata?: CouncilMetadata | null;
+  acceptanceCouncilMetadata?: any;
+  disbursementMetadata?: any;
+  irbMetadata?: any;
   status: ProposalWorkflowStatus;
   /** Vietnamese label for `status`, resolved by the backend so both apps read the same wording. */
   statusLabel?: string;
@@ -275,8 +278,15 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export async function loadResearchProposals() {
-  const response = await requestJson<{ proposals: ResearchProposal[] }>("/research-proposals");
+export async function loadResearchProposals(filters?: Record<string, string>) {
+  const query = new URLSearchParams();
+  if (filters) {
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) query.append(key, value);
+    }
+  }
+  const qs = query.toString() ? `?${query.toString()}` : "";
+  const response = await requestJson<{ proposals: ResearchProposal[] }>(`/research-proposals${qs}`);
   return response.proposals;
 }
 
