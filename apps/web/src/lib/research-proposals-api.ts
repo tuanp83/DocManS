@@ -95,6 +95,7 @@ export type ProposalAttachment = {
   filePurpose: string;
   requirementCode: string;
   fileName: string;
+  version?: number;
   description?: string | null;
   mimeType: string;
   sizeBytes: number;
@@ -454,3 +455,54 @@ export async function recordProposalCouncilMinutes(proposalId: string, payload: 
   );
 }
 
+export type AuditLogRecord = {
+  id: string;
+  action: string;
+  actorDisplayName: string;
+  timestamp: string;
+  result: string;
+  reason?: string;
+  beforeFacts?: any;
+  afterFacts?: any;
+};
+
+export async function getProposalAuditLogs(id: string) {
+  const response = await requestJson<{ auditLogs: AuditLogRecord[] }>(`/research-proposals/${id}/audit-logs`);
+  return response.auditLogs;
+}
+
+export interface ProposalDeliverable {
+  id: string;
+  proposalId: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  proofFileName?: string | null;
+  proofStorageKey?: string | null;
+  publishedAt?: string | null;
+  status: string;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getProposalDeliverables(proposalId: string): Promise<ProposalDeliverable[]> {
+  return requestJson<ProposalDeliverable[]>(`/proposals/${proposalId}/deliverables`);
+}
+
+export async function createProposalDeliverable(
+  proposalId: string,
+  data: {
+    type: string;
+    title: string;
+    description?: string;
+    proofFileName?: string;
+    proofStorageKey?: string;
+    publishedAt?: string;
+  }
+): Promise<ProposalDeliverable> {
+  return requestJson<ProposalDeliverable>(`/proposals/${proposalId}/deliverables`, {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}

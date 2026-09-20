@@ -9,6 +9,9 @@ import { ResearcherProfilesModule } from "./researcher-profiles/researcher-profi
 import { NotificationsModule } from "./notifications/notifications.module.js";
 import { ScientificDocumentsModule } from "./scientific-documents/scientific-documents.module.js";
 
+import { MailModule } from "./mail/mail.module.js";
+import { DashboardModule } from "./dashboard/dashboard.module.js";
+
 @Controller("api/v1/health")
 class HealthController {
   @Get()
@@ -31,7 +34,9 @@ class HealthController {
     ProposalEvaluationsModule,
     ResearcherProfilesModule,
     NotificationsModule,
-    ScientificDocumentsModule
+    ScientificDocumentsModule,
+    MailModule,
+    DashboardModule
   ],
   controllers: [HealthController]
 })

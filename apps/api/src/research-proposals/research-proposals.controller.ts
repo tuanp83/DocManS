@@ -80,4 +80,9 @@ export class ResearchProposalsController {
   async listHistory(@Req() request: RequestWithCurrentUser, @Param("id") id: string) {
     return { history: await this.proposalsService.listHistory(request.currentUser!, id) };
   }
+
+  @Get(":id/audit-logs")
+  async getAuditLogs(@Req() request: RequestWithCurrentUser, @Param("id") id: string) {
+    return { auditLogs: await this.proposalsService.getProposalAuditLogs(request.currentUser!, id) };
+  }
 }

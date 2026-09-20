@@ -10,6 +10,7 @@ import { useSession } from "@/components/auth/session-provider";
 import { ProposalDecisionPanel } from "@/components/research-proposals/proposal-decision-panel";
 import { ProposalEvaluationPanel } from "@/components/research-proposals/proposal-evaluation-panel";
 import { ProposalReviewForm } from "@/components/research-proposals/proposal-review-form";
+import { ProposalDeliverablesPanel } from "@/components/research-proposals/proposal-deliverables-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ParticipationBadge } from "@/components/ui/participation-badge";
 import { SectionCard } from "@/components/ui/section-card";
@@ -957,6 +958,10 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
             <EmptyState title="Chưa có lịch sử nộp" message="Timeline sẽ xuất hiện khi hồ sơ được nộp chính thức." />
           )}
         </SectionCard>
+      </div>
+      
+      <div className="grid">
+        <ProposalDeliverablesPanel proposalId={proposal.id} />
       </div>
     </div>
   );

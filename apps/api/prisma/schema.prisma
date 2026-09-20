@@ -52,6 +52,7 @@ model User {
   researcherProfileHistories ResearcherProfileHistory[]
   notifications UserNotification[] @relation("UserNotifications")
   createdScientificDocuments ScientificDocument[] @relation("ScientificDocumentCreator")
+  createdProposalDeliverables ProposalDeliverable[] @relation("ProposalDeliverableCreator")
 
   @@map("users")
 }
@@ -444,12 +445,35 @@ model ResearchProposal {
   reviews                ProposalReview[]
   evaluationSummary      ProposalEvaluationSummary?
   decisions              ProposalDecision[]
+  deliverables           ProposalDeliverable[]
 
   @@index([intakePeriodId])
   @@index([ownerId])
   @@index([hostOrganizationUnitId])
   @@index([status])
   @@map("research_proposals")
+}
+
+model ProposalDeliverable {
+  id              String           @id @default(uuid())
+  proposalId      String           @map("proposal_id")
+  proposal        ResearchProposal @relation(fields: [proposalId], references: [id])
+  type            String
+  title           String
+  description     String?
+  proofFileName   String?          @map("proof_file_name")
+  proofStorageKey String?          @map("proof_storage_key")
+  publishedAt     DateTime?        @map("published_at")
+  status          String           @default("draft")
+  createdById     String           @map("created_by_id")
+  createdBy       User             @relation("ProposalDeliverableCreator", fields: [createdById], references: [id])
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  @@index([proposalId])
+  @@index([createdById])
+  @@index([status])
+  @@map("proposal_deliverables")
 }
 
 model ProposalMember {
@@ -501,6 +525,7 @@ model FileRecord {
   relatedEntityId   String    @map("related_entity_id")
   filePurpose       String    @map("file_purpose")
   originalFileName  String    @map("original_file_name")
+  version           Int       @default(1)
   description       String?
   mimeType          String    @map("mime_type")
   sizeBytes         Int       @map("size_bytes")

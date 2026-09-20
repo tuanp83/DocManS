@@ -108,6 +108,7 @@ type ProposalAttachmentRecord = {
   requirementCode?: string;
   originalFileName?: string;
   fileName?: string;
+  version?: number;
   description?: string | null;
   mimeType: string;
   sizeBytes: number;
@@ -920,7 +921,7 @@ export class ResearchProposalsService {
 
   private async findAttachments(proposalId: string, options: { canMutate: boolean } = { canMutate: false }) {
     const records = (await this.prisma.fileRecord.findMany({
-      where: { relatedEntityType: "research_proposal", relatedEntityId: proposalId, status: "active", deletedAt: null },
+      where: { relatedEntityType: "research_proposal", relatedEntityId: proposalId, status: { in: ["active", "superseded"] }, deletedAt: null },
       orderBy: { createdAt: "asc" },
       include: {
         uploadedBy: {
@@ -1181,6 +1182,7 @@ export class ResearchProposalsService {
       filePurpose: attachment.filePurpose ?? attachment.requirementCode ?? "",
       requirementCode: attachment.requirementCode ?? attachment.filePurpose ?? "",
       fileName: attachment.fileName ?? attachment.originalFileName ?? "",
+      version: attachment.version ?? 1,
       description: attachment.description ?? null,
       mimeType: attachment.mimeType,
       sizeBytes: attachment.sizeBytes,
@@ -1254,5 +1256,49 @@ export class ResearchProposalsService {
       submittedAt: record.submittedAt.toISOString(),
       note: record.note ?? ""
     };
+  }
+
+  async getProposalAuditLogs(actor: SafeUserContext, proposalId: string) {
+    // 1. Check basic read access
+    const asOf = new Date();
+    const proposal = await this.findProposal(proposalId);
+    if (!proposal) {
+      throw new NotFoundException({ message: "Không tìm thấy đề tài" });
+    }
+
+    const [participation, reviewAccess] = await Promise.all([
+      this.participation.resolveForProposal(actor?.id, proposal, undefined, asOf),
+      this.reviewAccess.resolveForProposal(actor?.id, proposalId, asOf)
+    ]);
+    assertCanReadProposal(actor, proposal, participation, reviewAccess);
+
+    // 2. Fetch logs from Prisma
+    const logs = await (this.prisma as any).auditLog.findMany({
+      where: {
+        targetEntityId: proposalId,
+      },
+      orderBy: {
+        timestamp: "desc",
+      },
+      include: {
+        actor: {
+          select: {
+            displayName: true,
+            credentialEmail: true,
+          }
+        }
+      }
+    });
+
+    return logs.map((log: any) => ({
+      id: log.id,
+      action: log.action,
+      actorDisplayName: log.actor?.displayName ?? log.username ?? "Unknown",
+      timestamp: log.timestamp.toISOString(),
+      result: log.result,
+      reason: log.reason,
+      beforeFacts: log.beforeFacts,
+      afterFacts: log.afterFacts,
+    }));
   }
 }

@@ -19,6 +19,7 @@ type FileRecord = {
   relatedEntityId: string;
   filePurpose: string;
   originalFileName: string;
+  version: number;
   description: string | null;
   mimeType: string;
   sizeBytes: number;
@@ -134,6 +135,28 @@ export class FilesService {
         // Object storage has no transaction with Postgres. Rechecking here ensures a lifecycle
         // change between the initial authorization and metadata write rolls back the usable file.
         await this.assertCanUpload(actor, input.relatedEntityType, input.relatedEntityId);
+
+        // Find existing file for versioning
+        const existingFile = await tx.fileRecord.findFirst({
+          where: {
+            relatedEntityType: input.relatedEntityType,
+            relatedEntityId: input.relatedEntityId,
+            filePurpose: input.filePurpose,
+            status: "active",
+            deletedAt: null
+          },
+          orderBy: { version: "desc" }
+        });
+
+        const newVersion = existingFile ? existingFile.version + 1 : 1;
+
+        if (existingFile) {
+          await tx.fileRecord.update({
+            where: { id: existingFile.id },
+            data: { status: "superseded" }
+          });
+        }
+
         return tx.fileRecord.create({
           data: {
             id: fileId,
@@ -141,6 +164,7 @@ export class FilesService {
             relatedEntityId: input.relatedEntityId,
             filePurpose: input.filePurpose,
             originalFileName,
+            version: newVersion,
             description,
             mimeType: input.mimeType,
             sizeBytes: input.sizeBytes,
@@ -400,6 +424,7 @@ export class FilesService {
       filePurpose: record.filePurpose,
       requirementCode: record.filePurpose,
       fileName: record.originalFileName,
+      version: record.version,
       description: record.description ?? null,
       mimeType: record.mimeType,
       sizeBytes: record.sizeBytes,
