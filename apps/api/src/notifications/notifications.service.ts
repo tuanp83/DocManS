@@ -26,7 +26,7 @@ export class NotificationsService {
       const user = await (this.prisma as any).user.findUnique({
         where: { id: data.userId }
       });
-      if (user && user.email) {
+      if (user && user.credentialEmail) {
         const emailHtml = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #2c3e50;">Thông báo từ DocManS</h2>
@@ -37,7 +37,7 @@ export class NotificationsService {
             <p style="font-size: 12px; color: #7f8c8d;">Hệ thống Quản lý Nghiên cứu Khoa học (DocManS)<br/>Học viện Quân Y</p>
           </div>
         `;
-        await this.mailService.sendMail(user.email, data.title, emailHtml);
+        await this.mailService.sendMail(user.credentialEmail, data.title, emailHtml);
       }
     } catch (e) {
       console.error("Failed to send email notification", e);
