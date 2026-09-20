@@ -21,11 +21,13 @@ const STATUS_MAP: Record<string, string> = {
   rejected: "Từ chối"
 };
 
+import { getApiBaseUrl } from "@/lib/session";
+
 export function DashboardCharts() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
   useEffect(() => {
-    fetch("/api/v1/dashboard/stats")
+    fetch(`${getApiBaseUrl()}/dashboard/stats`, { credentials: "include" })
       .then((res) => res.json())
       .then((data) => setStats(data))
       .catch((err) => console.error(err));

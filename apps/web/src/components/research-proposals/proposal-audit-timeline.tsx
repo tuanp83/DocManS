@@ -15,23 +15,35 @@ function formatDate(dateStr?: string) {
 
 function getActionLabel(action: string) {
   switch (action) {
-    case "PROPOSAL_CREATED": return "Khởi tạo đề tài";
-    case "PROPOSAL_SUBMITTED": return "Nộp đề tài";
-    case "PROPOSAL_STATUS_CHANGED": return "Cập nhật trạng thái";
-    case "COUNCIL_PROPOSED": return "Đề xuất Hội đồng";
-    case "COUNCIL_APPROVED": return "Phê duyệt Hội đồng";
-    case "COUNCIL_REJECTED": return "Từ chối Hội đồng";
-    case "DISBURSEMENT_UPDATED": return "Cập nhật giải ngân";
-    case "REVIEW_SUBMITTED": return "Nộp nhận xét";
-    case "IRB_CERTIFICATE_ISSUED": return "Cấp chứng nhận IRB";
+    case "create-proposal-draft": return "Khởi tạo đề tài";
+    case "submit-proposal": return "Nộp đề tài";
+    case "resubmit-proposal": return "Nộp lại đề tài";
+    case "check-proposal-completeness": return "Kiểm tra hồ sơ";
+    case "assign-reviewer": return "Phân công nhận xét";
+    case "change-reviewer-assignment": return "Sửa phân công nhận xét";
+    case "submit-score-and-review-comment": return "Nộp nhận xét và điểm";
+    case "consolidate-evaluation": return "Tổng hợp đánh giá";
+    case "propose-council": return "Đề xuất Hội đồng";
+    case "approve-council": return "Phê duyệt Hội đồng";
+    case "reject-council": return "Từ chối Hội đồng";
+    case "record-council-minutes": return "Ghi nhận biên bản Hội đồng";
+    case "approve-proposal-budget": return "Phê duyệt kinh phí";
+    case "submit-irb-review": return "Nộp đánh giá Đạo đức y sinh (IRB)";
+    case "update-irb-status": return "Cập nhật trạng thái IRB";
+    case "approve-irb-council": return "Phê duyệt Hội đồng IRB";
+    case "propose-irb-council": return "Đề xuất Hội đồng IRB";
+    case "update-disbursement": return "Cập nhật giải ngân";
+    case "propose-acceptance-council": return "Đề xuất Hội đồng nghiệm thu";
+    case "approve-acceptance-council": return "Phê duyệt HĐ nghiệm thu";
+    case "record-acceptance-minutes": return "Ghi nhận nghiệm thu";
     default: return action;
   }
 }
 
 function getDotModifier(action: string): string {
-  if (action.includes("APPROVED") || action.includes("ISSUED")) return "success";
-  if (action.includes("REJECTED")) return "danger";
-  if (action.includes("SUBMITTED") || action.includes("CREATED")) return "info";
+  if (action.includes("approve") || action.includes("record") || action.includes("complete")) return "success";
+  if (action.includes("reject")) return "danger";
+  if (action.includes("submit") || action.includes("create") || action.includes("propose")) return "info";
   return "";
 }
 
@@ -95,8 +107,52 @@ export function ProposalAuditTimeline({ proposalId }: { proposalId: string }) {
                   {log.reason && (
                     <div className="timeline-details" style={{ marginTop: 8 }}>
                       <div>
-                        <dt>Ghi chú</dt>
-                        <dd>{log.reason}</dd>
+                        <dt>Chi tiết / Ghi chú</dt>
+                        {(() => {
+                          let json = null;
+                          try {
+                            json = JSON.parse(log.reason);
+                          } catch { /* not json */ }
+
+                          if (!json || typeof json !== "object") {
+                            return <dd>{log.reason}</dd>;
+                          }
+
+                          if (log.action === "submit-score-and-review-comment") {
+                            return (
+                              <dd>
+                                <strong>Tổng điểm:</strong> {json.totalScore ?? "—"}<br />
+                                <strong>Đề xuất:</strong> {json.recommendation === "approve" ? "Đồng ý" : json.recommendation === "reject" ? "Không đồng ý" : json.recommendation ?? "—"}
+                              </dd>
+                            );
+                          }
+                          
+                          if (log.action === "approve-proposal" || log.action === "reject-proposal") {
+                            return (
+                              <dd>
+                                <strong>Quyết định:</strong> {json.decision === "approved" ? "Phê duyệt" : "Không phê duyệt"}<br />
+                                <strong>Chuyển trạng thái:</strong> {json.fromStatus} ➔ {json.toStatus}
+                              </dd>
+                            );
+                          }
+
+                          if (log.action.includes("council") || log.action.includes("irb")) {
+                             return (
+                              <dd>
+                                {json.councilType && <><strong>Loại HĐ:</strong> {json.councilType}<br /></>}
+                                {json.memberCount && <><strong>Số lượng TV:</strong> {json.memberCount}<br /></>}
+                                {json.date && <><strong>Ngày họp:</strong> {formatDate(json.date)}<br /></>}
+                                {json.status && <><strong>Trạng thái:</strong> {json.status}<br /></>}
+                              </dd>
+                             );
+                          }
+
+                          return (
+                            <dd style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 12, background: "var(--surface-muted)", padding: 8, borderRadius: 4 }}>
+                              {JSON.stringify(json, null, 2)}
+                            </dd>
+                          );
+                        })()}
                       </div>
                     </div>
                   )}
