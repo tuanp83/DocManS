@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards, Query } from "@nestjs/common";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
 import {
@@ -19,8 +19,8 @@ export class ResearchProposalsController {
   constructor(private readonly proposalsService: ResearchProposalsService) {}
 
   @Get()
-  async listProposals(@Req() request: RequestWithCurrentUser) {
-    return { proposals: await this.proposalsService.listProposals(request.currentUser!) };
+  async listProposals(@Req() request: RequestWithCurrentUser, @Query() query: any) {
+    return { proposals: await this.proposalsService.listProposals(request.currentUser!, query) };
   }
 
   @Post()

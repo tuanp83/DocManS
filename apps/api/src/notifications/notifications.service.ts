@@ -6,6 +6,19 @@ import type { SafeUserContext } from "../auth/auth.types.js";
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async createNotification(data: { userId: string; title: string; message: string; type: string; link?: string; metadata?: any }) {
+    return (this.prisma as any).userNotification.create({
+      data: {
+        userId: data.userId,
+        title: data.title,
+        message: data.message,
+        type: data.type,
+        link: data.link,
+        metadata: data.metadata || {}
+      }
+    });
+  }
+
   async listMyNotifications(actor: SafeUserContext, query?: { limit?: string; unreadOnly?: string }) {
     const unreadOnly = query?.unreadOnly === "true";
     const take = Math.min(Math.max(Number(query?.limit ?? 20) || 20, 1), 100);

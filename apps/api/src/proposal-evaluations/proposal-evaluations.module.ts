@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
+import { NotificationsModule } from "../notifications/notifications.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
@@ -16,7 +17,7 @@ import { ProposalReviewsService } from "./proposal-reviews.service.js";
  * — that keeps the two proposal modules free of a circular import.
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, NotificationsModule],
   controllers: [ProposalEvaluationsController],
   providers: [
     PrismaService,

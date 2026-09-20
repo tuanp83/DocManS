@@ -43,6 +43,10 @@ import {
   type ProjectMilestone
 } from "./submit-milestone-report-modal";
 import { SendDeadlineReminderModal } from "./send-deadline-reminder-modal";
+import { AcceptanceCouncilModal } from "@/components/research-proposals/acceptance-council-modal";
+import { MilestoneDisbursementModal } from "./milestone-disbursement-modal";
+import { IRBApprovalModal } from "@/components/research-proposals/irb-approval-modal";
+import { Award, HeartPulse, DollarSign } from "lucide-react";
 
 type WorkspaceTab = "proposals_summary" | "milestones_matrix" | "alerts_center";
 type ViewPerspective = "all_projects" | "my_projects";
@@ -74,6 +78,12 @@ export function ProjectTrackingWorkspace() {
   // Trạng thái modal
   const [submittingMilestone, setSubmittingMilestone] = useState<ProjectMilestone | null>(null);
   const [remindingMilestone, setRemindingMilestone] = useState<ProjectMilestone | null>(null);
+
+  // New Modals for Acceptance, Disbursement, and IRB
+  const [isAcceptanceModalOpen, setIsAcceptanceModalOpen] = useState(false);
+  const [isDisbursementModalOpen, setIsDisbursementModalOpen] = useState(false);
+  const [isIRBModalOpen, setIsIRBModalOpen] = useState(false);
+  const [modalTargetProposal, setModalTargetProposal] = useState<ResearchProposal | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Mốc báo cáo state (lưu cục bộ có thể cập nhật sau khi nộp/đôn đốc)
@@ -890,12 +900,51 @@ export function ProjectTrackingWorkspace() {
                       </td>
 
                       <td style={{ padding: "12px", textAlign: "center" }}>
-                        <div style={{ display: "flex", justifyContent: "center", gap: "4px" }}>
+                        <div style={{ display: "flex", justifyContent: "center", gap: "4px", flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            className="button button-outline"
+                            style={{ fontSize: "11px", padding: "4px 7px", height: "auto", display: "inline-flex", alignItems: "center", gap: "3px", color: "#065f46" }}
+                            onClick={() => {
+                              setModalTargetProposal(proposal);
+                              setIsDisbursementModalOpen(true);
+                            }}
+                            title="Giám sát Giải ngân & Quyết toán theo mốc"
+                          >
+                            <DollarSign size={11} /> Kinh phí
+                          </button>
+
+                          <button
+                            type="button"
+                            className="button button-outline"
+                            style={{ fontSize: "11px", padding: "4px 7px", height: "auto", display: "inline-flex", alignItems: "center", gap: "3px", color: "#1e3a8a" }}
+                            onClick={() => {
+                              setModalTargetProposal(proposal);
+                              setIsAcceptanceModalOpen(true);
+                            }}
+                            title="Hội đồng Nghiệm thu & Đánh giá kết quả (4 tiêu chí)"
+                          >
+                            <Award size={11} /> Nghiệm thu
+                          </button>
+
+                          <button
+                            type="button"
+                            className="button button-outline"
+                            style={{ fontSize: "11px", padding: "4px 7px", height: "auto", display: "inline-flex", alignItems: "center", gap: "3px", color: "#be123c" }}
+                            onClick={() => {
+                              setModalTargetProposal(proposal);
+                              setIsIRBModalOpen(true);
+                            }}
+                            title="Phê duyệt Hội đồng Đạo đức Y sinh (IRB)"
+                          >
+                            <HeartPulse size={11} /> IRB
+                          </button>
+
                           {proposal.nextMilestone && (
                             <button
                               type="button"
                               className="button button-outline"
-                              style={{ fontSize: "11px", padding: "4px 8px", height: "auto" }}
+                              style={{ fontSize: "11px", padding: "4px 7px", height: "auto" }}
                               onClick={() => setSubmittingMilestone(proposal.nextMilestone!)}
                             >
                               Nộp BC
@@ -905,7 +954,7 @@ export function ProjectTrackingWorkspace() {
                             <button
                               type="button"
                               className="button button-outline"
-                              style={{ fontSize: "11px", padding: "4px 8px", height: "auto", color: "#be123c", borderColor: "#fecdd3" }}
+                              style={{ fontSize: "11px", padding: "4px 7px", height: "auto", color: "#be123c", borderColor: "#fecdd3" }}
                               onClick={() => setRemindingMilestone(proposal.nextMilestone!)}
                             >
                               Đôn đốc
@@ -1191,6 +1240,51 @@ export function ProjectTrackingWorkspace() {
           milestone={remindingMilestone}
           onClose={() => setRemindingMilestone(null)}
           onSendSuccess={handleSendReminderSuccess}
+        />
+      )}
+
+      {/* Modal Hội đồng Nghiệm thu & Đánh giá kết quả */}
+      {modalTargetProposal && isAcceptanceModalOpen && (
+        <AcceptanceCouncilModal
+          isOpen={isAcceptanceModalOpen}
+          onClose={() => {
+            setIsAcceptanceModalOpen(false);
+            setModalTargetProposal(null);
+          }}
+          proposal={modalTargetProposal}
+          currentUserRole={account?.systemRole}
+          currentUserUsername={account?.username}
+          onSuccess={() => void loadData()}
+        />
+      )}
+
+      {/* Modal Giám sát Giải ngân & Quyết toán theo mốc */}
+      {modalTargetProposal && isDisbursementModalOpen && (
+        <MilestoneDisbursementModal
+          isOpen={isDisbursementModalOpen}
+          onClose={() => {
+            setIsDisbursementModalOpen(false);
+            setModalTargetProposal(null);
+          }}
+          proposal={modalTargetProposal}
+          currentUserRole={account?.systemRole}
+          currentUserUsername={account?.username}
+          onSuccess={() => void loadData()}
+        />
+      )}
+
+      {/* Modal Phê duyệt Hội đồng Đạo đức Y sinh (IRB) */}
+      {modalTargetProposal && isIRBModalOpen && (
+        <IRBApprovalModal
+          isOpen={isIRBModalOpen}
+          onClose={() => {
+            setIsIRBModalOpen(false);
+            setModalTargetProposal(null);
+          }}
+          proposal={modalTargetProposal}
+          currentUserRole={account?.systemRole}
+          currentUserUsername={account?.username}
+          onSuccess={() => void loadData()}
         />
       )}
     </div>

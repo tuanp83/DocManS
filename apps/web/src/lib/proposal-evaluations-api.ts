@@ -401,6 +401,7 @@ export type CouncilCandidate = {
   position?: string;
   profileType: string;
   isConflicted: boolean;
+  conflictSeverity?: "BLOCKED_DIRECT_PARTICIPANT" | "WARNING_SAME_UNIT";
   conflictReason?: string;
 };
 
@@ -411,6 +412,238 @@ export type CouncilCandidatesResponse = {
 
 export function loadCouncilCandidates(proposalId: string) {
   return requestJson<CouncilCandidatesResponse>(`/research-proposals/${proposalId}/council-candidates`);
+}
+
+// Acceptance Council Types & APIs ---------------------------------------------
+export type AcceptanceCouncilMember = {
+  profileId: string;
+  fullName: string;
+  academicTitle?: string;
+  unit?: string;
+  role: "CHAIRMAN" | "SECRETARY" | "REVIEWER_1" | "REVIEWER_2" | "MEMBER";
+  isConflicted?: boolean;
+  conflictReason?: string;
+};
+
+export type AcceptanceEvaluationScores = {
+  reportScore: number; // Max 30
+  scientificProductsScore: number; // Max 30
+  trainingProductsScore: number; // Max 15
+  militaryMedicalPracticalScore: number; // Max 25
+  totalScore: number; // 0 - 100
+  classification: "EXCELLENT" | "PASSED" | "FAILED";
+  assessmentComments: string;
+};
+
+export type AcceptanceCouncilMetadata = {
+  councilType?: "FACILITY" | "OFFICIAL";
+  establishmentDecisionNumber?: string;
+  decisionDate?: string;
+  meetingDate?: string;
+  meetingLocation?: string;
+  status: "NONE" | "PROPOSED" | "ESTABLISHED" | "EVALUATED";
+  members: AcceptanceCouncilMember[];
+  evaluationResult?: AcceptanceEvaluationScores;
+  minutesNotes?: string;
+  decisionSignerName?: string;
+};
+
+export function proposeAcceptanceCouncil(
+  proposalId: string,
+  payload: {
+    councilType: "FACILITY" | "OFFICIAL";
+    members: AcceptanceCouncilMember[];
+    notes?: string;
+  }
+) {
+  return requestJson<{ success: boolean; acceptanceCouncil: AcceptanceCouncilMetadata }>(
+    `/research-proposals/${proposalId}/acceptance-council/propose`,
+    { method: "POST", body: JSON.stringify(payload) }
+  );
+}
+
+export function approveAcceptanceCouncil(
+  proposalId: string,
+  payload: {
+    decisionNumber: string;
+    decisionDate: string;
+    signerName: string;
+  }
+) {
+  return requestJson<{ success: boolean; acceptanceCouncil: AcceptanceCouncilMetadata }>(
+    `/research-proposals/${proposalId}/acceptance-council/approve`,
+    { method: "POST", body: JSON.stringify(payload) }
+  );
+}
+
+export function recordAcceptanceMinutes(
+  proposalId: string,
+  payload: {
+    meetingDate: string;
+    meetingLocation: string;
+    reportScore: number;
+    scientificProductsScore: number;
+    trainingProductsScore: number;
+    militaryMedicalPracticalScore: number;
+    assessmentComments: string;
+    minutesNotes?: string;
+  }
+) {
+  return requestJson<{ success: boolean; acceptanceCouncil: AcceptanceCouncilMetadata }>(
+    `/research-proposals/${proposalId}/acceptance-council/minutes`,
+    { method: "POST", body: JSON.stringify(payload) }
+  );
+}
+
+// Milestone Disbursement & Settlement Types & APIs ---------------------------
+export type MilestoneAttachment = {
+  id: string;
+  fileName: string;
+  fileSize?: number;
+  fileUrl?: string;
+  uploadedAt: string;
+  uploadedByName?: string;
+};
+
+export type DisbursementMilestone = {
+  id: string;
+  name: string;
+  percentage: number;
+  expectedAmount: number;
+  disbursedAmount: number;
+  status: "PENDING" | "DISBURSED" | "SETTLED";
+  disbursedDate?: string;
+  settledDate?: string;
+  evidenceNotes?: string;
+  attachments?: MilestoneAttachment[];
+};
+
+export type DisbursementCostItem = {
+  code: string;
+  name: string;
+  allocatedAmount: number;
+  spentAmount: number;
+  settledAmount: number;
+};
+
+export type DisbursementMetadata = {
+  totalBudget: number;
+  totalDisbursed: number;
+  totalSettled: number;
+  settlementStatus: "PENDING" | "PARTIALLY_SETTLED" | "COMPLETED";
+  milestones: DisbursementMilestone[];
+  costItems: DisbursementCostItem[];
+  lastUpdatedBy?: string;
+  lastUpdatedAt?: string;
+};
+
+export function fetchDisbursement(proposalId: string) {
+  return requestJson<{ success: boolean; proposalId: string; disbursement: DisbursementMetadata }>(
+    `/research-proposals/${proposalId}/disbursement`
+  );
+}
+
+export function updateDisbursement(
+  proposalId: string,
+  payload: {
+    milestones: DisbursementMilestone[];
+    costItems: DisbursementCostItem[];
+    settlementStatus?: "PENDING" | "PARTIALLY_SETTLED" | "COMPLETED";
+    notes?: string;
+  }
+) {
+  return requestJson<{ success: boolean; proposalId: string; disbursement: DisbursementMetadata }>(
+    `/research-proposals/${proposalId}/disbursement`,
+    { method: "POST", body: JSON.stringify(payload) }
+  );
+}
+
+// Biomedical Research Ethics Council / IRB Types & APIs -----------------------
+export type IRBMember = {
+  userId: string;
+  displayName: string;
+  role: string;
+};
+
+export type IRBReview = {
+  reviewerId: string;
+  reviewerName: string;
+  status: "submitted";
+  comment: string;
+  recommendation: string;
+  submittedAt: string;
+};
+
+export type IRBMetadata = {
+  council?: {
+    status: "draft" | "submitted" | "approved";
+    members: IRBMember[];
+    proposedById?: string;
+    proposedByName?: string;
+    proposedAt?: string;
+    approvedById?: string;
+    approvedByName?: string;
+    approvedAt?: string;
+    meetingDate?: string;
+  };
+  reviews?: IRBReview[];
+  certificate?: {
+    status: "APPROVED" | "REJECTED";
+    certificateNumber?: string;
+    decisionDate?: string;
+    validUntil?: string;
+    ethicsNotes?: string;
+    riskLevel?: string;
+    targetSubjects?: string;
+    approvedById?: string;
+    approvedByName?: string;
+    updatedAt?: string;
+  };
+};
+
+export function fetchIRBInfo(proposalId: string) {
+  return requestJson<{ success: boolean; proposalId: string; irb: IRBMetadata }>(
+    `/research-proposals/${proposalId}/irb`
+  );
+}
+
+export function proposeIrbCouncil(proposalId: string, members: IRBMember[], meetingDate: string = "") {
+  return requestJson<{ success: boolean; proposalId: string; irb: IRBMetadata }>(
+    `/research-proposals/${proposalId}/irb/propose`,
+    { method: "POST", body: JSON.stringify({ members, meetingDate }) }
+  );
+}
+
+export function approveIrbCouncil(proposalId: string) {
+  return requestJson<{ success: boolean; proposalId: string; irb: IRBMetadata }>(
+    `/research-proposals/${proposalId}/irb/approve-council`,
+    { method: "POST" }
+  );
+}
+
+export function submitIrbReview(proposalId: string, payload: { comment: string; recommendation: string }) {
+  return requestJson<{ success: boolean; proposalId: string; irb: IRBMetadata }>(
+    `/research-proposals/${proposalId}/irb/review`,
+    { method: "POST", body: JSON.stringify(payload) }
+  );
+}
+
+export function updateIRBStatus(
+  proposalId: string,
+  payload: {
+    status: "APPROVED" | "REJECTED";
+    certificateNumber?: string;
+    decisionDate?: string;
+    validUntil?: string;
+    riskLevel?: string;
+    targetSubjects?: string;
+    ethicsNotes?: string;
+  }
+) {
+  return requestJson<{ success: boolean; proposalId: string; irb: IRBMetadata }>(
+    `/research-proposals/${proposalId}/irb`,
+    { method: "POST", body: JSON.stringify(payload) }
+  );
 }
 
 

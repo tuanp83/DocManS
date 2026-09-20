@@ -69,6 +69,9 @@ type ResearchProposalRecord = {
   endDate: Date | null;
   budgetMetadata: unknown;
   councilMetadata?: unknown;
+  acceptanceCouncilMetadata?: unknown;
+  disbursementMetadata?: unknown;
+  irbMetadata?: unknown;
   status: string;
   submittedAt: Date | null;
   submittedById: string | null;
@@ -165,7 +168,7 @@ export class ResearchProposalsService {
     });
   }
 
-  async listProposals(actor: SafeUserContext) {
+  async listProposals(actor: SafeUserContext, query?: any) {
     const asOf = new Date();
     const records = (await this.prisma.researchProposal.findMany({
       orderBy: { createdAt: "desc" },
@@ -192,11 +195,73 @@ export class ResearchProposalsService {
       return proposal?.submittedAt && event.submittedAt >= proposal.submittedAt;
     }).map((event) => event.proposalId));
 
-    return records
+    let results = records
       .filter((proposal) => canReadProposal(actor, proposal, participationByProposal.get(proposal.id), reviewAccessByProposal.get(proposal.id)))
       .map((proposal) =>
         this.toProposalResponse(proposal, actor, participationByProposal.get(proposal.id), reviewAccessByProposal.get(proposal.id), completenessChecked.has(proposal.id))
       );
+
+    if (query) {
+      const kw = query.keyword?.trim().toLowerCase();
+      const today = new Date(asOf.getFullYear(), asOf.getMonth(), asOf.getDate());
+      
+      results = results.filter((p: any) => {
+        if (kw && !p.title.toLowerCase().includes(kw) && !(p.code && p.code.toLowerCase().includes(kw)) && !(p.ownerDisplayName && p.ownerDisplayName.toLowerCase().includes(kw))) return false;
+        if (query.status && p.status !== query.status) return false;
+        if (query.unit && p.hostOrganizationUnitId !== query.unit) return false;
+        if (query.level && p.proposalTypeCode !== query.level) return false;
+        
+        // Military scope filter
+        if (query.military) {
+          const isMilitary = p.researchFieldCode?.startsWith("QS") || p.proposalTypeCode?.startsWith("QS") || p.proposalTypeCode === "bqp";
+          const isDual = p.researchFieldCode?.startsWith("LD") || p.proposalTypeCode?.startsWith("LD") || p.proposalTypeCode === "luongdung";
+          const scope = isDual ? "dual-use" : isMilitary ? "military" : "civilian";
+          if (scope !== query.military) return false;
+        }
+
+        const disbursementData: any = p.disbursementMetadata || {};
+        const budgetTotal = (p.budgetMetadata as any)?.amount || disbursementData.totalBudget || 500000000;
+        const disbursedTotal = disbursementData.totalDisbursed ?? 0;
+        const disbursedPercent = budgetTotal > 0 ? Math.min(100, Math.round((disbursedTotal / budgetTotal) * 100)) : 0;
+        
+        if (query.disbursement === "zero" && disbursedTotal !== 0) return false;
+        if (query.disbursement === "partial" && (disbursedTotal === 0 || disbursedPercent >= 100)) return false;
+        if (query.disbursement === "full" && disbursedPercent < 100) return false;
+
+        const irbStatus = (p.irbMetadata as any)?.status || "PENDING";
+        if (query.irb === "approved" && irbStatus !== "APPROVED") return false;
+        if (query.irb === "pending" && irbStatus === "APPROVED") return false;
+
+        const acceptanceData: any = p.acceptanceCouncilMetadata;
+        const acceptanceResult = acceptanceData?.acceptanceMinutes?.resultClassification;
+        const isAcceptanceCompleted = acceptanceResult === "EXCELLENT" || acceptanceResult === "PASSED";
+        const isAcceptanceInProgress = acceptanceData?.status === "approved" && !acceptanceResult;
+        
+        if (query.acceptance === "completed" && !isAcceptanceCompleted) return false;
+        if (query.acceptance === "in_progress" && !isAcceptanceInProgress) return false;
+        if (query.acceptance === "pending" && acceptanceData) return false;
+
+        if (query.progress) {
+          const start = p.startDate ? new Date(p.startDate) : null;
+          const end = p.endDate ? new Date(p.endDate) : null;
+          let assessment = "unknown";
+          if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
+            const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+            const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+            const remainingDays = Math.round((endDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            if (today < startDay) assessment = "not_started";
+            else if (remainingDays < 0) assessment = "overdue";
+            else if (remainingDays <= 60) assessment = "ending_soon";
+            else assessment = "on_track";
+          }
+          if (query.progress !== assessment) return false;
+        }
+
+        return true;
+      });
+    }
+
+    return results;
   }
 
   async getProposal(actor: SafeUserContext, proposalId: string) {
@@ -1077,6 +1142,9 @@ export class ResearchProposalsService {
       endDate: proposal.endDate?.toISOString() ?? "",
       budgetMetadata: proposal.budgetMetadata ?? {},
       councilMetadata: proposal.councilMetadata ?? null,
+      acceptanceCouncilMetadata: proposal.acceptanceCouncilMetadata ?? null,
+      disbursementMetadata: proposal.disbursementMetadata ?? null,
+      irbMetadata: proposal.irbMetadata ?? null,
       status: proposal.status,
       submittedAt: proposal.submittedAt?.toISOString() ?? "",
       ...(reviewAccess?.isAssignedReviewer && !participation?.isParticipant ? {} : { submittedById: proposal.submittedById ?? "" }),
