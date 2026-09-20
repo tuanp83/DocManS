@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getDashboardSnapshot, type DashboardPanel } from "@/fixtures/showcase-data";
+import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 
 function renderPanel(panel: DashboardPanel) {
   if (panel.variant === "chart") {
@@ -133,10 +134,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid two-column">
-        {renderPanel(snapshot.panels[0])}
-        {renderPanel(snapshot.panels[1])}
-      </div>
+      <DashboardCharts />
 
       <div className="grid two-column" style={{ marginTop: 16 }}>
         {renderPanel(snapshot.panels[2])}

@@ -47,10 +47,11 @@ import { OfficialCouncilDecisionModal } from "@/components/research-proposals/of
 import { AcceptanceCouncilModal } from "@/components/research-proposals/acceptance-council-modal";
 import { MilestoneDisbursementModal } from "@/components/projects/milestone-disbursement-modal";
 import { IRBApprovalModal } from "@/components/research-proposals/irb-approval-modal";
+import { ProposalAuditTimeline } from "@/components/research-proposals/proposal-audit-timeline";
 import { useSession } from "@/components/auth/session-provider";
 import { HeartPulse, DollarSign } from "lucide-react";
 
-type ActiveTab = "progress" | "council" | "minutes" | "irb";
+type ActiveTab = "progress" | "council" | "minutes" | "irb" | "audit";
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return "—";
@@ -249,7 +250,8 @@ export function ProposalReviewsWorkspace() {
           background: "#ffffff",
           borderRadius: "8px 8px 0 0",
           padding: "0 16px",
-          gap: "8px"
+          gap: "8px",
+          flexWrap: "wrap"
         }}
       >
         <button
@@ -331,6 +333,24 @@ export function ProposalReviewsWorkspace() {
         >
           <HeartPulse size={18} />
           4. Hội đồng Đạo đức (IRB)
+        </button>
+        <button
+          onClick={() => setActiveTab("audit")}
+          className="relative px-6 py-4 transition-all"
+          style={{
+            borderBottom: activeTab === "audit" ? "3px solid #15803d" : "3px solid transparent",
+            backgroundColor: activeTab === "audit" ? "#f0fdf4" : "transparent",
+            fontWeight: activeTab === "audit" ? 700 : 600,
+            color: activeTab === "audit" ? "#15803d" : "#64748b",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Lịch sử hoạt động
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 h-[3px] rounded-t-md transition-colors" />
         </button>
       </div>
 

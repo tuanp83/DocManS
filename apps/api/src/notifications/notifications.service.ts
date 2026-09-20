@@ -1,13 +1,17 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
+import { MailService } from "../mail/mail.service.js";
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService
+  ) {}
 
   async createNotification(data: { userId: string; title: string; message: string; type: string; link?: string; metadata?: any }) {
-    return (this.prisma as any).userNotification.create({
+    const notification = await (this.prisma as any).userNotification.create({
       data: {
         userId: data.userId,
         title: data.title,
@@ -17,6 +21,29 @@ export class NotificationsService {
         metadata: data.metadata || {}
       }
     });
+
+    try {
+      const user = await (this.prisma as any).user.findUnique({
+        where: { id: data.userId }
+      });
+      if (user && user.email) {
+        const emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2c3e50;">Thông báo từ DocManS</h2>
+            <p><strong>${data.title}</strong></p>
+            <p>${data.message}</p>
+            ${data.link ? `<p><a href="${data.link}" style="display: inline-block; padding: 10px 15px; background-color: #3498db; color: white; text-decoration: none; border-radius: 4px;">Xem chi tiết</a></p>` : ""}
+            <hr style="border: none; border-top: 1px solid #eee; margin-top: 20px;" />
+            <p style="font-size: 12px; color: #7f8c8d;">Hệ thống Quản lý Nghiên cứu Khoa học (DocManS)<br/>Học viện Quân Y</p>
+          </div>
+        `;
+        await this.mailService.sendMail(user.email, data.title, emailHtml);
+      }
+    } catch (e) {
+      console.error("Failed to send email notification", e);
+    }
+
+    return notification;
   }
 
   async listMyNotifications(actor: SafeUserContext, query?: { limit?: string; unreadOnly?: string }) {
