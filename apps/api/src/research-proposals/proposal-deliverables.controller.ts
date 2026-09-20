@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request } from "@nestjs/common";
+import { Controller, Get, Post, Body, Param, UseGuards, Req } from "@nestjs/common";
 import { ProposalDeliverablesService } from "./proposal-deliverables.service.js";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
+import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
 
 @Controller("api/v1/proposals/:proposalId/deliverables")
 @UseGuards(SessionAuthGuard)
@@ -8,17 +9,19 @@ export class ProposalDeliverablesController {
   constructor(private readonly deliverablesService: ProposalDeliverablesService) {}
 
   @Get()
-  async getDeliverables(@Param("proposalId") proposalId: string) {
-    return this.deliverablesService.getDeliverables(proposalId);
+  async getDeliverables(
+    @Req() request: RequestWithCurrentUser,
+    @Param("proposalId") proposalId: string
+  ) {
+    return this.deliverablesService.getDeliverables(proposalId, request.currentUser!);
   }
 
   @Post()
   async createDeliverable(
+    @Req() request: RequestWithCurrentUser,
     @Param("proposalId") proposalId: string,
-    @Body() body: any,
-    @Request() req: any
+    @Body() body: { type: string; title: string; description?: string; proofFileName?: string; proofStorageKey?: string; publishedAt?: string }
   ) {
-    const userId = req.user.id;
-    return this.deliverablesService.createDeliverable(proposalId, body, userId);
+    return this.deliverablesService.createDeliverable(proposalId, body, request.currentUser!);
   }
 }

@@ -1,145 +1,97 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertList } from "@/components/ui/alert-list";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { PageHeader } from "@/components/ui/page-header";
-import { SectionCard } from "@/components/ui/section-card";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { getDashboardSnapshot, type DashboardPanel } from "@/fixtures/showcase-data";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 
-function renderPanel(panel: DashboardPanel) {
-  if (panel.variant === "chart") {
-    return (
-      <SectionCard key={panel.title} title={panel.title} subtitle={panel.subtitle}>
-        <div className="chart-placeholder" aria-label={panel.title}>
-          {panel.bars.map((bar) => (
-            <div className="chart-bar" key={bar.label}>
-              <span style={{ height: bar.height }} />
-              <strong>{bar.label}</strong>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-    );
+function formatBudget(amount: number) {
+  if (amount >= 1_000_000_000) {
+    return `${(amount / 1_000_000_000).toFixed(1)} tỷ đ`;
   }
-
-  if (panel.variant === "list") {
-    return (
-      <SectionCard
-        key={panel.title}
-        title={panel.title}
-        subtitle={panel.subtitle}
-        action={
-          panel.actionHref && panel.actionLabel ? (
-            <Link className="button" href={panel.actionHref}>
-              {panel.actionLabel}
-            </Link>
-          ) : undefined
-        }
-      >
-        <AlertList items={panel.items} />
-      </SectionCard>
-    );
+  if (amount >= 1_000_000) {
+    return `${(amount / 1_000_000).toFixed(0)} triệu đ`;
   }
+  return new Intl.NumberFormat("vi-VN").format(amount) + " đ";
+}
 
-  return (
-    <SectionCard
-      key={panel.title}
-      title={panel.title}
-      subtitle={panel.subtitle}
-      action={
-        panel.actionHref && panel.actionLabel ? (
-          <Link className="button" href={panel.actionHref}>
-            {panel.actionLabel}
-          </Link>
-        ) : undefined
-      }
-    >
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Mã hồ sơ</th>
-              <th>Tên đề tài</th>
-              <th>Đơn vị</th>
-              <th>Trạng thái</th>
-              <th>Hạn xử lý</th>
-            </tr>
-          </thead>
-          <tbody>
-            {panel.rows.map((row) => (
-              <tr key={row.code}>
-                <td>
-                  <Link className="record-title" href={row.href}>
-                    {row.code}
-                  </Link>
-                </td>
-                <td>
-                  <span className="record-title">{row.title}</span>
-                  <span className="record-meta">{row.meta}</span>
-                </td>
-                <td>{row.unit}</td>
-                <td>
-                  <StatusBadge status={row.status} />
-                </td>
-                <td>{row.dueDate}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="mobile-list">
-        {panel.rows.map((row) => (
-          <article className="list-card" key={row.code}>
-            <div className="list-card-header">
-              <div>
-                <Link className="record-title" href={row.href}>
-                  {row.code}
-                </Link>
-                <span className="record-meta">{row.title}</span>
-              </div>
-              <StatusBadge status={row.status} />
-            </div>
-            <span className="record-meta">
-              {row.unit} - hạn {row.dueDate}
-            </span>
-          </article>
-        ))}
-      </div>
-    </SectionCard>
-  );
+interface DashboardKpis {
+  total: number;
+  pending: number;
+  approved: number;
+  overdue: number;
+  totalApprovedBudget: number;
+  submittedThisMonth: number;
 }
 
 export default function DashboardPage() {
-  const snapshot = getDashboardSnapshot("LEADERSHIP_APPROVAL_AUTHORITY");
+  const [kpis, setKpis] = useState<DashboardKpis | null>(null);
+
+  useEffect(() => {
+    fetch("/api/v1/dashboard/stats", { credentials: "include" })
+      .then(res => res.json())
+      .then(data => {
+        if (data.kpis) setKpis(data.kpis);
+      })
+      .catch(console.error);
+  }, []);
 
   return (
     <>
       <Breadcrumb items={[{ label: "Dashboard" }]} />
       <PageHeader
-        eyebrow={snapshot.eyebrow}
-        title={snapshot.title}
-        description={snapshot.description}
+        eyebrow="Tổng quan hệ thống"
+        title="Dashboard — Quản lý Nghiên cứu Khoa học"
+        description="Theo dõi tình hình đề tài, đánh giá, và quyết định phê duyệt tại Học viện Quân Y."
         actions={
-          <Link className="button primary" href={snapshot.primaryActionHref}>
-            {snapshot.primaryActionLabel}
+          <Link className="button primary" href="/my-proposals">
+            Hồ sơ của tôi
           </Link>
         }
       />
 
       <div className="grid kpi-grid" style={{ marginBottom: 16 }}>
-        {snapshot.kpis.map((kpi) => (
-          <KpiCard key={kpi.label} label={kpi.label} value={kpi.value} meta={kpi.meta} tone={kpi.tone} />
-        ))}
+        <KpiCard
+          label="Tổng đề tài"
+          value={kpis ? String(kpis.total) : "—"}
+          meta="Toàn bộ hệ thống"
+          tone="default"
+        />
+        <KpiCard
+          label="Chờ xử lý"
+          value={kpis ? String(kpis.pending) : "—"}
+          meta="Cần phản hồi"
+          tone={kpis && kpis.pending > 0 ? "warning" : "default"}
+        />
+        <KpiCard
+          label="Đã phê duyệt"
+          value={kpis ? String(kpis.approved) : "—"}
+          meta="Đề tài đã duyệt"
+          tone="info"
+        />
+        <KpiCard
+          label="Quá hạn"
+          value={kpis ? String(kpis.overdue) : "—"}
+          meta="Cần lưu ý"
+          tone={kpis && kpis.overdue > 0 ? "danger" : "default"}
+        />
+        <KpiCard
+          label="Kinh phí đã duyệt"
+          value={kpis ? formatBudget(kpis.totalApprovedBudget) : "—"}
+          meta="Tổng cộng"
+          tone="default"
+        />
+        <KpiCard
+          label="Nộp mới tháng này"
+          value={kpis ? String(kpis.submittedThisMonth) : "—"}
+          meta={new Date().toLocaleDateString("vi-VN", { month: "long", year: "numeric" })}
+          tone="default"
+        />
       </div>
 
       <DashboardCharts />
-
-      <div className="grid two-column" style={{ marginTop: 16 }}>
-        {renderPanel(snapshot.panels[2])}
-        {renderPanel(snapshot.panels[3])}
-      </div>
     </>
   );
 }
