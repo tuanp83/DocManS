@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import ExcelJS from "exceljs";
+import { AuditLogService } from "../auth/audit-log.service.js";
+import type { SafeUserContext } from "../auth/auth.types.js";
+import { DashboardService } from "./dashboard.service.js";
 
 const STATUS_MAP: Record<string, string> = {
   draft: "Bản nháp",
@@ -17,16 +19,14 @@ const STATUS_MAP: Record<string, string> = {
 
 @Injectable()
 export class DashboardExportService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly dashboard: DashboardService,
+    private readonly auditLog: AuditLogService
+  ) {}
 
-  async exportProposalsToExcel(): Promise<Buffer> {
-    const proposals = await this.prisma.researchProposal.findMany({
-      include: {
-        hostOrganizationUnit: true,
-        owner: true
-      },
-      orderBy: { submittedAt: "desc" }
-    });
+  async exportProposalsToExcel(actor: SafeUserContext | undefined): Promise<Buffer> {
+    // Same visibility filter as the proposal list and dashboard totals; fails closed without an actor.
+    const proposals = await this.dashboard.findReadableProposals(actor);
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "DocManS";
@@ -71,6 +71,14 @@ export class DashboardExportService {
     sheet.getColumn("budget").numFmt = "#,##0";
 
     const buffer = await workbook.xlsx.writeBuffer();
+    await this.auditLog.record({
+      action: "export-proposals",
+      result: "success",
+      actorId: actor!.id,
+      username: actor!.username,
+      targetEntity: "research-proposal-export",
+      afterFacts: { format: "xlsx", rowCount: proposals.length }
+    });
     return buffer as unknown as Buffer;
   }
 }
