@@ -59,10 +59,9 @@ export function MilestoneDisbursementModal({
   currentUserUsername,
   onSuccess
 }: MilestoneDisbursementModalProps) {
-  // Check permission: ONLY Top Scientific Management
+  // Display hint only — the backend (assertCanManageDisbursement) checks role and the proposal's organization scope.
   const canManage =
-    ["tvtien", "nmphuong", "dmtrung", "admin", "admin2"].includes(currentUserUsername || "") ||
-    currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY";
+    currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY" || currentUserRole === "SCIENTIFIC_MANAGEMENT_STAFF";
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -187,7 +186,7 @@ export function MilestoneDisbursementModal({
 
   const handleSave = async () => {
     if (!canManage) {
-      setMessage({ type: "error", text: "Chỉ Trưởng phòng KHQS, Giám Đốc, Trưởng Ban QLKH mới có quyền cập nhật kinh phí." });
+      setMessage({ type: "error", text: "Chỉ lãnh đạo Học viện hoặc cán bộ quản lý khoa học phụ trách đơn vị của hồ sơ mới có quyền cập nhật kinh phí." });
       return;
     }
     setSaving(true);
@@ -259,7 +258,7 @@ export function MilestoneDisbursementModal({
           <div className="cmd-alert warning" style={{ borderRadius: 0, borderLeft: "none", borderRight: "none" }}>
             <AlertCircle size={16} />
             <span>
-              <b>Lưu ý:</b> Quyền điều chỉnh kinh phí, duyệt mốc giải ngân và quyết toán chỉ dành riêng cho <b>Trưởng phòng KHQS (nmphuong)</b>, <b>Giám Đốc (tvtien)</b>, và <b>Trưởng Ban QLKH (dmtrung)</b>. Chuyên viên và chủ nhiệm chỉ có quyền theo dõi.
+              <b>Lưu ý:</b> Quyền điều chỉnh kinh phí, duyệt mốc giải ngân và quyết toán dành cho <b>lãnh đạo Học viện</b> và <b>cán bộ quản lý khoa học phụ trách đơn vị của hồ sơ</b>. Các tài khoản khác chỉ có quyền theo dõi.
             </span>
           </div>
         )}

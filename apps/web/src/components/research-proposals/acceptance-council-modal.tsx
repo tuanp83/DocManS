@@ -22,7 +22,8 @@ import {
   loadCouncilCandidates,
   proposeAcceptanceCouncil,
   approveAcceptanceCouncil,
-  recordAcceptanceMinutes
+  recordAcceptanceMinutes,
+  type IRBContextVersion
 } from "@/lib/proposal-evaluations-api";
 import { exportAcceptanceMinutesWord, ProposalExportData } from "@/lib/word-export";
 import "@/styles/council-modals.css";
@@ -37,6 +38,8 @@ interface AcceptanceCouncilModalProps {
     ownerDisplayName?: string;
     hostOrganizationUnit?: string;
     acceptanceCouncilMetadata?: AcceptanceCouncilMetadata | null;
+    /** Backend-issued authorization; its contextVersion is sent back on writes to detect stale data. */
+    viewerAuthorization?: { contextVersion?: IRBContextVersion } | null;
   };
   currentUserRole?: string;
   currentUserUsername?: string;
@@ -74,10 +77,12 @@ export function AcceptanceCouncilModal({
     proposal.acceptanceCouncilMetadata?.members || []
   );
 
-  // Council Approval Form
+  // Council Approval Form — empty means the server issues the next NNN/QĐ-HVQY-NT/YYYY number.
   const [decisionNumber, setDecisionNumber] = useState(
-    proposal.acceptanceCouncilMetadata?.establishmentDecisionNumber || `QĐ-HVQY/2026/NT-${proposal.code?.slice(-3) || "01"}`
+    proposal.acceptanceCouncilMetadata?.decisionNumber || proposal.acceptanceCouncilMetadata?.establishmentDecisionNumber || ""
   );
+  // Proposal contextVersion from the last read/write; a stale token makes the server reject with 409.
+  const [contextVersion, setContextVersion] = useState<IRBContextVersion>(proposal.viewerAuthorization?.contextVersion);
   const [decisionDate, setDecisionDate] = useState(
     proposal.acceptanceCouncilMetadata?.decisionDate || new Date().toISOString().split("T")[0]
   );
@@ -112,13 +117,8 @@ export function AcceptanceCouncilModal({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const isManagement = [
-    "LEADERSHIP_APPROVAL_AUTHORITY",
-    "DIVISION_HEAD",
-    "DEPT_LEAD",
-    "SYSTEM_ADMIN",
-    "ADMIN"
-  ].includes(currentUserRole || "") || ["tvtien", "nmphuong", "dmtrung", "admin"].includes(currentUserUsername || "");
+  // Display hint only — the backend (assertApprovalAuthority) decides; leadership signs the decision.
+  const isManagement = currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY";
 
   const totalScore = Number(reportScore) + Number(scientificScore) + Number(trainingScore) + Number(practicalScore);
   const classification = totalScore >= 90 ? "EXCELLENT" : totalScore >= 70 ? "PASSED" : "FAILED";
@@ -188,9 +188,11 @@ export function AcceptanceCouncilModal({
     try {
       const res = await proposeAcceptanceCouncil(proposal.id, {
         councilType,
-        members: selectedMembers
+        members: selectedMembers,
+        contextVersion
       });
       if (res.success) {
+        if (res.contextVersion) setContextVersion(res.contextVersion);
         setStatus(res.acceptanceCouncil.status);
         setMessage({ type: "success", text: "Đã đề xuất danh sách Hội đồng nghiệm thu thành công!" });
         onSuccess?.();
@@ -207,11 +209,14 @@ export function AcceptanceCouncilModal({
     setMessage(null);
     try {
       const res = await approveAcceptanceCouncil(proposal.id, {
-        decisionNumber,
+        decisionNumber: decisionNumber.trim() || undefined,
         decisionDate,
-        signerName
+        signerName,
+        contextVersion
       });
       if (res.success) {
+        if (res.contextVersion) setContextVersion(res.contextVersion);
+        if (res.acceptanceCouncil.decisionNumber) setDecisionNumber(res.acceptanceCouncil.decisionNumber);
         setStatus(res.acceptanceCouncil.status);
         setMessage({ type: "success", text: "Thủ trưởng đã ký Quyết định thành lập Hội đồng nghiệm thu!" });
         onSuccess?.();
@@ -234,9 +239,11 @@ export function AcceptanceCouncilModal({
         scientificProductsScore: Number(scientificScore),
         trainingProductsScore: Number(trainingScore),
         militaryMedicalPracticalScore: Number(practicalScore),
-        assessmentComments: comments
+        assessmentComments: comments,
+        contextVersion
       });
       if (res.success) {
+        if (res.contextVersion) setContextVersion(res.contextVersion);
         setStatus(res.acceptanceCouncil.status);
         setMessage({ type: "success", text: "Đã ghi nhận kết quả và biên bản nghiệm thu thành công!" });
         onSuccess?.();
@@ -376,7 +383,7 @@ export function AcceptanceCouncilModal({
                     type="text"
                     value={decisionNumber}
                     onChange={e => setDecisionNumber(e.target.value)}
-                    placeholder="VD: 128/QĐ-HVQY ngày 15/10/2026"
+                    placeholder="Để trống để hệ thống tự cấp số (VD: 001/QĐ-HVQY-NT/2026)"
                     className="cmd-input"
                   />
                 </div>

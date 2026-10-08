@@ -265,9 +265,10 @@ export class ProposalEvaluationsController {
   @Post(":id/irb/approve-council")
   async approveIrbCouncil(
     @Req() request: RequestWithCurrentUser,
-    @Param("id") id: string
+    @Param("id") id: string,
+    @Body() body: Record<string, unknown> = {}
   ) {
-    return this.decisions.approveIrbCouncil(request.currentUser!, id);
+    return this.decisions.approveIrbCouncil(request.currentUser!, id, body ?? {});
   }
 
   @Post(":id/irb/review")

@@ -438,6 +438,8 @@ export type AcceptanceEvaluationScores = {
 export type AcceptanceCouncilMetadata = {
   councilType?: "FACILITY" | "OFFICIAL";
   establishmentDecisionNumber?: string;
+  /** Establishment decision number issued (or validated as unique) by the server. */
+  decisionNumber?: string;
   decisionDate?: string;
   meetingDate?: string;
   meetingLocation?: string;
@@ -448,15 +450,18 @@ export type AcceptanceCouncilMetadata = {
   decisionSignerName?: string;
 };
 
+type AcceptanceCouncilResponse = { success: boolean; acceptanceCouncil: AcceptanceCouncilMetadata; contextVersion?: IRBContextVersion };
+
 export function proposeAcceptanceCouncil(
   proposalId: string,
   payload: {
     councilType: "FACILITY" | "OFFICIAL";
     members: AcceptanceCouncilMember[];
     notes?: string;
+    contextVersion?: IRBContextVersion;
   }
 ) {
-  return requestJson<{ success: boolean; acceptanceCouncil: AcceptanceCouncilMetadata }>(
+  return requestJson<AcceptanceCouncilResponse>(
     `/research-proposals/${proposalId}/acceptance-council/propose`,
     { method: "POST", body: JSON.stringify(payload) }
   );
@@ -465,12 +470,14 @@ export function proposeAcceptanceCouncil(
 export function approveAcceptanceCouncil(
   proposalId: string,
   payload: {
-    decisionNumber: string;
+    /** Leave empty to let the server issue the next NNN/QĐ-HVQY-NT/YYYY number. */
+    decisionNumber?: string;
     decisionDate: string;
     signerName: string;
+    contextVersion?: IRBContextVersion;
   }
 ) {
-  return requestJson<{ success: boolean; acceptanceCouncil: AcceptanceCouncilMetadata }>(
+  return requestJson<AcceptanceCouncilResponse>(
     `/research-proposals/${proposalId}/acceptance-council/approve`,
     { method: "POST", body: JSON.stringify(payload) }
   );
@@ -487,9 +494,10 @@ export function recordAcceptanceMinutes(
     militaryMedicalPracticalScore: number;
     assessmentComments: string;
     minutesNotes?: string;
+    contextVersion?: IRBContextVersion;
   }
 ) {
-  return requestJson<{ success: boolean; acceptanceCouncil: AcceptanceCouncilMetadata }>(
+  return requestJson<AcceptanceCouncilResponse>(
     `/research-proposals/${proposalId}/acceptance-council/minutes`,
     { method: "POST", body: JSON.stringify(payload) }
   );
@@ -601,28 +609,32 @@ export type IRBMetadata = {
   };
 };
 
+/** Opaque proposal contextVersion token returned by the API; sent back unchanged on the next write. */
+export type IRBContextVersion = unknown;
+type IRBResponse = { success: boolean; proposalId: string; irb: IRBMetadata; contextVersion?: IRBContextVersion };
+
 export function fetchIRBInfo(proposalId: string) {
-  return requestJson<{ success: boolean; proposalId: string; irb: IRBMetadata }>(
+  return requestJson<IRBResponse>(
     `/research-proposals/${proposalId}/irb`
   );
 }
 
-export function proposeIrbCouncil(proposalId: string, members: IRBMember[], meetingDate: string = "") {
-  return requestJson<{ success: boolean; proposalId: string; irb: IRBMetadata }>(
+export function proposeIrbCouncil(proposalId: string, members: IRBMember[], meetingDate: string = "", contextVersion?: IRBContextVersion) {
+  return requestJson<IRBResponse>(
     `/research-proposals/${proposalId}/irb/propose`,
-    { method: "POST", body: JSON.stringify({ members, meetingDate }) }
+    { method: "POST", body: JSON.stringify({ members, meetingDate, contextVersion }) }
   );
 }
 
-export function approveIrbCouncil(proposalId: string) {
-  return requestJson<{ success: boolean; proposalId: string; irb: IRBMetadata }>(
+export function approveIrbCouncil(proposalId: string, contextVersion?: IRBContextVersion) {
+  return requestJson<IRBResponse>(
     `/research-proposals/${proposalId}/irb/approve-council`,
-    { method: "POST" }
+    { method: "POST", body: JSON.stringify({ contextVersion }) }
   );
 }
 
-export function submitIrbReview(proposalId: string, payload: { comment: string; recommendation: string }) {
-  return requestJson<{ success: boolean; proposalId: string; irb: IRBMetadata }>(
+export function submitIrbReview(proposalId: string, payload: { comment: string; recommendation: string; contextVersion?: IRBContextVersion }) {
+  return requestJson<IRBResponse>(
     `/research-proposals/${proposalId}/irb/review`,
     { method: "POST", body: JSON.stringify(payload) }
   );
@@ -638,9 +650,10 @@ export function updateIRBStatus(
     riskLevel?: string;
     targetSubjects?: string;
     ethicsNotes?: string;
+    contextVersion?: IRBContextVersion;
   }
 ) {
-  return requestJson<{ success: boolean; proposalId: string; irb: IRBMetadata }>(
+  return requestJson<IRBResponse>(
     `/research-proposals/${proposalId}/irb`,
     { method: "POST", body: JSON.stringify(payload) }
   );

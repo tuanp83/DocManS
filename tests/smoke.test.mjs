@@ -104,6 +104,7 @@ describe("workspace smoke checks", () => {
       "ResearcherProfileExpertiseKeyword",
       "SystemParameter",
       "NotificationTemplate",
+      "DocumentNumberCounter",
       "ProposalIntakePeriod",
       "ResearchProposal",
       "ProposalDeliverable",

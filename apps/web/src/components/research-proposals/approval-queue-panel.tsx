@@ -242,7 +242,8 @@ export function ApprovalQueuePanel() {
     try {
       await approveProposalCouncil(reviewingCouncilProposal.id, {
         approvalNote: councilApprovalNote,
-        decisionNumber: councilDecisionNumber
+        decisionNumber: councilDecisionNumber,
+        contextVersion: reviewingCouncilProposal.viewerAuthorization?.contextVersion
       });
       setCouncilActionSuccess("Đã ký phê duyệt và ban hành Quyết định thành lập Hội đồng thành công!");
       await loadData();
@@ -277,7 +278,7 @@ export function ApprovalQueuePanel() {
     setCouncilActionLoading(true);
     setCouncilActionError("");
     try {
-      await rejectProposalCouncil(reviewingCouncilProposal.id, { reason: reason.trim() });
+      await rejectProposalCouncil(reviewingCouncilProposal.id, { reason: reason.trim(), contextVersion: reviewingCouncilProposal.viewerAuthorization?.contextVersion });
       setCouncilActionSuccess("Đã trả lại tờ trình kèm ý kiến chỉ đạo.");
       await loadData();
       setTimeout(() => {

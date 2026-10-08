@@ -615,7 +615,8 @@ export function ProposalEvaluationPanel({
         meetingLocation: councilMeetingLocation,
         tentativeAgenda: councilTentativeAgenda,
         members,
-        submitToLeadership
+        submitToLeadership,
+        contextVersion
       });
       setCouncilSuccess(
         submitToLeadership
@@ -644,7 +645,8 @@ export function ProposalEvaluationPanel({
         conclusion: minutesConclusion,
         averageScore: Number(minutesAverageScore) || 0,
         summaryComments: minutesComments,
-        modificationsRequired: minutesModifications
+        modificationsRequired: minutesModifications,
+        contextVersion
       });
       setMinutesSuccess("Đã ghi nhận Biên bản & Kết luận phiên họp Hội đồng thành công!");
       // Pre-fill consolidation summary with council conclusion

@@ -41,7 +41,22 @@ export async function runProposalMutation<T>(prisma: PrismaService, actor: SafeU
       return work(joinedTransaction(tx), currentActor);
     }, { isolationLevel: "Serializable", timeout: 15000 });
   } catch (error) {
-    if ((error as { code?: string }).code === "P2034") throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Hồ sơ đã thay đổi. Vui lòng tải lại và thực hiện lại thao tác." });
+    if (isSerializationFailure(error)) {
+      // Same 409 for the client; `serializationFailure` lets a caller whose work is fully
+      // transactional retry. A retry re-checks the caller's contextVersion, so a record that really
+      // changed still ends in CONTEXT_VERSION_MISMATCH.
+      throw Object.assign(new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Hồ sơ đã thay đổi. Vui lòng tải lại và thực hiện lại thao tác." }), { serializationFailure: true });
+    }
     throw error;
   }
+}
+
+// Serializable conflicts arrive as P2034 from Prisma operations, but as P2010 carrying SQLSTATE 40001
+// when the raw `SELECT ... FOR UPDATE` loses the race. Both mean "reload and retry", never a 500.
+function isSerializationFailure(error: unknown) {
+  const { code, meta } = (error ?? {}) as { code?: string; meta?: { code?: string; driverAdapterError?: { cause?: { originalCode?: string; kind?: string } } } };
+  if (code === "P2034") return true;
+  if (code !== "P2010") return false;
+  const cause = meta?.driverAdapterError?.cause;
+  return meta?.code === "40001" || cause?.originalCode === "40001" || cause?.kind === "TransactionWriteConflict";
 }

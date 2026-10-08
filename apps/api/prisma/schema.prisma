@@ -385,6 +385,16 @@ model NotificationTemplate {
   @@map("notification_templates")
 }
 
+/// Per-scope, per-year counter for system-issued document numbers (IRB certificates, acceptance decisions).
+model DocumentNumberCounter {
+  scope     String
+  year      Int
+  lastValue Int    @default(0) @map("last_value")
+
+  @@id([scope, year])
+  @@map("document_number_counters")
+}
+
 model ProposalIntakePeriod {
   id                           String            @id @default(uuid())
   code                         String            @unique

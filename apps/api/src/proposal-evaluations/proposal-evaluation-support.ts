@@ -234,30 +234,24 @@ export function assertProposalStatus(proposal: EvaluationProposalRecord, allowed
   }
 }
 
-export function isTopScientificManagement(actor: SafeUserContext | undefined): boolean {
-  if (!actor) return false;
-  if (isLeadership(actor)) return true; // Giám Đốc
-  if (actor.username === "nmphuong" || actor.unit?.includes("Trưởng Phòng KHQS") || actor.unit?.includes("Trưởng phòng KHQS")) return true;
-  if (actor.username === "dmtrung" || actor.unit?.includes("Trưởng Ban QLKH")) return true;
-  if (actor.systemRole === "SYSTEM_ADMIN") return true;
-  return false;
+/**
+ * IRB certificate and disbursement authority (decision of 08/10/2026, nhật ký Bước 10): leadership
+ * academy-wide, or scientific management staff holding an organization scope on the proposal's host
+ * unit. Usernames, free-text `unit` titles and SYSTEM_ADMIN no longer grant this authority — a system
+ * role alone never implies record access.
+ */
+function assertProposalGovernanceAuthority(actor: SafeUserContext | undefined, proposal: Pick<EvaluationProposalRecord, "hostOrganizationUnitId">, message: string): SafeUserContext {
+  if (actor && isLeadership(actor)) return actor;
+  if (!actor || !isScientificManagement(actor)) throw new ForbiddenException({ message });
+  assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
+  return actor;
 }
 
-export function assertCanManageDisbursement(actor: SafeUserContext | undefined): SafeUserContext {
-  if (!isTopScientificManagement(actor)) {
-    throw new ForbiddenException({
-      message: "Chỉ Trưởng phòng KHQS, Giám Đốc và Trưởng Ban QLKH mới có quyền quản lý giải ngân và quyết toán kinh phí."
-    });
-  }
-  return actor!;
+export function assertCanManageDisbursement(actor: SafeUserContext | undefined, proposal: Pick<EvaluationProposalRecord, "hostOrganizationUnitId">): SafeUserContext {
+  return assertProposalGovernanceAuthority(actor, proposal, "Chỉ lãnh đạo Học viện hoặc cán bộ quản lý khoa học phụ trách đơn vị của hồ sơ mới có quyền quản lý giải ngân và quyết toán kinh phí.");
 }
 
-export function assertCanManageIRB(actor: SafeUserContext | undefined): SafeUserContext {
-  if (!isTopScientificManagement(actor)) {
-    throw new ForbiddenException({
-      message: "Chỉ Trưởng phòng KHQS, Giám Đốc và Trưởng Ban QLKH mới có quyền phê duyệt Hội đồng Đạo đức Y sinh (IRB)."
-    });
-  }
-  return actor!;
+export function assertCanManageIRB(actor: SafeUserContext | undefined, proposal: Pick<EvaluationProposalRecord, "hostOrganizationUnitId">): SafeUserContext {
+  return assertProposalGovernanceAuthority(actor, proposal, "Chỉ lãnh đạo Học viện hoặc cán bộ quản lý khoa học phụ trách đơn vị của hồ sơ mới có quyền cấp Giấy chứng nhận Đạo đức Y sinh (IRB).");
 }
 

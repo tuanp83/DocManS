@@ -22,7 +22,8 @@ import {
   approveIrbCouncil,
   submitIrbReview,
   updateIRBStatus,
-  IRBMember
+  IRBMember,
+  type IRBContextVersion
 } from "@/lib/proposal-evaluations-api";
 import { exportIrbCertificateWord, ProposalExportData } from "@/lib/word-export";
 import "@/styles/council-modals.css";
@@ -51,14 +52,17 @@ export function IRBApprovalModal({
   currentUserUsername,
   onSuccess
 }: IRBApprovalModalProps) {
-  const isScientificManagement = ["nmphuong", "dmtrung", "admin", "admin2"].includes(currentUserUsername || "") || currentUserRole === "SCIENTIFIC_MANAGEMENT";
-  const isLeadership = ["tvtien", "admin", "admin2"].includes(currentUserUsername || "") || currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY";
+  // Display hints only — the backend checks role and the proposal's organization scope.
+  const isScientificManagement = currentUserRole === "SCIENTIFIC_MANAGEMENT_STAFF";
+  const isLeadership = currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY";
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const [irbData, setIrbData] = useState<IRBMetadata | null>(null);
+  // Proposal contextVersion from the last IRB read/write; a stale token makes the server reject with 409.
+  const [contextVersion, setContextVersion] = useState<IRBContextVersion>(undefined);
   
   // Council Form State
   const [councilMembers, setCouncilMembers] = useState<IRBMember[]>([]);
@@ -90,6 +94,7 @@ export function IRBApprovalModal({
       const res = await fetchIRBInfo(proposal.id);
       if (res && res.irb) {
         setIrbData(res.irb);
+        setContextVersion(res.contextVersion);
         if (res.irb.council?.members) {
           setCouncilMembers(res.irb.council.members);
         }
@@ -101,7 +106,8 @@ export function IRBApprovalModal({
           setRiskLevel((res.irb.certificate.riskLevel as any) || "LOW");
           setEthicsNotes(res.irb.certificate.ethicsNotes || "");
         } else {
-          setCertificateNumber(`IRB-HVQY-2026-${proposal.code?.slice(-3) || "088"}`);
+          // Left empty so the server assigns a unique number from its sequence.
+          setCertificateNumber("");
           setApprovalDate(new Date().toISOString().split("T")[0]);
           setValidUntil("2027-12-31");
           setEthicsNotes("Nghiên cứu can thiệp y dược học đáp ứng đầy đủ các tiêu chuẩn đạo đức theo Hướng dẫn Quốc gia và Tuyên ngôn Helsinki.");
@@ -127,9 +133,10 @@ export function IRBApprovalModal({
     setSaving(true);
     setMessage(null);
     try {
-      const res = await proposeIrbCouncil(proposal.id, councilMembers, "");
+      const res = await proposeIrbCouncil(proposal.id, councilMembers, "", contextVersion);
       if (res.success) {
         setIrbData(res.irb);
+        setContextVersion(res.contextVersion);
         setMessage({ type: "success", text: "Trình danh sách Hội đồng Y đức thành công!" });
         onSuccess?.();
       }
@@ -145,9 +152,10 @@ export function IRBApprovalModal({
     setSaving(true);
     setMessage(null);
     try {
-      const res = await approveIrbCouncil(proposal.id);
+      const res = await approveIrbCouncil(proposal.id, contextVersion);
       if (res.success) {
         setIrbData(res.irb);
+        setContextVersion(res.contextVersion);
         setMessage({ type: "success", text: "Phê duyệt Hội đồng Y đức thành công!" });
         onSuccess?.();
       }
@@ -162,9 +170,10 @@ export function IRBApprovalModal({
     setSaving(true);
     setMessage(null);
     try {
-      const res = await submitIrbReview(proposal.id, { comment: reviewComment, recommendation: reviewRecommendation });
+      const res = await submitIrbReview(proposal.id, { comment: reviewComment, recommendation: reviewRecommendation, contextVersion });
       if (res.success) {
         setIrbData(res.irb);
+        setContextVersion(res.contextVersion);
         setMessage({ type: "success", text: "Gửi nhận xét thành công!" });
         onSuccess?.();
       }
@@ -187,9 +196,12 @@ export function IRBApprovalModal({
         validUntil,
         riskLevel,
         ethicsNotes,
+        contextVersion,
       });
       if (res.success) {
         setIrbData(res.irb);
+        setContextVersion(res.contextVersion);
+        setCertificateNumber(res.irb.certificate?.certificateNumber || "");
         setMessage({ type: "success", text: "Đã cấp/cập nhật Giấy chứng nhận IRB thành công!" });
         onSuccess?.();
       }
@@ -389,7 +401,7 @@ export function IRBApprovalModal({
                 </div>
                 <div className="cmd-form-group">
                   <label className="cmd-label">Số Giấy chứng nhận IRB</label>
-                  <input type="text" disabled={!isScientificManagement && !isLeadership} value={certificateNumber} onChange={e => setCertificateNumber(e.target.value)} className="cmd-input" />
+                  <input type="text" disabled={!isScientificManagement && !isLeadership} value={certificateNumber} onChange={e => setCertificateNumber(e.target.value)} placeholder="Để trống để hệ thống tự cấp số" className="cmd-input" />
                 </div>
                 <div className="cmd-form-group">
                   <label className="cmd-label">Ngày cấp</label>

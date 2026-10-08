@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
+import { proposalContextVersion, runProposalMutation } from "../proposals-shared/proposal-mutation.js";
 import { REVIEW_STATUS } from "../proposals-shared/proposal-review-access.js";
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
 import { ProposalParticipationService } from "../research-proposals/proposal-participation.service.js";
@@ -14,7 +15,6 @@ import {
   assertProposalStatus,
   assertScientificManagementScope,
   findEvaluationProposal,
-  isTopScientificManagement,
   resolveActorConflict,
   updateProposalStatusGuarded,
   type EvaluationProposalRecord,
@@ -62,6 +62,40 @@ export class ProposalDecisionsService {
     private readonly summaries: ProposalEvaluationSummaryService,
     private readonly notifications: NotificationsService
   ) {}
+
+  /**
+   * Council, acceptance-council and IRB data are read-modify-write JSON on the proposal row. Each write
+   * runs in one serializable transaction with that row locked (`runProposalMutation`): the caller's
+   * contextVersion is verified when sent, the proposal and the caller's account are re-read inside the
+   * lock, and metadata plus audit commit together. Concurrent writers therefore serialize instead of
+   * silently overwriting each other. The response carries the proposal's new contextVersion.
+   */
+  private async mutateEvaluationMetadata<T extends Record<string, unknown>>(
+    actor: SafeUserContext,
+    proposalId: string,
+    input: Record<string, unknown> | undefined,
+    work: (context: { tx: PrismaService; actor: SafeUserContext; proposal: EvaluationProposalRecord; auditLog: AuditLogService }) => Promise<T>
+  ) {
+    // A serialization conflict (another writer committed first) is retried up to 3 times. Each retry
+    // re-checks the caller's contextVersion: a client that sent one and whose record really changed
+    // still gets 409 and must reload; a client that sent none, or whose conflict was only on a shared
+    // counter row, succeeds without seeing the conflict. The work is fully transactional, so a retry
+    // never repeats a side effect.
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await runProposalMutation(this.prisma, actor, proposalId, input?.contextVersion, async (tx, currentActor) => {
+          const proposal = await findEvaluationProposal(tx, proposalId);
+          const auditLog = this.auditLog instanceof AuditLogService ? new AuditLogService(tx) : this.auditLog;
+          const result = await work({ tx, actor: currentActor, proposal, auditLog });
+          const updated = await findEvaluationProposal(tx, proposalId);
+          return { ...result, contextVersion: proposalContextVersion(updated as never) };
+        });
+      } catch (error) {
+        if (!(error as { serializationFailure?: boolean }).serializationFailure || attempt >= MAX_SERIALIZATION_RETRIES) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 10 + Math.floor(Math.random() * 40) * (attempt + 1)));
+      }
+    }
+  }
 
   /** AC-ST-3.5-01 — everything the authority needs in one authority-scoped read model. */
   async getDecisionPackage(actor: SafeUserContext, proposalId: string) {
@@ -280,7 +314,7 @@ export class ProposalDecisionsService {
    * Enforces fail-closed Conflict-of-Interest (COI) check for all council candidates.
    */
   async proposeCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertScientificManagementScope(actor, proposal);
 
     const conflict = await this.resolveDecisionConflict(actor, proposal);
@@ -316,12 +350,12 @@ export class ProposalDecisionsService {
       members
     };
 
-    await this.prisma.researchProposal.update({
+    await tx.researchProposal.update({
       where: { id: proposalId },
       data: { councilMetadata: updatedCouncil as any }
     });
 
-    await this.auditLog.record({
+    await auditLog.record({
       action: "propose-council",
       result: "success",
       actorId: actor.id,
@@ -336,6 +370,7 @@ export class ProposalDecisionsService {
       proposalId,
       councilMetadata: updatedCouncil
     };
+    });
   }
 
   /**
@@ -465,7 +500,7 @@ export class ProposalDecisionsService {
    * Atomically transitions proposal to under_review and activates reviewer assignments.
    */
   async approveCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertApprovalAuthority(actor);
 
     const conflict = await this.resolveDecisionConflict(actor, proposal);
@@ -494,7 +529,7 @@ export class ProposalDecisionsService {
       members
     };
 
-    await this.prisma.$transaction(async (tx) => {
+    {
       // If proposal is in submitted state, move to under_review
       if (proposal.status === "submitted" || proposal.status === "resubmitted") {
         await tx.researchProposal.update({
@@ -539,9 +574,9 @@ export class ProposalDecisionsService {
           }
         }
       }
-    });
+    }
 
-    await this.auditLog.record({
+    await auditLog.record({
       action: "approve-council",
       result: "success",
       actorId: actor.id,
@@ -556,13 +591,14 @@ export class ProposalDecisionsService {
       proposalId,
       councilMetadata: updatedCouncil
     };
+    });
   }
 
   /**
    * Stage 1: Leadership requests adjustments or returns Council proposal to staff.
    */
   async rejectCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertApprovalAuthority(actor);
 
     const conflict = await this.resolveDecisionConflict(actor, proposal);
@@ -584,12 +620,12 @@ export class ProposalDecisionsService {
       rejectedByName: actor.displayName
     };
 
-    await this.prisma.researchProposal.update({
+    await tx.researchProposal.update({
       where: { id: proposalId },
       data: { councilMetadata: updatedCouncil as any }
     });
 
-    await this.auditLog.record({
+    await auditLog.record({
       action: "reject-council",
       result: "success",
       actorId: actor.id,
@@ -604,13 +640,14 @@ export class ProposalDecisionsService {
       proposalId,
       councilMetadata: updatedCouncil
     };
+    });
   }
 
   /**
    * Stage 2: Staff or Council Secretary records the official evaluation minutes & conclusion.
    */
   async recordCouncilMinutes(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertScientificManagementScope(actor, proposal);
 
     const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
@@ -640,12 +677,12 @@ export class ProposalDecisionsService {
       councilMinutes
     };
 
-    await this.prisma.researchProposal.update({
+    await tx.researchProposal.update({
       where: { id: proposalId },
       data: { councilMetadata: updatedCouncil as any }
     });
 
-    await this.auditLog.record({
+    await auditLog.record({
       action: "record-council-minutes",
       result: "success",
       actorId: actor.id,
@@ -660,6 +697,7 @@ export class ProposalDecisionsService {
       proposalId,
       councilMetadata: updatedCouncil
     };
+    });
   }
 
   /**
@@ -707,7 +745,7 @@ export class ProposalDecisionsService {
   // =========================================================================================
 
   async proposeAcceptanceCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertScientificManagementScope(actor, proposal);
 
     const members = (input.members as Array<any>) || [];
@@ -727,14 +765,14 @@ export class ProposalDecisionsService {
       members
     };
 
-    await this.prisma.researchProposal.update({
+    await tx.researchProposal.update({
       where: { id: proposalId },
       data: {
         acceptanceCouncilMetadata: acceptanceCouncil
       }
     });
 
-    await this.auditLog.record({
+    await auditLog.record({
       action: "propose-acceptance-council",
       result: "success",
       actorId: actor.id,
@@ -744,15 +782,34 @@ export class ProposalDecisionsService {
     });
 
     return { success: true, acceptanceCouncil };
+    });
   }
 
   async approveAcceptanceCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    try {
+      return await this.approveAcceptanceCouncilInTransaction(actor, proposalId, input);
+    } catch (error) {
+      // The partial unique index is the backstop if two proposals race for the same manual number.
+      if ((error as { code?: string }).code === "P2002") throw documentNumberTaken(ACCEPTANCE_DECISION_NUMBER);
+      throw error;
+    }
+  }
+
+  private async approveAcceptanceCouncilInTransaction(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
+    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertApprovalAuthority(actor);
 
     const current = (proposal.acceptanceCouncilMetadata as Record<string, unknown>) || {};
-    const count = await this.prisma.researchProposal.count({ where: { status: "approved" } });
-    const decisionNumber = (input.decisionNumber as string) || `${count + 45}/QĐ-HVQY`;
+    const requestedNumber = typeof input.decisionNumber === "string" ? input.decisionNumber.trim() : "";
+    if (requestedNumber.length > 100) {
+      throw new BadRequestException({ message: "Số quyết định không được vượt quá 100 ký tự." });
+    }
+    const decisionDate = (input.decisionDate as string) || new Date().toISOString();
+    const decisionNumber = await this.resolveDocumentNumber(tx, ACCEPTANCE_DECISION_NUMBER, proposalId, {
+      requested: requestedNumber,
+      previous: typeof current.decisionNumber === "string" ? current.decisionNumber : "",
+      decisionDate
+    });
 
     const updated = {
       ...current,
@@ -761,30 +818,32 @@ export class ProposalDecisionsService {
       approvedById: actor.id,
       approvedByName: actor.displayName || actor.username,
       decisionNumber,
-      decisionDate: (input.decisionDate as string) || new Date().toISOString()
+      decisionDate
     };
 
-    await this.prisma.researchProposal.update({
+    await tx.researchProposal.update({
       where: { id: proposalId },
       data: {
         acceptanceCouncilMetadata: updated
       }
     });
 
-    await this.auditLog.record({
+    await auditLog.record({
       action: "approve-acceptance-council",
       result: "success",
       actorId: actor.id,
       targetEntity: "proposal",
       targetEntityId: proposalId,
-      username: actor.username
+      username: actor.username,
+      reason: JSON.stringify({ proposalId, decisionNumber })
     });
 
     return { success: true, acceptanceCouncil: updated };
+    });
   }
 
   async recordAcceptanceMinutes(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertScientificManagementScope(actor, proposal);
 
     const current = (proposal.acceptanceCouncilMetadata as Record<string, unknown>) || {};
@@ -818,14 +877,14 @@ export class ProposalDecisionsService {
       minutesSummary: (input.minutesSummary as string) || "Biên bản họp Hội đồng đánh giá nghiệm thu chính thức."
     };
 
-    await this.prisma.researchProposal.update({
+    await tx.researchProposal.update({
       where: { id: proposalId },
       data: {
         acceptanceCouncilMetadata: updated
       }
     });
 
-    await this.auditLog.record({
+    await auditLog.record({
       action: "record-acceptance-minutes",
       result: "success",
       actorId: actor.id,
@@ -835,6 +894,7 @@ export class ProposalDecisionsService {
     });
 
     return { success: true, acceptanceCouncil: updated };
+    });
   }
 
   // =========================================================================================
@@ -906,8 +966,8 @@ export class ProposalDecisionsService {
 
   async updateDisbursement(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    // PHÂN QUYỀN ĐẶC BIỆT: Chỉ Trưởng phòng KHQS, Giám Đốc và Trưởng Ban QLKH
-    assertCanManageDisbursement(actor);
+    // Lãnh đạo Học viện, hoặc cán bộ QLKH có phạm vi đơn vị chủ trì của hồ sơ.
+    assertCanManageDisbursement(actor, proposal);
 
     const payload = {
       ...input,
@@ -953,8 +1013,9 @@ export class ProposalDecisionsService {
     assertCanReadEvaluation(actor, proposal);
 
     const existing = proposal.irbMetadata as Record<string, unknown> | null;
+    const contextVersion = proposalContextVersion(proposal as never);
     if (existing) {
-      return { proposalId, irb: existing };
+      return { proposalId, irb: existing, contextVersion };
     }
 
     const defaultIrb = {
@@ -966,11 +1027,11 @@ export class ProposalDecisionsService {
       certificate: null
     };
 
-    return { proposalId, irb: defaultIrb };
+    return { proposalId, irb: defaultIrb, contextVersion };
   }
 
   async proposeIrbCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertScientificManagementScope(actor, proposal);
 
     const members = Array.isArray(input.members) ? (input.members as Array<Record<string, unknown>>) : [];
@@ -1002,12 +1063,12 @@ export class ProposalDecisionsService {
       }
     };
 
-    await this.prisma.researchProposal.update({
+    await tx.researchProposal.update({
       where: { id: proposalId },
       data: { irbMetadata: updated as any }
     });
 
-    await this.auditLog.record({
+    await auditLog.record({
       action: "propose-irb-council",
       result: "success",
       actorId: actor.id,
@@ -1017,10 +1078,11 @@ export class ProposalDecisionsService {
     });
 
     return { success: true, irb: updated };
+    });
   }
 
-  async approveIrbCouncil(actor: SafeUserContext, proposalId: string) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
+  async approveIrbCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
+    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertApprovalAuthority(actor);
 
     const current = (proposal.irbMetadata as Record<string, unknown>) || {};
@@ -1041,12 +1103,12 @@ export class ProposalDecisionsService {
       }
     };
 
-    await this.prisma.researchProposal.update({
+    await tx.researchProposal.update({
       where: { id: proposalId },
       data: { irbMetadata: updated as any }
     });
 
-    await this.auditLog.record({
+    await auditLog.record({
       action: "approve-irb-council",
       result: "success",
       actorId: actor.id,
@@ -1056,18 +1118,19 @@ export class ProposalDecisionsService {
     });
 
     return { success: true, irb: updated };
+    });
   }
 
   async submitIrbReview(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    
+    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     const current = (proposal.irbMetadata as Record<string, unknown>) || {};
     const council = (current.council as Record<string, unknown>) || {};
     const members = (council.members as Array<Record<string, unknown>>) || [];
     
     const isMember = members.some((m) => m.userId === actor.id);
     if (!isMember) {
-      throw new BadRequestException({ message: "Bạn không phải là thành viên của Hội đồng IRB này." });
+      // Authority failure, not invalid input: only members of this IRB council may review.
+      throw new ForbiddenException({ message: "Bạn không phải là thành viên của Hội đồng IRB này." });
     }
 
     if (council.status !== "approved") {
@@ -1097,12 +1160,12 @@ export class ProposalDecisionsService {
       reviews: currentReviews
     };
 
-    await this.prisma.researchProposal.update({
+    await tx.researchProposal.update({
       where: { id: proposalId },
       data: { irbMetadata: updated as any }
     });
 
-    await this.auditLog.record({
+    await auditLog.record({
       action: "submit-irb-review",
       result: "success",
       actorId: actor.id,
@@ -1112,60 +1175,161 @@ export class ProposalDecisionsService {
     });
 
     return { success: true, irb: updated };
+    });
   }
 
   async updateIRBStatus(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    // PHÂN QUYỀN ĐẶC BIỆT: Chỉ Trưởng phòng KHQS, Giám Đốc và Trưởng Ban QLKH
-    assertCanManageIRB(actor);
+    const status = typeof input.status === "string" && input.status ? input.status : "APPROVED";
+    if (status !== "APPROVED" && status !== "REJECTED") {
+      throw new BadRequestException({ message: "Trạng thái chứng nhận IRB không hợp lệ." });
+    }
+    const requestedNumber = typeof input.certificateNumber === "string" ? input.certificateNumber.trim() : "";
+    if (requestedNumber.length > 100) {
+      throw new BadRequestException({ message: "Số giấy chứng nhận IRB không được vượt quá 100 ký tự." });
+    }
 
-    const status = (input.status as string) || "APPROVED";
-    const count = await this.prisma.researchProposal.count();
-    const certificateNumber = (input.certificateNumber as string) || (status === "APPROVED" ? `IRB-HVQY-2026-${String(count + 20).padStart(3, "0")}` : null);
+    let notice: { ownerId: string; label: string; certificateNumber: string | null } | null = null;
+    let result;
+    try {
+      result = await this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
+        // Lãnh đạo Học viện, hoặc cán bộ QLKH có phạm vi đơn vị chủ trì của hồ sơ.
+        assertCanManageIRB(actor, proposal);
 
-    const current = (proposal.irbMetadata as Record<string, unknown>) || {};
+        const current = (proposal.irbMetadata as Record<string, unknown>) || {};
+        const previous = (current.certificate as Record<string, unknown> | null | undefined) ?? null;
+        const decisionDate = (input.decisionDate as string) || new Date().toISOString();
+        // Re-issuing an approval keeps the proposal's number; a rejection without a number stores none.
+        const certificateNumber = await this.resolveDocumentNumber(tx, IRB_CERTIFICATE_NUMBER, proposalId, {
+          requested: requestedNumber,
+          previous: status === "APPROVED" && typeof previous?.certificateNumber === "string" ? previous.certificateNumber : "",
+          decisionDate,
+          generate: status === "APPROVED"
+        });
 
-    const certificate = {
-      status,
-      certificateNumber,
-      decisionDate: (input.decisionDate as string) || new Date().toISOString(),
-      validUntil: (input.validUntil as string) || new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
-      riskLevel: (input.riskLevel as string) || "CONTROLLED",
-      targetSubjects: (input.targetSubjects as string) || "Bệnh nhân và đối tượng can thiệp y học",
-      ethicsNotes: (input.ethicsNotes as string) || "Hội đồng Đạo đức trong nghiên cứu Y sinh học thông qua đề cương nghiên cứu.",
-      approvedById: actor.id,
-      approvedByName: actor.displayName || actor.username,
-      updatedAt: new Date().toISOString()
-    };
+        const certificate = {
+          status,
+          certificateNumber,
+          decisionDate,
+          validUntil: (input.validUntil as string) || new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
+          riskLevel: (input.riskLevel as string) || "CONTROLLED",
+          targetSubjects: (input.targetSubjects as string) || "Bệnh nhân và đối tượng can thiệp y học",
+          ethicsNotes: (input.ethicsNotes as string) || "Hội đồng Đạo đức trong nghiên cứu Y sinh học thông qua đề cương nghiên cứu.",
+          approvedById: actor.id,
+          approvedByName: actor.displayName || actor.username,
+          updatedAt: new Date().toISOString()
+        };
 
-    const updated = {
-      ...current,
-      certificate
-    };
+        const updated = {
+          ...current,
+          certificate
+        };
 
-    await this.prisma.researchProposal.update({
-      where: { id: proposalId },
-      data: { irbMetadata: updated as any }
-    });
+        await tx.researchProposal.update({
+          where: { id: proposalId },
+          data: { irbMetadata: updated as any }
+        });
 
-    await this.notifications.createNotification({
-      userId: proposal.ownerId,
-      title: "Hội đồng Y đức (IRB)",
-      message: `Hồ sơ đạo đức của đề tài ${proposal.code || proposal.title} đã được cấp Giấy chứng nhận: ${status === "APPROVED" ? "Đã phê duyệt" : "Chưa phê duyệt"}.`,
-      type: "IRB_UPDATE",
-      link: `/research-proposals/${proposalId}?tab=irb`,
-      metadata: { proposalId, status, certificateNumber }
-    });
+        await auditLog.record({
+          action: "update-irb-status",
+          result: "success",
+          actorId: actor.id,
+          targetEntity: "proposal",
+          targetEntityId: proposalId,
+          username: actor.username,
+          reason: JSON.stringify({ proposalId, status, certificateNumber })
+        });
 
-    await this.auditLog.record({
-      action: "update-irb-status",
-      result: "success",
-      actorId: actor.id,
-      targetEntity: "proposal",
-      targetEntityId: proposalId,
-      username: actor.username
-    });
+        notice = { ownerId: proposal.ownerId, label: proposal.code || proposal.title, certificateNumber };
+        return { success: true, irb: updated };
+      });
+    } catch (error) {
+      // The partial unique index is the backstop if two proposals race for the same manual number.
+      if ((error as { code?: string }).code === "P2002") throw documentNumberTaken(IRB_CERTIFICATE_NUMBER);
+      throw error;
+    }
 
-    return { success: true, irb: updated };
+    // Notify only after the certificate is committed, never for a rolled-back attempt.
+    const committed = notice as { ownerId: string; label: string; certificateNumber: string | null } | null;
+    if (committed) {
+      await this.notifications.createNotification({
+        userId: committed.ownerId,
+        title: "Hội đồng Y đức (IRB)",
+        message: `Hồ sơ đạo đức của đề tài ${committed.label} đã được cấp Giấy chứng nhận: ${status === "APPROVED" ? "Đã phê duyệt" : "Chưa phê duyệt"}.`,
+        type: "IRB_UPDATE",
+        link: `/research-proposals/${proposalId}?tab=irb`,
+        metadata: { proposalId, status, certificateNumber: committed.certificateNumber }
+      });
+    }
+
+    return result;
   }
+
+  /**
+   * System-issued document numbers are unique across proposals. An explicitly entered number, or the
+   * proposal's own previous number, must not belong to another proposal (409). Otherwise the next
+   * number of the decision year is taken from `document_number_counters` inside this transaction —
+   * never from a row count, which repeats — so numbering restarts at 001 each year and a rolled-back
+   * write leaves no gap or duplicate. The partial unique indexes are the final backstop.
+   */
+  private async resolveDocumentNumber(
+    tx: PrismaService,
+    kind: DocumentNumberKind,
+    proposalId: string,
+    options: { requested: string; previous: string; decisionDate: string; generate?: boolean }
+  ): Promise<string | null> {
+    const chosen = options.requested || options.previous.trim();
+    if (chosen) {
+      if (await this.isDocumentNumberTaken(tx, kind, proposalId, chosen)) throw documentNumberTaken(kind);
+      return chosen;
+    }
+    if (options.generate === false) return null;
+
+    const parsed = new Date(options.decisionDate);
+    const year = Number.isNaN(parsed.valueOf()) ? new Date().getFullYear() : parsed.getFullYear();
+    // A manually entered number may already occupy the next slot; skip past it.
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const [row] = await tx.$queryRaw<Array<{ value: number }>>`
+        INSERT INTO document_number_counters (scope, year, last_value) VALUES (${kind.scope}, ${year}, 1)
+        ON CONFLICT (scope, year) DO UPDATE SET last_value = document_number_counters.last_value + 1
+        RETURNING last_value AS value`;
+      const candidate = kind.format(year, String(row.value).padStart(3, "0"));
+      if (!(await this.isDocumentNumberTaken(tx, kind, proposalId, candidate))) return candidate;
+    }
+    throw documentNumberTaken(kind);
+  }
+
+  private async isDocumentNumberTaken(tx: PrismaService, kind: DocumentNumberKind, proposalId: string, number: string) {
+    const rows = kind === IRB_CERTIFICATE_NUMBER
+      ? await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM research_proposals
+          WHERE id <> ${proposalId} AND irb_metadata->'certificate'->>'certificateNumber' = ${number}
+          LIMIT 1`
+      : await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM research_proposals
+          WHERE id <> ${proposalId} AND acceptance_council_metadata->>'decisionNumber' = ${number}
+          LIMIT 1`;
+    return rows.length > 0;
+  }
+}
+
+type DocumentNumberKind = { scope: string; format: (year: number, sequence: string) => string; takenCode: string; takenMessage: string };
+
+const MAX_SERIALIZATION_RETRIES = 3;
+
+const IRB_CERTIFICATE_NUMBER: DocumentNumberKind = {
+  scope: "irb-certificate",
+  format: (year, sequence) => `IRB-HVQY-${year}-${sequence}`,
+  takenCode: "IRB_CERTIFICATE_NUMBER_TAKEN",
+  takenMessage: "Số giấy chứng nhận IRB đã được dùng cho hồ sơ khác."
+};
+
+const ACCEPTANCE_DECISION_NUMBER: DocumentNumberKind = {
+  scope: "acceptance-council-decision",
+  format: (year, sequence) => `${sequence}/QĐ-HVQY-NT/${year}`,
+  takenCode: "ACCEPTANCE_DECISION_NUMBER_TAKEN",
+  takenMessage: "Số quyết định thành lập Hội đồng nghiệm thu đã được dùng cho hồ sơ khác."
+};
+
+function documentNumberTaken(kind: DocumentNumberKind) {
+  return new ConflictException({ code: kind.takenCode, message: kind.takenMessage });
 }
