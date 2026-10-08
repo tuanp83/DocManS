@@ -849,38 +849,39 @@ export class ProposalDecisionsService {
     const current = (proposal.acceptanceCouncilMetadata as Record<string, unknown>) || {};
 
     const reportScore = Number(input.reportScore ?? 28);
-    const productScore = Number(input.productScore ?? 27);
-    const trainingScore = Number(input.trainingScore ?? 14);
-    const applicationScore = Number(input.applicationScore ?? 23);
-    const totalScore = Math.min(100, Math.max(0, reportScore + productScore + trainingScore + applicationScore));
+    const scientificProductsScore = Number(input.scientificProductsScore ?? 27);
+    const trainingProductsScore = Number(input.trainingProductsScore ?? 14);
+    const militaryMedicalPracticalScore = Number(input.militaryMedicalPracticalScore ?? 24);
+    const totalScore = Math.min(100, Math.max(0, reportScore + scientificProductsScore + trainingProductsScore + militaryMedicalPracticalScore));
 
-    const classification = (input.classification as string) || (totalScore >= 90 ? "XUẤT SẮC" : totalScore >= 70 ? "ĐẠT" : "KHÔNG ĐẠT");
+    const classification = totalScore >= 90 ? "EXCELLENT" : totalScore >= 70 ? "PASSED" : "FAILED";
     const resolution = (input.resolution as string) || "approved";
 
     const updated = {
       ...current,
-      status: "completed",
+      status: "EVALUATED",
       completedAt: new Date().toISOString(),
       completedById: actor.id,
       completedByName: actor.displayName || actor.username,
-      scores: {
+      meetingDate: input.meetingDate ?? current.meetingDate,
+      meetingLocation: input.meetingLocation ?? current.meetingLocation,
+      evaluationResult: {
         reportScore,
-        productScore,
-        trainingScore,
-        applicationScore,
+        scientificProductsScore,
+        trainingProductsScore,
+        militaryMedicalPracticalScore,
         totalScore,
-        classification
+        classification,
+        assessmentComments: typeof input.assessmentComments === "string" ? input.assessmentComments : ""
       },
       resolution,
-      conclusions: (input.conclusions as string) || "Hội đồng nhất trí nghiệm thu kết quả nghiên cứu của đề tài đạt yêu cầu chất lượng.",
-      modificationsRequired: (input.modificationsRequired as string) || "",
-      minutesSummary: (input.minutesSummary as string) || "Biên bản họp Hội đồng đánh giá nghiệm thu chính thức."
+      minutesNotes: typeof input.minutesNotes === "string" ? input.minutesNotes : ""
     };
 
     await tx.researchProposal.update({
       where: { id: proposalId },
       data: {
-        acceptanceCouncilMetadata: updated
+        acceptanceCouncilMetadata: updated as any
       }
     });
 
@@ -914,50 +915,10 @@ export class ProposalDecisionsService {
 
     const defaultData = {
       totalBudget: totalAmount,
-      totalDisbursed: Math.round(totalAmount * 0.4),
+      totalDisbursed: 0,
       totalSettled: 0,
-      milestones: [
-        {
-          id: "ms-1",
-          name: "Đợt 1: Tạm ứng kinh phí sau ký hợp đồng / phê duyệt",
-          percentage: 40,
-          plannedAmount: Math.round(totalAmount * 0.4),
-          disbursedAmount: Math.round(totalAmount * 0.4),
-          disbursedDate: "2026-05-15",
-          receiptNumber: "UNC-2026-0412",
-          status: "disbursed",
-          note: "Đã giải ngân tạm ứng đợt 1 vào tài khoản cơ quan chủ trì"
-        },
-        {
-          id: "ms-2",
-          name: "Đợt 2: Giải ngân giai đoạn 2 sau báo cáo tiến độ giữa kỳ đạt",
-          percentage: 40,
-          plannedAmount: Math.round(totalAmount * 0.4),
-          disbursedAmount: 0,
-          disbursedDate: null,
-          receiptNumber: null,
-          status: "pending",
-          note: "Chờ thẩm định báo cáo tiến độ 6 tháng"
-        },
-        {
-          id: "ms-3",
-          name: "Đợt 3: Thanh quyết toán kinh phí còn lại sau nghiệm thu chính thức",
-          percentage: 20,
-          plannedAmount: totalAmount - Math.round(totalAmount * 0.8),
-          disbursedAmount: 0,
-          disbursedDate: null,
-          receiptNumber: null,
-          status: "pending",
-          note: "Quyết toán sau khi có Quyết định công nhận kết quả nghiệm thu"
-        }
-      ],
-      expenseCategories: [
-        { code: "cat_1", name: "Thù lao nghiên cứu trực tiếp cho các nhà khoa học", plannedAmount: Math.round(totalAmount * 0.35), actualAmount: Math.round(totalAmount * 0.15) },
-        { code: "cat_2", name: "Thuê khoán chuyên môn & kiểm nghiệm độc lập", plannedAmount: Math.round(totalAmount * 0.15), actualAmount: Math.round(totalAmount * 0.05) },
-        { code: "cat_3", name: "Hóa chất, sinh phẩm, vật tư tiêu hao, động vật thí nghiệm", plannedAmount: Math.round(totalAmount * 0.30), actualAmount: Math.round(totalAmount * 0.15) },
-        { code: "cat_4", name: "Hội nghị, hội thảo khoa học & đi thực địa/dã chiến", plannedAmount: Math.round(totalAmount * 0.10), actualAmount: Math.round(totalAmount * 0.03) },
-        { code: "cat_5", name: "Xuất bản bài báo, công bố quốc tế & đăng ký SHTT", plannedAmount: Math.round(totalAmount * 0.10), actualAmount: Math.round(totalAmount * 0.02) }
-      ],
+      milestones: [],
+      expenseCategories: [],
       updatedAt: new Date().toISOString()
     };
 

@@ -14,6 +14,10 @@ export function getNavigationItems(role: UserRole, account?: { unit?: string }) 
   if (account?.unit && account.unit.toLowerCase().includes("chuyên viên")) {
     items = items.filter((item) => item.href !== "/reviews");
   }
+
+  // FEATURE FLAG: Tạm ẩn các màn hình chưa sẵn sàng (Theo dõi đề tài / nhiệm vụ)
+  items = items.filter((item) => item.href !== "/tasks" && item.href !== "/my-tasks");
+
   return items;
 }
 

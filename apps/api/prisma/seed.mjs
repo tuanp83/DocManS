@@ -159,6 +159,23 @@ const users = [
   }
 ];
 
+if (process.env.NODE_ENV === "production") {
+  console.log("🌱 Chạy seed cho môi trường PRODUCTION. Chỉ khởi tạo 1 tài khoản admin.");
+  // Giữ lại mỗi admin
+  users.length = 0;
+  users.push({
+    id: "user-admin-prod",
+    username: "admin",
+    passwordHash:
+      "scrypt:user-admin-prod:88577689e88df3ec17a117384f8a68ff4e516d4ccc3c4a7783764eb66f4a72a8c35ae574d915e01d7ba3fe5e3a800b30463e721c488544ca3fc90192544e0c43",
+    displayName: "Quản trị Hệ thống",
+    status: "active",
+    systemRole: "SYSTEM_ADMIN",
+    unit: "Ban Giám Đốc"
+  });
+  console.warn("⚠️ VUI LÒNG ĐĂNG NHẬP BẰNG TÀI KHOẢN admin/1234 VÀ ĐỔI MẬT KHẨU NGAY LẬP TỨC.");
+}
+
 const organizationUnits = [
   // Ban Giám đốc & Cơ quan chỉ đạo
   ["org-hvqy", "HVQY", "Học viện Quân y"],
@@ -392,59 +409,61 @@ for (const [type, code, name] of catalogs) {
   });
 }
 
-const intakeStartsAt = new Date();
-intakeStartsAt.setDate(intakeStartsAt.getDate() - 1);
-const intakeEndsAt = new Date();
-intakeEndsAt.setDate(intakeEndsAt.getDate() + 30);
+if (process.env.NODE_ENV !== "production") {
+  const intakeStartsAt = new Date();
+  intakeStartsAt.setDate(intakeStartsAt.getDate() - 1);
+  const intakeEndsAt = new Date();
+  intakeEndsAt.setDate(intakeEndsAt.getDate() + 30);
 
-await prisma.proposalIntakePeriod.upsert({
-  where: { code: "INTAKE-2026-SEED" },
-  update: {
-    title: "Đợt tiếp nhận hồ sơ nghiên cứu 2026",
-    description: "Đợt tiếp nhận mẫu phục vụ kiểm thử EP-02.",
-    startsAt: intakeStartsAt,
-    endsAt: intakeEndsAt,
-    status: "open",
-    applicableOrganizationUnitId: "org-khti",
-    requiredPackage: [
-      {
-        code: "proposal-form",
-        label: "Thuyết minh đề tài",
-        allowedMimeTypes: ["application/pdf"],
-        maxSizeMb: 5
-      },
-      {
-        code: "budget-form",
-        label: "Dự toán kinh phí",
-        allowedMimeTypes: ["application/pdf"],
-        maxSizeMb: 5
-      }
-    ]
-  },
-  create: {
-    code: "INTAKE-2026-SEED",
-    title: "Đợt tiếp nhận hồ sơ nghiên cứu 2026",
-    description: "Đợt tiếp nhận mẫu phục vụ kiểm thử EP-02.",
-    startsAt: intakeStartsAt,
-    endsAt: intakeEndsAt,
-    status: "open",
-    applicableOrganizationUnitId: "org-khti",
-    requiredPackage: [
-      {
-        code: "proposal-form",
-        label: "Thuyết minh đề tài",
-        allowedMimeTypes: ["application/pdf"],
-        maxSizeMb: 5
-      },
-      {
-        code: "budget-form",
-        label: "Dự toán kinh phí",
-        allowedMimeTypes: ["application/pdf"],
-        maxSizeMb: 5
-      }
-    ]
-  }
-});
+  await prisma.proposalIntakePeriod.upsert({
+    where: { code: "INTAKE-2026-SEED" },
+    update: {
+      title: "Đợt tiếp nhận hồ sơ nghiên cứu 2026",
+      description: "Đợt tiếp nhận mẫu phục vụ kiểm thử EP-02.",
+      startsAt: intakeStartsAt,
+      endsAt: intakeEndsAt,
+      status: "open",
+      applicableOrganizationUnitId: "org-khti",
+      requiredPackage: [
+        {
+          code: "proposal-form",
+          label: "Thuyết minh đề tài",
+          allowedMimeTypes: ["application/pdf"],
+          maxSizeMb: 5
+        },
+        {
+          code: "budget-form",
+          label: "Dự toán kinh phí",
+          allowedMimeTypes: ["application/pdf"],
+          maxSizeMb: 5
+        }
+      ]
+    },
+    create: {
+      code: "INTAKE-2026-SEED",
+      title: "Đợt tiếp nhận hồ sơ nghiên cứu 2026",
+      description: "Đợt tiếp nhận mẫu phục vụ kiểm thử EP-02.",
+      startsAt: intakeStartsAt,
+      endsAt: intakeEndsAt,
+      status: "open",
+      applicableOrganizationUnitId: "org-khti",
+      requiredPackage: [
+        {
+          code: "proposal-form",
+          label: "Thuyết minh đề tài",
+          allowedMimeTypes: ["application/pdf"],
+          maxSizeMb: 5
+        },
+        {
+          code: "budget-form",
+          label: "Dự toán kinh phí",
+          allowedMimeTypes: ["application/pdf"],
+          maxSizeMb: 5
+        }
+      ]
+    }
+  });
+}
 
 await prisma.systemParameter.upsert({
   where: { key: "session_timeout_minutes" },
@@ -485,6 +504,7 @@ await prisma.notificationTemplate.upsert({
 // Seed researcher profiles for internal researchers
 const doctorDegree = await prisma.catalogItem.findFirst({ where: { type: "academic-degree", code: "doctor" } });
 
+if (process.env.NODE_ENV !== "production") {
 const patuanProfile = await prisma.researcherProfile.upsert({
   where: { linkedUserId: "user-pi" },
   update: {
@@ -1635,6 +1655,6 @@ for (const doc of sampleDocs) {
     }
   });
 }
-
+}
 await prisma.$disconnect();
 
