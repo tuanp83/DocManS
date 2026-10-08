@@ -328,10 +328,27 @@ function createPrisma() {
       async findUnique({ where }) {
         return store.fileRecords.find((item) => item.id === where.id) ?? null;
       },
+      async findFirst({ where }) {
+        const matches = store.fileRecords.filter((item) => {
+          if (where.relatedEntityType && item.relatedEntityType !== where.relatedEntityType) return false;
+          if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
+          if (where.filePurpose && item.filePurpose !== where.filePurpose) return false;
+          if (where.status && !(typeof where.status === "object" ? where.status.in.includes(item.status) : item.status === where.status)) return false;
+          if (where.deletedAt === null && item.deletedAt !== null) return false;
+          return true;
+        });
+        return matches.sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0] ?? null;
+      },
+      async update({ where, data }) {
+        const record = store.fileRecords.find((item) => item.id === where.id);
+        if (!record) throw new Error("file record not found");
+        Object.assign(record, data, { updatedAt: new Date() });
+        return record;
+      },
       async findMany({ where }) {
         return store.fileRecords.filter((item) => {
           if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
-          if (where.status && item.status !== where.status) return false;
+          if (where.status && !(typeof where.status === "object" ? where.status.in.includes(item.status) : item.status === where.status)) return false;
           if (where.deletedAt === null && item.deletedAt !== null) return false;
           return true;
         });
@@ -633,12 +650,13 @@ describe("ST-3.2 reviewer assignment and assignment-scoped proposal access", () 
     // No assignment, no reviewer permission, no state change — only the denial trail.
     assert.equal(services.prisma.store.reviewAssignments.length, 0);
     assert.equal(services.prisma.store.proposals.find((item) => item.id === proposal.id).status, "submitted");
-    assert.equal(services.auditLog.find("assign-reviewer").length, 3);
+    const denials = services.prisma.store.auditLogs.filter((record) => record.action === "assign-reviewer");
+    assert.equal(denials.length, 3);
     assert.equal(
-      services.auditLog.find("assign-reviewer").every((record) => record.result === "failure"),
+      denials.every((record) => record.result === "failure"),
       true
     );
-    assert.equal(JSON.parse(services.auditLog.find("assign-reviewer")[0].reason).reasonCode, "participation");
+    assert.equal(JSON.parse(denials[0].reason).reasonCode, "participation");
   });
 
   it("Story 1.9: an active staff secretary cannot bypass the capability response to assign a reviewer", async () => {
@@ -1030,7 +1048,7 @@ describe("ST-3.4 evaluation progress and consolidation", () => {
 
     // A revoked assignment must not hold the round open.
     const openAssignment = services.prisma.store.reviewAssignments.find((item) => item.reviewerUserId === secondReviewerUser.id);
-    await services.assignments.revokeAssignment(staffUser, proposal.id, openAssignment.id, {});
+    await services.assignments.revokeAssignment(staffUser, proposal.id, openAssignment.id, { reason: "Người đánh giá không thể tiếp tục" });
     const afterRevoke = await services.summaries.getReviewProgress(staffUser, proposal.id);
     assert.equal(afterRevoke.pendingCount, 0);
     assert.equal(afterRevoke.allReviewsSubmitted, true);

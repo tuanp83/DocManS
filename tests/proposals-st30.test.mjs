@@ -278,10 +278,27 @@ function createPrisma() {
       async findUnique({ where }) {
         return store.fileRecords.find((item) => item.id === where.id) ?? null;
       },
+      async findFirst({ where }) {
+        const matches = store.fileRecords.filter((item) => {
+          if (where.relatedEntityType && item.relatedEntityType !== where.relatedEntityType) return false;
+          if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
+          if (where.filePurpose && item.filePurpose !== where.filePurpose) return false;
+          if (where.status && !(typeof where.status === "object" ? where.status.in.includes(item.status) : item.status === where.status)) return false;
+          if (where.deletedAt === null && item.deletedAt !== null) return false;
+          return true;
+        });
+        return matches.sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0] ?? null;
+      },
+      async update({ where, data }) {
+        const record = store.fileRecords.find((item) => item.id === where.id);
+        if (!record) throw new Error("file record not found");
+        Object.assign(record, data, { updatedAt: new Date() });
+        return record;
+      },
       async findMany({ where }) {
         return store.fileRecords.filter((item) => {
           if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
-          if (where.status && item.status !== where.status) return false;
+          if (where.status && !(typeof where.status === "object" ? where.status.in.includes(item.status) : item.status === where.status)) return false;
           if (where.deletedAt === null && item.deletedAt !== null) return false;
           return true;
         });

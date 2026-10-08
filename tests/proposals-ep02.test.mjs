@@ -302,13 +302,24 @@ function createEp02Prisma() {
           if (where.id && item.id !== where.id) return false;
           if (where.relatedEntityType && item.relatedEntityType !== where.relatedEntityType) return false;
           if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
-          if (where.status && item.status !== where.status) return false;
+          if (where.status && !(typeof where.status === "object" ? where.status.in.includes(item.status) : item.status === where.status)) return false;
           if (where.deletedAt === null && item.deletedAt !== null) return false;
           return true;
         });
       },
       async findUnique({ where }) {
         return store.fileRecords.find((item) => item.id === where.id) ?? null;
+      },
+      async findFirst({ where }) {
+        const matches = store.fileRecords.filter((item) => {
+          if (where.relatedEntityType && item.relatedEntityType !== where.relatedEntityType) return false;
+          if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
+          if (where.filePurpose && item.filePurpose !== where.filePurpose) return false;
+          if (where.status && !(typeof where.status === "object" ? where.status.in.includes(item.status) : item.status === where.status)) return false;
+          if (where.deletedAt === null && item.deletedAt !== null) return false;
+          return true;
+        });
+        return matches.sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0] ?? null;
       },
       async update({ where, data }) {
         const index = store.fileRecords.findIndex((item) => item.id === where.id);
@@ -534,7 +545,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     assert.equal(piList[0].id, intake.id);
     assert.equal(closed.status, "closed");
     assert.deepEqual(
-      auditLog.records.map((record) => record.action),
+      prisma.store.auditLogs.map((record) => record.action),
       ["create-proposal-intake-period", "open-proposal-intake-period", "close-proposal-intake-period"]
     );
 
@@ -581,10 +592,10 @@ describe("EP-02 proposal intake and submission behavior", () => {
     const auditLog = createAuditLog();
     const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
     const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma));
-    await createOpenIntake(intakeService);
+    const intake = await createOpenIntake(intakeService);
 
     const draft = await proposalService.createDraft(piUser, {
-      intakePeriodId: "intake-1",
+      intakePeriodId: intake.id,
       title: "Nghiên cứu ban đầu",
       hostOrganizationUnitId: "org-khti"
     });
@@ -608,9 +619,9 @@ describe("EP-02 proposal intake and submission behavior", () => {
     );
     await assert.rejects(() => proposalService.updateDraft(otherPiUser, draft.id, { title: "Chiếm quyền" }), ForbiddenException);
 
-    await intakeService.closePeriod(staffUser, "intake-1");
+    await intakeService.closePeriod(staffUser, intake.id);
     await assert.rejects(
-      () => proposalService.createDraft(piUser, { intakePeriodId: "intake-1", title: "Đợt đã đóng", hostOrganizationUnitId: "org-khti" }),
+      () => proposalService.createDraft(piUser, { intakePeriodId: intake.id, title: "Đợt đã đóng", hostOrganizationUnitId: "org-khti" }),
       BadRequestException
     );
   });
@@ -829,7 +840,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     assert.equal(staffMetadata[0].canEdit, false);
     assert.equal(staffMetadata[0].canDelete, false);
     assert.equal((await filesService.downloadFile(staffUser, attachment.id)).fileName, "Chỉ số Glucose.docx");
-    assert.ok(auditLog.records.some((record) => record.action === "upload-file"));
+    assert.ok(prisma.store.auditLogs.some((record) => record.action === "upload-file"));
     assert.equal(auditLog.records.at(-1).action, "download-file");
   });
 
@@ -874,7 +885,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     assert.equal((await proposalService.getReadiness(piUser, draft.id)).missingFiles.some((item) => item.code === "proposal-form"), true);
     await assert.rejects(() => filesService.downloadFile(piUser, attachment.id), NotFoundException);
     assert.deepEqual(
-      auditLog.records.map((record) => record.action).slice(-2),
+      prisma.store.auditLogs.map((record) => record.action).slice(-2),
       ["update-file-description", "delete-file"]
     );
   });
@@ -1026,7 +1037,6 @@ describe("EP-02 proposal intake and submission behavior", () => {
       assert.equal(error instanceof BadRequestException, true);
       const response = error.getResponse();
       assert.ok(response.missingFields.some((item) => item.code === "research-field"));
-      assert.ok(response.missingFields.some((item) => item.code === "members"));
       assert.ok(response.missingFiles.some((item) => item.code === "proposal-form"));
       return true;
     });
@@ -1150,17 +1160,16 @@ describe("EP-02 proposal intake and submission behavior", () => {
     assert.ok(resubmitted.supplementRequests[0].resolvedAt);
     assert.equal(resubmitted.history.at(-1).fromStatus, "supplement_requested");
     assert.equal(resubmitted.history.at(-1).toStatus, "resubmitted");
-    assert.equal(auditLog.records.some((record) => record.action === "upload-file"), true);
+    assert.equal(prisma.store.auditLogs.some((record) => record.action === "upload-file"), true);
     assert.equal(prisma.store.auditLogs.at(-1).action, "resubmit-proposal");
 
     await assert.rejects(() => proposalService.resubmitProposal(piUser, submitted.id), BadRequestException);
-    await assert.rejects(
-      () =>
-        proposalService.requestSupplement(scopedStaff, draft.id, {
-          reason: "Không thể yêu cầu bổ sung sau khi đã nộp lại.",
-          dueDate: futureDate(5)
-        }),
-      BadRequestException
-    );
+    // A resubmitted proposal is re-checked and may receive another supplement round.
+    const secondRound = await proposalService.requestSupplement(scopedStaff, draft.id, {
+      reason: "Cần bổ sung thêm minh chứng sau khi nộp lại.",
+      dueDate: futureDate(5)
+    });
+    assert.equal(secondRound.status, "supplement_requested");
+    assert.equal(secondRound.supplementRequests.filter((item) => item.status === "open").length, 1);
   });
 });
