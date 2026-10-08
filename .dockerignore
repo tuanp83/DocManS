@@ -20,3 +20,5 @@ docs
 .codegraph
 **/*.dump
 **/*.log
+reports
+output

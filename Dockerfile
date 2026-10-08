@@ -16,8 +16,10 @@ COPY packages/validation/package.json packages/validation/
 RUN npm ci --ignore-scripts
 
 FROM deps AS builder
-# NEXT_PUBLIC_* values are inlined into the browser bundle at build time.
-ARG NEXT_PUBLIC_API_BASE_URL
+# NEXT_PUBLIC_* values are inlined into the browser bundle at build time. The relative default
+# keeps the image domain-independent: browsers call the same origin and nginx routes /api/ to the
+# API. Server-side middleware uses API_INTERNAL_BASE_URL instead.
+ARG NEXT_PUBLIC_API_BASE_URL=/api/v1
 ARG NEXT_PUBLIC_APP_NAME="DocManS"
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
     NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME \

@@ -177,9 +177,22 @@ if (process.env.NODE_ENV === "production") {
   if (existingAdmin) {
     console.log("Seed production: tài khoản quản trị đã tồn tại, giữ nguyên (không ghi đè thông tin đăng nhập).");
   } else {
+    if (!/^[a-z0-9][a-z0-9._-]{2,63}$/i.test(adminUsername)) {
+      throw new Error("ADMIN_USERNAME chỉ gồm chữ, số, dấu chấm, gạch dưới, gạch ngang (3–64 ký tự).");
+    }
     const initialPassword = process.env.ADMIN_INITIAL_PASSWORD ?? "";
-    if (initialPassword.length < 12) {
-      throw new Error("ADMIN_INITIAL_PASSWORD (>= 12 ký tự) là bắt buộc để khởi tạo tài khoản quản trị production lần đầu.");
+    // Same policy as apps/api/src/auth/password-request.pipe.ts.
+    if (
+      initialPassword.length < 12 ||
+      initialPassword.length > 256 ||
+      /\s/.test(initialPassword) ||
+      !/[a-z]/.test(initialPassword) ||
+      !/[A-Z]/.test(initialPassword) ||
+      !/\d/.test(initialPassword)
+    ) {
+      throw new Error(
+        "ADMIN_INITIAL_PASSWORD là bắt buộc khi khởi tạo lần đầu: 12–256 ký tự, không có khoảng trắng, gồm chữ thường, chữ hoa và chữ số."
+      );
     }
     const salt = randomBytes(16).toString("hex");
     const derivedKey = await scryptAsync(initialPassword, salt, 64);

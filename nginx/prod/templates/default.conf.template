@@ -26,8 +26,9 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
 
-    # Keep in sync with FILE_MAX_UPLOAD_BYTES (backend remains authoritative).
-    client_max_body_size 25m;
+    # FILE_MAX_UPLOAD_BYTES defaults to 10 MB; 11m leaves room for multipart overhead.
+    # Raise both together (backend remains authoritative).
+    client_max_body_size 11m;
 
     # NestJS API: controllers already carry the /api/v1 prefix, so the full URI is forwarded unchanged.
     location /api/ {
