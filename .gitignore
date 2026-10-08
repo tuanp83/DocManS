@@ -15,3 +15,7 @@ apps/web/.next/
 .codegraph/
 users.md
 _bmad/
+# Production secrets and runtime artifacts
+.env.production
+nginx/ssl/
+backups/

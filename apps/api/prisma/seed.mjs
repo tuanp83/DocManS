@@ -1,4 +1,6 @@
 import "dotenv/config";
+import { randomBytes, scrypt } from "node:crypto";
+import { promisify } from "node:util";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Client as MinioClient } from "minio";
@@ -12,6 +14,7 @@ if (!databaseUrl) {
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: databaseUrl })
 });
+const scryptAsync = promisify(scrypt);
 
 // Demo/local seed accounts. All seeded users share the password "1234"
 // (scrypt-hashed below, salt = user id, matching apps/api/src/auth/password.service.ts).
@@ -159,21 +162,40 @@ const users = [
   }
 ];
 
+// Production: no demo accounts. Exactly one bootstrap SYSTEM_ADMIN whose initial password comes
+// from ADMIN_INITIAL_PASSWORD (never hard-coded), hashed exactly like PasswordService.hashPassword
+// (scrypt, random 16-byte hex salt, 64-byte key), and forced to change on first login.
+// Re-running the seed on later deploys never resets the admin's credentials.
+const PRODUCTION_ADMIN_ID = "user-admin-prod";
+
 if (process.env.NODE_ENV === "production") {
-  console.log("🌱 Chạy seed cho môi trường PRODUCTION. Chỉ khởi tạo 1 tài khoản admin.");
-  // Giữ lại mỗi admin
   users.length = 0;
-  users.push({
-    id: "user-admin-prod",
-    username: "admin",
-    passwordHash:
-      "scrypt:user-admin-prod:88577689e88df3ec17a117384f8a68ff4e516d4ccc3c4a7783764eb66f4a72a8c35ae574d915e01d7ba3fe5e3a800b30463e721c488544ca3fc90192544e0c43",
-    displayName: "Quản trị Hệ thống",
-    status: "active",
-    systemRole: "SYSTEM_ADMIN",
-    unit: "Ban Giám Đốc"
-  });
-  console.warn("⚠️ VUI LÒNG ĐĂNG NHẬP BẰNG TÀI KHOẢN admin/1234 VÀ ĐỔI MẬT KHẨU NGAY LẬP TỨC.");
+
+  const adminUsername = (process.env.ADMIN_USERNAME ?? "admin").trim();
+  const existingAdmin = await prisma.user.findUnique({ where: { id: PRODUCTION_ADMIN_ID }, select: { id: true } });
+
+  if (existingAdmin) {
+    console.log("Seed production: tài khoản quản trị đã tồn tại, giữ nguyên (không ghi đè thông tin đăng nhập).");
+  } else {
+    const initialPassword = process.env.ADMIN_INITIAL_PASSWORD ?? "";
+    if (initialPassword.length < 12) {
+      throw new Error("ADMIN_INITIAL_PASSWORD (>= 12 ký tự) là bắt buộc để khởi tạo tài khoản quản trị production lần đầu.");
+    }
+    const salt = randomBytes(16).toString("hex");
+    const derivedKey = await scryptAsync(initialPassword, salt, 64);
+
+    users.push({
+      id: PRODUCTION_ADMIN_ID,
+      username: adminUsername,
+      passwordHash: `scrypt:${salt}:${derivedKey.toString("hex")}`,
+      mustChangePassword: true,
+      displayName: "Quản trị hệ thống",
+      status: "active",
+      systemRole: "SYSTEM_ADMIN",
+      unit: "Ban Giám Đốc"
+    });
+    console.log(`Seed production: đã tạo tài khoản quản trị "${adminUsername}" (bắt buộc đổi mật khẩu khi đăng nhập lần đầu).`);
+  }
 }
 
 const organizationUnits = [

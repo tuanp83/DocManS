@@ -1,44 +1,44 @@
-# Build environment
-FROM node:22-alpine AS builder
+# syntax=docker/dockerfile:1
+# One image, three roles selected by the compose `command`:
+#   migrate -> prisma migrate deploy + production seed (one-shot)
+#   api     -> node dist/apps/api/main.js
+#   web     -> next start apps/web
+# Node 24 matches local development: the API imports workspace packages (@rtms/*) whose entry
+# points are TypeScript and relies on Node's built-in type stripping.
 
-# Enable corepack for modern package management if needed
-# RUN corepack enable
-
+FROM node:24-alpine AS deps
 WORKDIR /app
-COPY package*.json ./
-# Cài đặt toàn bộ dependencies (bao gồm devDependencies) để build
-RUN npm ci
+COPY package.json package-lock.json ./
+COPY packages/contracts/package.json packages/contracts/
+COPY packages/permissions/package.json packages/permissions/
+COPY packages/ui-tokens/package.json packages/ui-tokens/
+COPY packages/validation/package.json packages/validation/
+RUN npm ci --ignore-scripts
 
+FROM deps AS builder
+# NEXT_PUBLIC_* values are inlined into the browser bundle at build time.
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_APP_NAME="DocManS"
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
+    NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME \
+    NEXT_TELEMETRY_DISABLED=1
+RUN test -n "$NEXT_PUBLIC_API_BASE_URL" || (echo "NEXT_PUBLIC_API_BASE_URL build arg is required" && exit 1)
 COPY . .
-# Build Next.js và NestJS
-RUN npm run build:web
-RUN npm run build:api
+RUN npm run build
+RUN npm prune --omit=dev --ignore-scripts
 
-# Production runtime
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
-
-ENV NODE_ENV=production
-
-# Copy package.json và cài đặt chỉ production dependencies
-COPY package*.json ./
-RUN npm ci --omit=dev
-
-# Copy build artifacts từ builder
-COPY --from=builder /app/apps/web/.next ./apps/web/.next
-COPY --from=builder /app/apps/web/public ./apps/web/public
-COPY --from=builder /app/dist/apps/api ./dist/apps/api
-COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
-
-# Sinh Prisma client
-RUN npx prisma generate --schema apps/api/prisma/schema.prisma
-
-# Đặt quyền sở hữu cho node user
-RUN chown -R node:node /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+COPY --from=builder --chown=node:node /app/package.json /app/package-lock.json /app/prisma.config.ts ./
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/packages ./packages
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/apps/api/prisma ./apps/api/prisma
+COPY --from=builder --chown=node:node /app/apps/web/next.config.ts ./apps/web/
+COPY --from=builder --chown=node:node /app/apps/web/.next ./apps/web/.next
+COPY --from=builder --chown=node:node /app/apps/web/public ./apps/web/public
 USER node
-
-# Expose ports
 EXPOSE 3000 4000
-
-# Chạy cả Next.js và NestJS bằng concurrently hoặc command tuỳ chỉnh
-CMD ["sh", "-c", "node dist/apps/api/main.js & npx next start apps/web"]
+CMD ["node", "dist/apps/api/main.js"]
