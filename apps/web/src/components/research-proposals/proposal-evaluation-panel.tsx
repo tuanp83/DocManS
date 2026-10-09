@@ -193,7 +193,7 @@ export function ProposalEvaluationPanel({
   // --- State Biên bản họp Hội đồng (Giai đoạn 2) ---
   const [minutesConductedAt, setMinutesConductedAt] = useState("");
   const [minutesConclusion, setMinutesConclusion] = useState<"approved" | "revision_required" | "rejected">("approved");
-  const [minutesAverageScore, setMinutesAverageScore] = useState<number>(85);
+  const [minutesAverageScore, setMinutesAverageScore] = useState<number>(0);
   const [minutesComments, setMinutesComments] = useState("");
   const [minutesModifications, setMinutesModifications] = useState("");
   const [isSavingMinutes, setIsSavingMinutes] = useState(false);
@@ -398,7 +398,7 @@ export function ProposalEvaluationPanel({
         if (min) {
           setMinutesConductedAt(min.meetingConductedAt ? min.meetingConductedAt.split("T")[0] : "");
           setMinutesConclusion(min.conclusion || "approved");
-          setMinutesAverageScore(min.averageScore ?? 85);
+          setMinutesAverageScore(min.averageScore ?? 0);
           setMinutesComments(min.summaryComments || "");
           setMinutesModifications(min.modificationsRequired || "");
         }

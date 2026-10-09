@@ -78,6 +78,12 @@ async function approvedIrbProposal() {
   });
 }
 
+/** Proposal whose acceptance council has been proposed and awaits the leadership decision. */
+async function proposedAcceptanceProposal() {
+  const proposal = await newProposal();
+  return db.researchProposal.update({ where: { id: proposal.id }, data: { acceptanceCouncilMetadata: { status: "PROPOSED", members: [] } } });
+}
+
 const auditCount = (proposalId, action) => db.auditLog.count({ where: { targetEntityId: proposalId, action } });
 const readIrb = async (proposalId) => (await db.researchProposal.findUnique({ where: { id: proposalId } })).irbMetadata;
 
@@ -273,18 +279,18 @@ describe("Council and IRB writes on real PostgreSQL", () => {
 
   it("acceptance decision numbers: NNN/QĐ-HVQY-NT/YYYY per year, kept on re-approval, manual duplicate 409", async () => {
     const approve = (proposal, input = {}) => decisions.approveAcceptanceCouncil(leader, proposal.id, input);
-    const a = await newProposal();
-    const b = await newProposal();
+    const a = await proposedAcceptanceProposal();
+    const b = await proposedAcceptanceProposal();
     const first = await approve(a, { decisionDate: "2031-06-01T00:00:00.000Z" });
     assert.equal(first.acceptanceCouncil.decisionNumber, "001/QĐ-HVQY-NT/2031");
     assert.ok(first.contextVersion);
     assert.equal((await approve(b, { decisionDate: "2031-06-02T00:00:00.000Z" })).acceptanceCouncil.decisionNumber, "002/QĐ-HVQY-NT/2031");
     assert.equal((await approve(a, { contextVersion: first.contextVersion })).acceptanceCouncil.decisionNumber, "001/QĐ-HVQY-NT/2031");
 
-    const c = await newProposal();
+    const c = await proposedAcceptanceProposal();
     await assert.rejects(approve(c, { decisionNumber: "001/QĐ-HVQY-NT/2031" }), (error) =>
       error instanceof ConflictException && error.getResponse().code === "ACCEPTANCE_DECISION_NUMBER_TAKEN");
-    assert.equal((await db.researchProposal.findUnique({ where: { id: c.id } })).acceptanceCouncilMetadata, null);
+    assert.equal((await db.researchProposal.findUnique({ where: { id: c.id } })).acceptanceCouncilMetadata.status, "PROPOSED");
     await assert.rejects(approve(c, { decisionNumber: "x".repeat(101) }), BadRequestException);
     await assert.rejects(decisions.approveAcceptanceCouncil(staff, c.id, {}), ForbiddenException);
 
@@ -376,5 +382,57 @@ describe("Council and IRB writes on real PostgreSQL", () => {
     }
     assert.equal((await db.researchProposal.findUnique({ where: { id: proposal.id } })).disbursementMetadata, null);
     assert.equal(await auditCount(proposal.id, "update-disbursement"), 0);
+  });
+
+  it("acceptance council follows PROPOSED → ESTABLISHED → EVALUATED with required scores and no conflicted members", async () => {
+    const profileFor = (user, name) => db.researcherProfile.create({
+      data: { managementOrganizationUnitId: orgA.id, fullName: name, fullNameKey: name.toLowerCase(), createdById: staff.id, updatedById: staff.id, status: "ACTIVE", ...(user ? { linkedUserId: user.id } : {}) }
+    });
+    const chair = await profileFor(memberA, unique("Chủ tịch"));
+    const secretary = await profileFor(memberB, unique("Thư ký"));
+    const reviewer = await profileFor(outsider, unique("Phản biện"));
+    const ownerProfile = await profileFor(owner, unique("Chủ nhiệm"));
+    const members = [
+      { profileId: chair.id, role: "CHAIRMAN", fullName: "Tên giả từ trình duyệt" },
+      { profileId: secretary.id, role: "SECRETARY" },
+      { profileId: reviewer.id, role: "REVIEWER_1" }
+    ];
+
+    const proposal = await newProposal();
+    // Not yet an approved, running project.
+    await assert.rejects(decisions.proposeAcceptanceCouncil(staff, proposal.id, { members }), BadRequestException);
+    await db.researchProposal.update({ where: { id: proposal.id }, data: { status: "approved" } });
+
+    await assert.rejects(decisions.proposeAcceptanceCouncil(staff, proposal.id, { members: members.slice(0, 2) }), BadRequestException);
+    await assert.rejects(decisions.proposeAcceptanceCouncil(staff, proposal.id, { members: [...members.slice(0, 2), { profileId: ownerProfile.id, role: "REVIEWER_1" }] }), (error) =>
+      error instanceof ForbiddenException && error.getResponse().code === "CONFLICT_DENIED");
+    await assert.rejects(decisions.recordAcceptanceMinutes(staff, proposal.id, { reportScore: 30 }), (error) =>
+      error instanceof ConflictException && error.getResponse().code === "WORKFLOW_STATE_DENIED");
+
+    const proposed = await decisions.proposeAcceptanceCouncil(staff, proposal.id, { members, councilType: "FACILITY" });
+    assert.equal(proposed.acceptanceCouncil.status, "PROPOSED");
+    assert.equal(proposed.acceptanceCouncil.councilType, "FACILITY");
+    assert.equal(proposed.acceptanceCouncil.members[0].fullName, chair.fullName);
+    assert.equal(proposed.acceptanceCouncil.meetingLocation, "");
+
+    const established = await decisions.approveAcceptanceCouncil(leader, proposal.id, { decisionDate: "2032-03-01T00:00:00.000Z" });
+    assert.equal(established.acceptanceCouncil.status, "ESTABLISHED");
+    await assert.rejects(decisions.proposeAcceptanceCouncil(staff, proposal.id, { members }), ConflictException);
+
+    // Scores are mandatory and bounded; a failing total cannot be concluded as "approved".
+    for (const input of [{}, { reportScore: 30, scientificProductsScore: 30, trainingProductsScore: 15 }, { reportScore: 31, scientificProductsScore: 30, trainingProductsScore: 15, militaryMedicalPracticalScore: 25 }, { reportScore: 10, scientificProductsScore: 10, trainingProductsScore: 5, militaryMedicalPracticalScore: 5, resolution: "approved" }]) {
+      await assert.rejects(decisions.recordAcceptanceMinutes(staff, proposal.id, input), BadRequestException, JSON.stringify(input));
+    }
+    assert.equal((await db.researchProposal.findUnique({ where: { id: proposal.id } })).acceptanceCouncilMetadata.status, "ESTABLISHED");
+
+    const evaluated = await decisions.recordAcceptanceMinutes(staff, proposal.id, { reportScore: 25, scientificProductsScore: 24, trainingProductsScore: 12, militaryMedicalPracticalScore: 20, assessmentComments: "Đạt yêu cầu." });
+    assert.equal(evaluated.acceptanceCouncil.status, "EVALUATED");
+    assert.equal(evaluated.acceptanceCouncil.evaluationResult.totalScore, 81);
+    assert.equal(evaluated.acceptanceCouncil.evaluationResult.classification, "PASSED");
+    assert.equal(evaluated.acceptanceCouncil.resolution, "approved");
+
+    // A recorded result is final: no second minutes, no re-establishing the council.
+    await assert.rejects(decisions.recordAcceptanceMinutes(staff, proposal.id, { reportScore: 30, scientificProductsScore: 30, trainingProductsScore: 15, militaryMedicalPracticalScore: 25 }), ConflictException);
+    await assert.rejects(decisions.approveAcceptanceCouncil(leader, proposal.id, {}), ConflictException);
   });
 });

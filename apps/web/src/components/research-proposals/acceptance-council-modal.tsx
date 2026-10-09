@@ -54,6 +54,13 @@ const ROLE_OPTIONS = [
   { value: "MEMBER", label: "Ủy viên Hội đồng" },
 ];
 
+// Máy chủ dùng PROPOSED → ESTABLISHED → EVALUATED; dữ liệu cũ có thể còn "proposed"/"approved"/"completed".
+function normalizeAcceptanceStatus(value: unknown): "NONE" | "PROPOSED" | "ESTABLISHED" | "EVALUATED" {
+  const legacy: Record<string, "PROPOSED" | "ESTABLISHED" | "EVALUATED"> = { proposed: "PROPOSED", approved: "ESTABLISHED", completed: "EVALUATED" };
+  if (value === "PROPOSED" || value === "ESTABLISHED" || value === "EVALUATED") return value;
+  return typeof value === "string" && legacy[value] ? legacy[value] : "NONE";
+}
+
 export function AcceptanceCouncilModal({
   isOpen,
   onClose,
@@ -67,7 +74,7 @@ export function AcceptanceCouncilModal({
     proposal.acceptanceCouncilMetadata?.councilType || "OFFICIAL"
   );
   const [status, setStatus] = useState<"NONE" | "PROPOSED" | "ESTABLISHED" | "EVALUATED">(
-    proposal.acceptanceCouncilMetadata?.status || "NONE"
+    normalizeAcceptanceStatus(proposal.acceptanceCouncilMetadata?.status)
   );
 
   // Candidates & COI
@@ -98,16 +105,16 @@ export function AcceptanceCouncilModal({
     proposal.acceptanceCouncilMetadata?.meetingLocation || "Phòng họp số 1 - Ban Quản lý Khoa học, Học viện Quân y"
   );
   const [reportScore, setReportScore] = useState<number>(
-    proposal.acceptanceCouncilMetadata?.evaluationResult?.reportScore ?? 28
+    proposal.acceptanceCouncilMetadata?.evaluationResult?.reportScore ?? 0
   );
   const [scientificScore, setScientificScore] = useState<number>(
-    proposal.acceptanceCouncilMetadata?.evaluationResult?.scientificProductsScore ?? 27
+    proposal.acceptanceCouncilMetadata?.evaluationResult?.scientificProductsScore ?? 0
   );
   const [trainingScore, setTrainingScore] = useState<number>(
-    proposal.acceptanceCouncilMetadata?.evaluationResult?.trainingProductsScore ?? 14
+    proposal.acceptanceCouncilMetadata?.evaluationResult?.trainingProductsScore ?? 0
   );
   const [practicalScore, setPracticalScore] = useState<number>(
-    proposal.acceptanceCouncilMetadata?.evaluationResult?.militaryMedicalPracticalScore ?? 24
+    proposal.acceptanceCouncilMetadata?.evaluationResult?.militaryMedicalPracticalScore ?? 0
   );
   const [comments, setComments] = useState<string>(
     proposal.acceptanceCouncilMetadata?.evaluationResult?.assessmentComments ||
@@ -193,7 +200,7 @@ export function AcceptanceCouncilModal({
       });
       if (res.success) {
         if (res.contextVersion) setContextVersion(res.contextVersion);
-        setStatus(res.acceptanceCouncil.status);
+        setStatus(normalizeAcceptanceStatus(res.acceptanceCouncil.status));
         setMessage({ type: "success", text: "Đã đề xuất danh sách Hội đồng nghiệm thu thành công!" });
         onSuccess?.();
       }
@@ -217,7 +224,7 @@ export function AcceptanceCouncilModal({
       if (res.success) {
         if (res.contextVersion) setContextVersion(res.contextVersion);
         if (res.acceptanceCouncil.decisionNumber) setDecisionNumber(res.acceptanceCouncil.decisionNumber);
-        setStatus(res.acceptanceCouncil.status);
+        setStatus(normalizeAcceptanceStatus(res.acceptanceCouncil.status));
         setMessage({ type: "success", text: "Thủ trưởng đã ký Quyết định thành lập Hội đồng nghiệm thu!" });
         onSuccess?.();
       }
@@ -244,7 +251,7 @@ export function AcceptanceCouncilModal({
       });
       if (res.success) {
         if (res.contextVersion) setContextVersion(res.contextVersion);
-        setStatus(res.acceptanceCouncil.status);
+        setStatus(normalizeAcceptanceStatus(res.acceptanceCouncil.status));
         setMessage({ type: "success", text: "Đã ghi nhận kết quả và biên bản nghiệm thu thành công!" });
         onSuccess?.();
       }

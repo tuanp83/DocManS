@@ -24,6 +24,7 @@ import { ProposalEvaluationSummaryService } from "./proposal-evaluation-summary.
 import { ProposalReviewAssignmentsService } from "./proposal-review-assignments.service.js";
 import { ProposalReviewsService } from "./proposal-reviews.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
+import { ACCEPTANCE_ELIGIBLE_PROPOSAL_STATUSES, assertAcceptanceStatus, readAcceptanceMembers, readAcceptanceScores, readAcceptanceStatus, readCouncilType, readOptionalDateText, readOptionalText, readResolution, type AcceptanceMemberInput } from "./acceptance-council.js";
 import { computeDisbursementTotals, emptyDisbursement, readApprovedBudget, readDisbursementInput, stampMilestoneDates, type DisbursementRecord } from "./disbursement.js";
 
 export const PROPOSAL_DECISIONS = {
@@ -747,42 +748,79 @@ export class ProposalDecisionsService {
 
   async proposeAcceptanceCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
     return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
-    assertScientificManagementScope(actor, proposal);
+      assertScientificManagementScope(actor, proposal);
+      assertProposalStatus(proposal, ACCEPTANCE_ELIGIBLE_PROPOSAL_STATUSES, "Chỉ đề tài đã được phê duyệt và đang thực hiện mới được lập hội đồng nghiệm thu.");
+      const current = (proposal.acceptanceCouncilMetadata as Record<string, unknown> | null) ?? null;
+      // Được đề xuất lại (sửa danh sách) khi hội đồng chưa được lãnh đạo thành lập.
+      assertAcceptanceStatus(readAcceptanceStatus(current), ["NONE", "PROPOSED"], "đề xuất hội đồng nghiệm thu");
 
-    const members = (input.members as Array<any>) || [];
-    if (members.length === 0) {
-      throw new BadRequestException({ message: "Hội đồng nghiệm thu cần ít nhất 3 thành viên (Chủ tịch, Phản biện, Thư ký)." });
-    }
+      const requested = readAcceptanceMembers(input.members);
+      const members = await this.resolveAcceptanceMembers(tx, proposal, requested);
 
-    const acceptanceCouncil = {
-      status: "proposed",
-      proposedAt: new Date().toISOString(),
-      proposedById: actor.id,
-      proposedByName: actor.displayName || actor.username,
-      acceptanceType: (input.acceptanceType as string) || "official", // "grassroots" | "official"
-      meetingDate: (input.meetingDate as string) || null,
-      meetingLocation: (input.meetingLocation as string) || "Phòng họp Trung tâm - Học viện Quân y",
-      tentativeAgenda: (input.tentativeAgenda as string) || "Hội đồng đánh giá nghiệm thu kết quả thực hiện nhiệm vụ KH&CN cấp Học viện",
-      members
-    };
+      const acceptanceCouncil = {
+        status: "PROPOSED" as const,
+        councilType: readCouncilType(input.councilType ?? input.acceptanceType),
+        proposedAt: new Date().toISOString(),
+        proposedById: actor.id,
+        proposedByName: actor.displayName || actor.username,
+        meetingDate: readOptionalDateText(input.meetingDate, "Ngày họp"),
+        meetingLocation: readOptionalText(input.meetingLocation, "Địa điểm họp", 300),
+        tentativeAgenda: readOptionalText(input.tentativeAgenda, "Chương trình dự kiến", 2000),
+        members
+      };
 
-    await tx.researchProposal.update({
-      where: { id: proposalId },
-      data: {
-        acceptanceCouncilMetadata: acceptanceCouncil
+      await tx.researchProposal.update({
+        where: { id: proposalId },
+        data: { acceptanceCouncilMetadata: acceptanceCouncil as never }
+      });
+
+      await auditLog.record({
+        action: "propose-acceptance-council",
+        result: "success",
+        actorId: actor.id,
+        targetEntity: "proposal",
+        targetEntityId: proposalId,
+        username: actor.username,
+        beforeFacts: current ? { acceptanceCouncil: current } : undefined,
+        afterFacts: { acceptanceCouncil }
+      });
+
+      return { success: true, acceptanceCouncil };
+    });
+  }
+
+  /**
+   * Thành viên hội đồng được xác định từ hồ sơ nhà khoa học trong cơ sở dữ liệu (tên, học hàm, đơn vị
+   * lấy từ hồ sơ, không tin dữ liệu hiển thị do trình duyệt gửi). Hồ sơ phải đang hoạt động, và chủ
+   * nhiệm hoặc thành viên đề tài không được ngồi trong hội đồng nghiệm thu chính đề tài đó.
+   */
+  private async resolveAcceptanceMembers(tx: PrismaService, proposal: { id: string; ownerId: string }, requested: AcceptanceMemberInput[]) {
+    const profiles = (await tx.researcherProfile.findMany({
+      where: { id: { in: requested.map((member) => member.profileId) } },
+      select: { id: true, fullName: true, title: true, status: true, linkedUserId: true, managementOrganizationUnit: { select: { name: true } } }
+    } as never)) as unknown as Array<{ id: string; fullName: string; title: string | null; status: string; linkedUserId: string | null; managementOrganizationUnit: { name: string } | null }>;
+    const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+
+    const teamUserIds = new Set<string>([proposal.ownerId]);
+    const team = (await tx.proposalMember.findMany({ where: { proposalId: proposal.id, status: "ACTIVE" }, select: { userId: true } } as never)) as unknown as Array<{ userId: string | null }>;
+    for (const member of team) if (member.userId) teamUserIds.add(member.userId);
+
+    return requested.map((member) => {
+      const profile = byId.get(member.profileId);
+      if (!profile || profile.status !== "ACTIVE") {
+        throw new BadRequestException({ code: "ACCEPTANCE_INVALID", message: "Có thành viên hội đồng không tồn tại hoặc hồ sơ đã ngừng hoạt động." });
       }
-    });
-
-    await auditLog.record({
-      action: "propose-acceptance-council",
-      result: "success",
-      actorId: actor.id,
-      targetEntity: "proposal",
-      targetEntityId: proposalId,
-      username: actor.username
-    });
-
-    return { success: true, acceptanceCouncil };
+      if (profile.linkedUserId && teamUserIds.has(profile.linkedUserId)) {
+        throw new ForbiddenException({ code: "CONFLICT_DENIED", message: `${profile.fullName} là chủ nhiệm hoặc thành viên đề tài nên không thể tham gia hội đồng nghiệm thu.` });
+      }
+      return {
+        profileId: profile.id,
+        fullName: profile.fullName,
+        academicTitle: profile.title ?? undefined,
+        unit: profile.managementOrganizationUnit?.name ?? undefined,
+        userId: profile.linkedUserId ?? undefined,
+        role: member.role
+      };
     });
   }
 
@@ -801,6 +839,9 @@ export class ProposalDecisionsService {
     assertApprovalAuthority(actor);
 
     const current = (proposal.acceptanceCouncilMetadata as Record<string, unknown>) || {};
+    // Chỉ thành lập hội đồng đã được đề xuất (hoặc ký lại quyết định của hội đồng đã thành lập, giữ
+    // nguyên số); không thành lập lại khi hội đồng đã họp và có kết quả nghiệm thu.
+    assertAcceptanceStatus(readAcceptanceStatus(current), ["PROPOSED", "ESTABLISHED"], "thành lập hội đồng nghiệm thu");
     const requestedNumber = typeof input.decisionNumber === "string" ? input.decisionNumber.trim() : "";
     if (requestedNumber.length > 100) {
       throw new BadRequestException({ message: "Số quyết định không được vượt quá 100 ký tự." });
@@ -814,7 +855,7 @@ export class ProposalDecisionsService {
 
     const updated = {
       ...current,
-      status: "approved",
+      status: "ESTABLISHED",
       approvedAt: new Date().toISOString(),
       approvedById: actor.id,
       approvedByName: actor.displayName || actor.username,
@@ -845,57 +886,47 @@ export class ProposalDecisionsService {
 
   async recordAcceptanceMinutes(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
     return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
-    assertScientificManagementScope(actor, proposal);
+      assertScientificManagementScope(actor, proposal);
 
-    const current = (proposal.acceptanceCouncilMetadata as Record<string, unknown>) || {};
+      const current = (proposal.acceptanceCouncilMetadata as Record<string, unknown>) || {};
+      // Biên bản chỉ ghi cho hội đồng đã được thành lập, và chỉ một lần: kết quả đã có không bị ghi đè.
+      assertAcceptanceStatus(readAcceptanceStatus(current), ["ESTABLISHED"], "ghi biên bản nghiệm thu");
 
-    const reportScore = Number(input.reportScore ?? 28);
-    const scientificProductsScore = Number(input.scientificProductsScore ?? 27);
-    const trainingProductsScore = Number(input.trainingProductsScore ?? 14);
-    const militaryMedicalPracticalScore = Number(input.militaryMedicalPracticalScore ?? 24);
-    const totalScore = Math.min(100, Math.max(0, reportScore + scientificProductsScore + trainingProductsScore + militaryMedicalPracticalScore));
+      // Điểm là bắt buộc — không còn điểm mặc định (trước đây thiếu điểm sẽ tự thành 93 "Xuất sắc").
+      const evaluationResult = {
+        ...readAcceptanceScores(input),
+        assessmentComments: readOptionalText(input.assessmentComments, "Nhận xét của hội đồng", 4000)
+      };
 
-    const classification = totalScore >= 90 ? "EXCELLENT" : totalScore >= 70 ? "PASSED" : "FAILED";
-    const resolution = (input.resolution as string) || "approved";
+      const updated = {
+        ...current,
+        status: "EVALUATED",
+        completedAt: new Date().toISOString(),
+        completedById: actor.id,
+        completedByName: actor.displayName || actor.username,
+        meetingDate: readOptionalDateText(input.meetingDate, "Ngày họp") ?? current.meetingDate ?? null,
+        meetingLocation: readOptionalText(input.meetingLocation, "Địa điểm họp", 300) || current.meetingLocation || "",
+        evaluationResult,
+        resolution: readResolution(input.resolution, evaluationResult.classification),
+        minutesNotes: readOptionalText(input.minutesNotes, "Ghi chú biên bản", 4000)
+      };
 
-    const updated = {
-      ...current,
-      status: "EVALUATED",
-      completedAt: new Date().toISOString(),
-      completedById: actor.id,
-      completedByName: actor.displayName || actor.username,
-      meetingDate: input.meetingDate ?? current.meetingDate,
-      meetingLocation: input.meetingLocation ?? current.meetingLocation,
-      evaluationResult: {
-        reportScore,
-        scientificProductsScore,
-        trainingProductsScore,
-        militaryMedicalPracticalScore,
-        totalScore,
-        classification,
-        assessmentComments: typeof input.assessmentComments === "string" ? input.assessmentComments : ""
-      },
-      resolution,
-      minutesNotes: typeof input.minutesNotes === "string" ? input.minutesNotes : ""
-    };
+      await tx.researchProposal.update({
+        where: { id: proposalId },
+        data: { acceptanceCouncilMetadata: updated as never }
+      });
 
-    await tx.researchProposal.update({
-      where: { id: proposalId },
-      data: {
-        acceptanceCouncilMetadata: updated as any
-      }
-    });
+      await auditLog.record({
+        action: "record-acceptance-minutes",
+        result: "success",
+        actorId: actor.id,
+        targetEntity: "proposal",
+        targetEntityId: proposalId,
+        username: actor.username,
+        afterFacts: { evaluationResult, resolution: updated.resolution }
+      });
 
-    await auditLog.record({
-      action: "record-acceptance-minutes",
-      result: "success",
-      actorId: actor.id,
-      targetEntity: "proposal",
-      targetEntityId: proposalId,
-      username: actor.username
-    });
-
-    return { success: true, acceptanceCouncil: updated };
+      return { success: true, acceptanceCouncil: updated };
     });
   }
 

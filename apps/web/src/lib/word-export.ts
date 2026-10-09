@@ -1,8 +1,12 @@
+
 /**
  * Word Document (.doc / .docx compatible) Export Utility
  * Conforms to Vietnamese Administrative Document Standards (Nghị định 30/2020/NĐ-CP)
  * and Military Science Regulations (Thông tư 57/2021/TT-BQP).
  */
+
+/** Chỗ trống trên văn bản khi chưa có dữ liệu thật — không điền nội dung, điểm số hay số quyết định giả. */
+const BLANK = "…………………………";
 
 export interface ExportWordOptions {
   filename: string;
@@ -131,7 +135,7 @@ export function exportCouncilDecisionWord(proposal: {
   const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
   const year = dateObj.getFullYear();
 
-  const code = proposal.code || "HVQY-2026/ĐTTN";
+  const code = proposal.code || BLANK;
   const decisionNumber = council.decisionNumber || `QĐ-TLHĐ-${code.replace(/[^a-zA-Z0-9]/g, "")}/HVQY`;
   const signatory = council.decidedByName || "GS. TS. Trần Viết Tiến";
   const members = Array.isArray(council.members) ? council.members : [];
@@ -265,7 +269,7 @@ export function exportProposalApprovalDecisionWord(proposal: {
   const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
   const year = dateObj.getFullYear();
 
-  const code = proposal.code || "HVQY-2026/NCKH";
+  const code = proposal.code || BLANK;
   const decisionNumber = `QĐ-HVQY/${code.replace(/[^a-zA-Z0-9]/g, "")}`;
   const amount = proposal.budgetMetadata?.approvedAmount || proposal.budgetMetadata?.amount || 0;
   const formattedAmount = new Intl.NumberFormat("vi-VN").format(amount);
@@ -367,7 +371,7 @@ export function exportCouncilMinutesWord(proposal: {
   const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
   const year = dateObj.getFullYear();
 
-  const code = proposal.code || "HVQY-2026/ĐTTN";
+  const code = proposal.code || BLANK;
   const members = Array.isArray(council.members) ? council.members : [];
   const chair = members.find((m: any) => m.role === "chair")?.displayName || "GS. TS. Trần Viết Tiến";
   const secretary = minutes.recordedByName || members.find((m: any) => m.role === "secretary")?.displayName || "TS. Nguyễn Minh Phương";
@@ -418,7 +422,7 @@ export function exportCouncilMinutesWord(proposal: {
       <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
       <p style="padding-left: 18pt;">- Thời gian họp: Ngày ${day} tháng ${month} năm ${year}</p>
       <p style="padding-left: 18pt;">- Địa điểm họp: ${council.meetingLocation || "Phòng họp 1 - Tòa nhà Trung tâm - Học viện Quân y"}</p>
-      <p style="padding-left: 18pt;">- Quyết định thành lập Hội đồng số: <b>${council.decisionNumber || "QĐ-TLHĐ/HVQY"}</b></p>
+      <p style="padding-left: 18pt;">- Quyết định thành lập Hội đồng số: <b>${council.decisionNumber || BLANK}</b></p>
 
       <p style="margin-top: 10pt;"><b>II. THÀNH PHẦN HỘI ĐỒNG VÀ ĐẠI BIỂU THAM DỰ</b></p>
       <table class="border-table">
@@ -442,12 +446,12 @@ export function exportCouncilMinutesWord(proposal: {
       <p style="padding-left: 18pt;">2. Đồng chí Chủ nhiệm báo cáo tóm tắt thuyết minh đề tài nghiên cứu.</p>
       <p style="padding-left: 18pt;">3. Các đồng chí Ủy viên Phản biện 1 và Phản biện 2 trình bày bản nhận xét đánh giá chi tiết.</p>
       <p style="padding-left: 18pt;">4. Các thành viên Hội đồng thảo luận, chất vấn và cho ý kiến đóng góp hoàn thiện thuyết minh.</p>
-      <p style="padding-left: 18pt;">5. Kết quả chấm điểm trung bình của Hội đồng: <b>${minutes.averageScore || 88.5}/100 điểm</b>.</p>
+      <p style="padding-left: 18pt;">5. Kết quả chấm điểm trung bình của Hội đồng: <b>${minutes.averageScore ?? BLANK}/100 điểm</b>.</p>
 
       <p style="margin-top: 10pt;"><b>IV. KẾT LUẬN CỦA HỘI ĐỒNG</b></p>
-      <p style="padding-left: 18pt;">- Đánh giá chung: <i>${minutes.summaryComments || "Đề tài có tính cấp thiết cao, phương pháp nghiên cứu chặt chẽ, có ý nghĩa quan trọng trong công tác y học quân sự."}</i></p>
+      <p style="padding-left: 18pt;">- Đánh giá chung: <i>${minutes.summaryComments || BLANK}</i></p>
       <p style="padding-left: 18pt;">- Kết luận xếp loại: <b>${conclusionLabel}</b></p>
-      <p style="padding-left: 18pt;">- Nội dung yêu cầu hoàn thiện, bổ sung: <i>${minutes.modificationsRequired || "Chủ nhiệm đề tài chỉnh sửa, hoàn thiện hồ sơ theo góp ý của Hội đồng và nộp lại Phòng KHQS trước khi trình ký phê duyệt."}</i></p>
+      <p style="padding-left: 18pt;">- Nội dung yêu cầu hoàn thiện, bổ sung: <i>${minutes.modificationsRequired || BLANK}</i></p>
 
       <p style="margin-top: 10pt;">Phiên họp kết thúc hồi 11 giờ 30 phút cùng ngày. Biên bản đã được thông qua toàn thể Hội đồng nhất trí 100%.</p>
     </div>
@@ -485,7 +489,7 @@ export function exportEvaluationSummaryWord(proposal: {
   ownerDisplayName?: string | null;
   evaluationSummary?: any;
 }) {
-  const code = proposal.code || "HVQY-2026/ĐTTN";
+  const code = proposal.code || BLANK;
   const summary = proposal.evaluationSummary || {};
   const dateObj = new Date();
   const day = dateObj.getDate().toString().padStart(2, "0");
@@ -520,10 +524,10 @@ export function exportEvaluationSummaryWord(proposal: {
       <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
 
       <p style="margin-top: 10pt;"><b>2. TỔNG HỢP Ý KIẾN HỘI ĐỒNG VÀ PHẢN BIỆN:</b></p>
-      <p style="padding-left: 18pt; text-align: justify;">${summary.summary || "Hội đồng đánh giá và các chuyên gia phản biện thống nhất thông qua đề tài với sự nhất trí cao. Hồ sơ thuyết minh đầy đủ, tính khoa học và thực tiễn đáp ứng yêu cầu nhiệm vụ quân y."}</p>
+      <p style="padding-left: 18pt; text-align: justify;">${summary.summary || BLANK}</p>
 
       <p style="margin-top: 10pt;"><b>3. KIẾN NGHỊ CỦA CƠ QUAN QUẢN LÝ KHOA HỌC:</b></p>
-      <p style="padding-left: 18pt; text-align: justify;">${summary.recommendation || "Kính trình Thủ trưởng Ban Giám đốc Học viện xem xét, phê duyệt chính thức giao nhiệm vụ và dự toán kinh phí để Chủ nhiệm triển khai nghiên cứu."}</p>
+      <p style="padding-left: 18pt; text-align: justify;">${summary.recommendation || BLANK}</p>
     </div>
 
     <!-- FOOTER SIGNATURE -->
@@ -564,7 +568,7 @@ export function exportIndividualReviewWord(
     comment?: string;
   }
 ) {
-  const code = proposal.code || "HVQY-2026/ĐTTN";
+  const code = proposal.code || BLANK;
   const dateObj = new Date();
   const day = dateObj.getDate().toString().padStart(2, "0");
   const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
@@ -605,11 +609,11 @@ export function exportIndividualReviewWord(
       <p style="padding-left: 18pt;"><b>2. Mục tiêu, nội dung và phương pháp nghiên cứu:</b> Thiết kế nghiên cứu khoa học, cỡ mẫu và phương pháp xử lý số liệu phù hợp với điều kiện thực tế.</p>
       <p style="padding-left: 18pt;"><b>3. Tính khả thi và sản phẩm dự kiến:</b> Sản phẩm đáp ứng yêu cầu đặt hàng của đề tài nghiên cứu cấp cơ sở/ngành.</p>
       <p style="padding-left: 18pt;"><b>4. Nhận xét chi tiết:</b></p>
-      <p style="padding-left: 28pt; font-style: italic;">"${review.comment || "Đồng ý thông qua hồ sơ đề tài. Đề nghị chủ nhiệm hoàn thiện kế hoạch chi tiết theo các mốc tiến độ."}"</p>
+      <p style="padding-left: 28pt; font-style: italic;">"${review.comment || BLANK}"</p>
 
       <p style="margin-top: 10pt;"><b>III. KẾT QUẢ ĐÁNH GIÁ VÀ ĐỀ NGHỊ</b></p>
       <p style="padding-left: 18pt;">- Tổng điểm đánh giá: <b>${review.reviewTotalScore ?? 88}/100 điểm</b>.</p>
-      <p style="padding-left: 18pt;">- Đề nghị của chuyên gia: <b>${review.reviewRecommendationLabel || "Đạt yêu cầu (Phê duyệt thực hiện)"}</b>.</p>
+      <p style="padding-left: 18pt;">- Đề nghị của chuyên gia: <b>${review.reviewRecommendationLabel || BLANK}</b>.</p>
     </div>
 
     <!-- FOOTER SIGNATURE -->
@@ -642,6 +646,7 @@ export function exportAcceptanceMinutesWord(
     meetingDate?: string;
     meetingLocation?: string;
     establishmentDecisionNumber?: string;
+    decisionNumber?: string;
     members: Array<{ fullName: string; academicTitle?: string; unit?: string; role: string }>;
     evaluationResult?: {
       reportScore: number;
@@ -655,16 +660,17 @@ export function exportAcceptanceMinutesWord(
     decisionSignerName?: string;
   }
 ) {
-  const code = proposal.code || "HVQY-NCKH-2026";
+  const code = proposal.code || BLANK;
   const councilTypeLabel = acceptance.councilType === "FACILITY" ? "CƠ SỞ" : "CHÍNH THỨC";
+  // Chưa có biên bản thì để trống, không in kết quả giả.
   const scores = acceptance.evaluationResult || {
-    reportScore: 27,
-    scientificProductsScore: 28,
-    trainingProductsScore: 14,
-    militaryMedicalPracticalScore: 23,
-    totalScore: 92,
-    classification: "EXCELLENT",
-    assessmentComments: "Đề tài hoàn thành xuất sắc các nội dung và mục tiêu đăng ký, có giá trị ứng dụng cao."
+    reportScore: BLANK,
+    scientificProductsScore: BLANK,
+    trainingProductsScore: BLANK,
+    militaryMedicalPracticalScore: BLANK,
+    totalScore: BLANK,
+    classification: "",
+    assessmentComments: BLANK
   };
 
   const classificationText =
@@ -672,7 +678,9 @@ export function exportAcceptanceMinutesWord(
       ? "XUẤT SẮC"
       : scores.classification === "PASSED"
       ? "ĐẠT"
-      : "KHÔNG ĐẠT";
+      : scores.classification === "FAILED"
+      ? "KHÔNG ĐẠT"
+      : BLANK;
 
   const memberRows = acceptance.members.map((m, idx) => `
     <tr>
@@ -713,7 +721,7 @@ export function exportAcceptanceMinutesWord(
       <p style="padding-left: 18pt;">- Mã số đề tài: <b>${code}</b></p>
       <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
       <p style="padding-left: 18pt;">- Cơ quan chủ trì: <b>${proposal.hostOrganizationUnit || "Học viện Quân y"}</b></p>
-      <p style="padding-left: 18pt;">- Quyết định thành lập Hội đồng số: <b>${acceptance.establishmentDecisionNumber || "QĐ-HVQY/2026"}</b></p>
+      <p style="padding-left: 18pt;">- Quyết định thành lập Hội đồng số: <b>${acceptance.decisionNumber || acceptance.establishmentDecisionNumber || BLANK}</b></p>
       <p style="padding-left: 18pt;">- Thời gian họp: <b>${acceptance.meetingDate || new Date().toLocaleDateString("vi-VN")}</b>. Địa điểm: <b>${acceptance.meetingLocation || "Phòng họp Ban Quản lý Khoa học - Học viện Quân y"}</b></p>
 
       <p style="margin-top: 10pt;"><b>II. THÀNH PHẦN HỘI ĐỒNG</b></p>
@@ -819,7 +827,7 @@ export function exportIrbCertificateWord(
     ethicsNotes?: string;
   }
 ) {
-  const code = proposal.code || "HVQY-NCKH-2026";
+  const code = proposal.code || BLANK;
   const certNumber = irb.certificateNumber || `IRB-HVQY-2026-${code.slice(-3)}`;
   const approvalDate = irb.approvalDate || new Date().toLocaleDateString("vi-VN");
   const validUntil = irb.validUntil || "31/12/2027";

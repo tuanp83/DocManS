@@ -161,12 +161,13 @@ export function ProgressReportPanel() {
       const irbCert = proposal.irbMetadata?.certificateNumber || null;
 
       // Dữ liệu Nghiệm thu
+      // Kết quả nghiệm thu do máy chủ ghi ở evaluationResult (totalScore, classification).
       const acceptanceData = proposal.acceptanceCouncilMetadata;
-      const acceptanceMinutes = acceptanceData?.acceptanceMinutes;
-      const acceptanceScore = acceptanceMinutes?.averageScore;
-      const acceptanceResult = acceptanceMinutes?.resultClassification;
+      const acceptanceEvaluation = acceptanceData?.evaluationResult;
+      const acceptanceScore = acceptanceEvaluation?.totalScore;
+      const acceptanceResult = acceptanceEvaluation?.classification;
       const isAcceptanceCompleted = acceptanceResult === "EXCELLENT" || acceptanceResult === "PASSED";
-      const isAcceptanceInProgress = acceptanceData?.status === "approved" && !acceptanceResult;
+      const isAcceptanceInProgress = (acceptanceData?.status === "ESTABLISHED" || acceptanceData?.status === "approved") && !acceptanceResult;
 
       return {
         ...proposal,
@@ -183,7 +184,7 @@ export function ProgressReportPanel() {
         irbStatus,
         irbCert,
         acceptanceData,
-        acceptanceMinutes,
+        acceptanceEvaluation,
         acceptanceScore,
         acceptanceResult,
         isAcceptanceCompleted,
