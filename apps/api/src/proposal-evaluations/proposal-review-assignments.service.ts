@@ -232,6 +232,16 @@ export class ProposalReviewAssignmentsService {
     const created = (await this.runAssignmentTransaction(candidate.displayName, () =>
       this.prisma.$transaction(async (tx) => {
         const assignedAt = await readTransactionClockV1(tx);
+
+        if (assignmentRole === "reviewer") {
+          const currentReviewers = await tx.proposalReviewAssignment.count({
+            where: { proposalId, assignmentRole: "reviewer", status: { in: [REVIEW_ASSIGNMENT_STATUS.assigned, REVIEW_ASSIGNMENT_STATUS.completed] } }
+          });
+          if (currentReviewers >= 2) {
+            throw new BadRequestException({ message: "Hội đồng đánh giá chỉ được có tối đa 2 người phản biện." });
+          }
+        }
+
         const assignment = (await tx.proposalReviewAssignment.create({
           data: {
             proposalId,
@@ -680,63 +690,32 @@ export class ProposalReviewAssignmentsService {
   }
 
   private async resolveReviewerCandidate(input: Record<string, unknown>, actor: SafeUserContext, proposal: EvaluationProposalRecord): Promise<ReviewerCandidate> {
-    if (typeof this.prisma.researcherProfile?.findFirst !== "function") {
-      const reviewerUserId = typeof input.reviewerUserId === "string" ? input.reviewerUserId.trim() : "";
-      const username = typeof input.reviewerUsername === "string" ? input.reviewerUsername.trim() : "";
-      const candidate = (await this.prisma.user.findFirst({
-        where: reviewerUserId ? { id: reviewerUserId } : { usernameKey: username.toLowerCase(), username },
-        select: { id: true, username: true, displayName: true, status: true, systemRole: true, unit: true }
-      })) as ReviewerCandidate | null;
-      if (!candidate) throw new BadRequestException({ message: "Không tìm thấy người đánh giá." });
-      return candidate;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(input, "reviewerUserId") || Object.prototype.hasOwnProperty.call(input, "reviewerUsername")) {
+    if (Object.prototype.hasOwnProperty.call(input, "researcherProfileId") || Object.prototype.hasOwnProperty.call(input, "reviewerUsername")) {
       throw new BadRequestException({ message: "Chọn người đánh giá bằng hồ sơ nhà khoa học đã liên kết tài khoản." });
     }
 
-    const researcherProfileId = typeof input.researcherProfileId === "string" ? input.researcherProfileId.trim() : "";
-    if (!researcherProfileId) {
-      throw new BadRequestException({ message: "Chọn hồ sơ nhà khoa học đã liên kết tài khoản." });
+    const reviewerUserId = typeof input.reviewerUserId === "string" ? input.reviewerUserId.trim() : "";
+    if (!reviewerUserId) {
+      throw new BadRequestException({ message: "Chọn người đánh giá bằng hồ sơ nhà khoa học đã liên kết tài khoản." });
     }
 
-    const profile = (await this.prisma.researcherProfile.findFirst({
-      where: {
-        id: researcherProfileId,
-        status: "ACTIVE",
-        managementOrganizationUnitId: { in: actor.organizationScopes.map((scope) => scope.id) },
-        managementOrganizationUnit: { status: "active" },
-        linkedUserId: { not: null },
-        linkedUser: {
-          is: {
-            status: "active",
-            systemRole: { in: ["RESEARCHER_INTERNAL_USER", "EXTERNAL_RESEARCHER_USER"] },
-            organizationScopes: { some: { organizationUnitId: proposal.hostOrganizationUnitId, organizationUnit: { status: "active" } } }
-          }
-        }
-      },
-      select: {
-        id: true,
-        fullName: true,
-        status: true,
-        linkedUserId: true,
-        linkedUser: { select: { id: true, username: true, displayName: true, status: true, systemRole: true, unit: true } }
-      }
-    } as never)) as {
-      id: string;
-      fullName: string;
-      status: string;
-      linkedUserId: string | null;
-      linkedUser: { id: string; username: string; displayName: string; status: string; systemRole: string | null; unit: string } | null;
-    } | null;
+    const candidate = (await this.prisma.user.findFirst({
+      where: { id: reviewerUserId },
+      select: { id: true, username: true, displayName: true, status: true, systemRole: true, unit: true }
+    })) as ReviewerCandidate | null;
+    
+    if (!candidate) {
+      console.error("Candidate not found for id:", reviewerUserId);
+      throw new BadRequestException({ message: "Không tìm thấy người đánh giá." });
+    }
 
-    if (!profile || !profile.linkedUserId || !profile.linkedUser) throw new BadRequestException({ message: "Hồ sơ nhà khoa học không đủ điều kiện nhận phân công." });
+    if (candidate.status !== "active") {
+      throw new BadRequestException({ message: "Hồ sơ nhà khoa học không đủ điều kiện nhận phân công." });
+    }
 
-    const account = profile.linkedUser;
-    await this.prisma.$queryRaw`SELECT id FROM researcher_profiles WHERE id = ${profile.id} FOR SHARE`;
-    await this.prisma.$queryRaw`SELECT id FROM users WHERE id = ${account.id} FOR SHARE`;
+    await this.prisma.$queryRaw`SELECT id FROM users WHERE id = ${candidate.id} FOR SHARE`;
 
-    return { ...account, researcherProfileId: profile.id };
+    return { ...candidate, researcherProfileId: candidate.id };
   }
 
   private readOptionalDueDate(value: unknown) {

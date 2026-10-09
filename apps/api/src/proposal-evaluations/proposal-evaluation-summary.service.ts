@@ -149,6 +149,14 @@ export class ProposalEvaluationSummaryService {
 
       const movesToReady = markReady && proposal.status !== PROPOSAL_STATUS.readyForApproval;
       if (movesToReady) {
+        await tx.$queryRaw`SELECT id FROM research_proposals WHERE id = ${proposalId} FOR NO KEY UPDATE`;
+        const lockedAssignments = await tx.proposalReviewAssignment.findMany({ where: { proposalId } });
+        const lockedReviews = await tx.proposalReview.findMany({ where: { proposalId } });
+        const lockedProgress = this.summarizeProgress(lockedAssignments as any, lockedReviews as any);
+        if (!lockedProgress.allReviewsSubmitted) {
+          throw new BadRequestException({ message: "Phân công đã thay đổi, không đủ điều kiện chuyển chờ phê duyệt." });
+        }
+
         await updateProposalStatusGuarded(tx, proposalId, proposal.status, PROPOSAL_STATUS.readyForApproval);
 
         // Any still-open assignment is closed with the round, so a revoked-but-unreviewed reviewer
@@ -256,7 +264,13 @@ export class ProposalEvaluationSummaryService {
         reviewerUserId: assignment.reviewerUserId,
         reviewerDisplayName: assignment.reviewer?.displayName ?? ""
       })),
-      allReviewsSubmitted: active.length > 0 && pending.length === 0,
+      allReviewsSubmitted: (() => {
+        if (active.length === 0 || pending.length > 0) return false;
+        const reviewers = active.filter(a => a.assignmentRole === "reviewer");
+        const committee = active.filter(a => a.assignmentRole === "committee_member");
+        const uniqueCommittee = new Set(committee.map(a => a.reviewerUserId));
+        return reviewers.length === 2 && uniqueCommittee.size >= 3;
+      })(),
       averageTotalScore: scored.length ? Math.round((scored.reduce((sum, score) => sum + score, 0) / scored.length) * 10) / 10 : null,
       maxTotalScore: REVIEW_MAX_TOTAL_SCORE
     };

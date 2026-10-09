@@ -120,8 +120,8 @@ describe("Epic 2 researcher profiles and account access on real PostgreSQL", () 
     orgA = await db.organizationUnit.create({ data: { code: unique("TEST-A"), name: "Đơn vị kiểm thử A" } });
     orgB = await db.organizationUnit.create({ data: { code: unique("TEST-B"), name: "Đơn vị kiểm thử B" } });
     field = await db.catalogItem.create({ data: { type: "research-field", code: unique("FIELD"), name: "Y học quân sự kiểm thử" } });
-    staff = await actorFor(await createUser({ role: "SCIENTIFIC_MANAGEMENT_STAFF", orgs: [orgA] }));
-    outsider = await actorFor(await createUser({ role: "SCIENTIFIC_MANAGEMENT_STAFF", orgs: [orgB] }));
+    staff = await actorFor(await createUser({ role: "RESEARCH_MANAGEMENT_STAFF", orgs: [orgA] }));
+    outsider = await actorFor(await createUser({ role: "RESEARCH_MANAGEMENT_STAFF", orgs: [orgB] }));
   });
 
   after(async () => {
@@ -460,7 +460,7 @@ describe("Epic 2 researcher profiles and account access on real PostgreSQL", () 
     const inactive = await profiles.listProfiles(staff, { status: "INACTIVE", pageSize: "100" });
     assert.ok(inactive.profiles.some((item) => item.id === inA.id), "inactive profiles stay visible to managers");
 
-    const revokedUser = await createUser({ role: "SCIENTIFIC_MANAGEMENT_STAFF", orgs: [orgA] });
+    const revokedUser = await createUser({ role: "RESEARCH_MANAGEMENT_STAFF", orgs: [orgA] });
     const revoked = await actorFor(revokedUser);
     const target = await profiles.getProfile(revoked, inA.id);
     await db.userOrganizationScope.deleteMany({ where: { userId: revokedUser.id } });

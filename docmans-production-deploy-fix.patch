@@ -1,0 +1,764 @@
+From d3d32afba91d6d16d5f954643318f3124d5e741a Mon Sep 17 00:00:00 2001
+From: Tuan Pham <tuan.p83@gmail.com>
+Date: Thu, 8 Oct 2026 22:41:05 +0000
+Subject: [PATCH] =?UTF-8?q?fix(deploy):=20make=20docker-compose.prod.yml?=
+ =?UTF-8?q?=20actually=20deployable=20(N1=E2=80=93N5)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+N1  nginx: move the production server block to nginx/prod/default.conf and
+    mount only that directory. nginx/conf.d/rtms.conf (dev) referenced hosts
+    `api`/`web` that did not exist in production, so nginx refused to start;
+    the dev stack no longer loads a TLS block without certificates either.
+N2  seed: the production admin is created from ADMIN_INITIAL_PASSWORD
+    (policy-checked, random salt, same format as PasswordService) with
+    mustChangePassword=true. The previous hash used the dev salt under a new
+    prefix and matched no password. Re-running the seed in production never
+    overwrites an existing account.
+N3  compose: one-shot `migrate` service runs `prisma migrate deploy`; `api`
+    starts only after it completes successfully.
+N4  compose: MinIO variables renamed to the MINIO_* names the code reads
+    (MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME,
+    MINIO_USE_SSL); previously every file upload/download failed.
+N5  Dockerfile: NEXT_PUBLIC_API_BASE_URL is a build arg (default /api/v1)
+    so browsers call the public origin instead of http://localhost:4000;
+    web middleware uses API_INTERNAL_BASE_URL=http://api:4000/api/v1.
+N6  Dockerfile: workspace manifests/packages are copied before `npm ci` so
+    @rtms/permissions is linked at runtime; prisma.config.ts is included.
+
+Also:
+- api and web run as separate services with health checks instead of two
+  background processes in one container.
+- All secrets are required (${VAR:?}); no fallback passwords.
+- postgres:16 to match development.
+- nginx client_max_body_size 11m to match FILE_MAX_UPLOAD_BYTES (10 MB).
+- .dockerignore keeps .env, .git, node_modules, reports/ and output/ out of
+  the build context and image.
+- scripts/backup.sh: pg_dump -Fc via `exec -T` (no TTY), MinIO backed up from
+  the named volume (the old path did not exist and errors were swallowed),
+  integrity checks, SHA256SUMS, fails loudly. New scripts/restore.sh.
+- .env.production.example documents every required variable.
+
+Not verified by a Docker build in the authoring environment; validate with
+`docker compose -f docker-compose.prod.yml --env-file .env.production up --build`.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01MqRwNcDvzhxJSBJUZ81VME
+---
+ .dockerignore             |  30 ++++++++
+ .env.production.example   |  26 +++++++
+ .gitignore                |   5 +-
+ Dockerfile                |  74 ++++++++++++-------
+ apps/api/prisma/seed.mjs  |  64 ++++++++++++-----
+ docker-compose.prod.yml   | 145 ++++++++++++++++++++++++++++----------
+ nginx/conf.d/default.conf |  49 -------------
+ nginx/prod/default.conf   |  52 ++++++++++++++
+ scripts/backup.sh         |  66 +++++++++++++----
+ scripts/restore.sh        |  43 +++++++++++
+ 10 files changed, 411 insertions(+), 143 deletions(-)
+ create mode 100644 .dockerignore
+ create mode 100644 .env.production.example
+ delete mode 100644 nginx/conf.d/default.conf
+ create mode 100644 nginx/prod/default.conf
+ create mode 100755 scripts/restore.sh
+
+diff --git a/.dockerignore b/.dockerignore
+new file mode 100644
+index 0000000..19e06fa
+--- /dev/null
++++ b/.dockerignore
+@@ -0,0 +1,30 @@
++# Không đưa bí mật, dữ liệu và rác build vào build context / image.
++.git
++.env
++.env.*
++!.env.example
++node_modules
++**/node_modules
++.next
++**/.next
++dist
++.nx
++coverage
++*.tsbuildinfo
++
++# Tài liệu, báo cáo, ảnh chụp và dữ liệu nội bộ — không cần để chạy ứng dụng.
++reports
++output
++tmp
++backups
++_bmad
++_bmad-output
++.stitch
++docs
++*.md
++!README.md
++
++# Cấu hình công cụ AI / IDE
++.agents
++.claude
++.codegraph
+diff --git a/.env.production.example b/.env.production.example
+new file mode 100644
+index 0000000..857d060
+--- /dev/null
++++ b/.env.production.example
+@@ -0,0 +1,26 @@
++# Sao chép thành .env.production và điền giá trị thật. KHÔNG commit file .env.production.
++# Sinh mật khẩu ngẫu nhiên: openssl rand -base64 32
++
++# Tên miền công khai (không có dấu / ở cuối)
++PUBLIC_ORIGIN=https://docmans.example.edu.vn
++
++POSTGRES_USER=docmans
++POSTGRES_PASSWORD=
++POSTGRES_DB=docmans
++
++MINIO_ROOT_USER=docmans
++MINIO_ROOT_PASSWORD=
++MINIO_BUCKET_NAME=docmans-files
++
++# Email gửi thông tin tài khoản (để trống nếu chưa dùng)
++SMTP_HOST=
++SMTP_PORT=587
++SMTP_FROM=
++SMTP_USER=
++SMTP_PASSWORD=
++SMTP_SECURE=false
++
++# Chỉ dùng khi chạy seed tạo admin lần đầu; xoá khỏi file sau khi đã tạo.
++# ADMIN_USERNAME=admin
++# ADMIN_DISPLAY_NAME=Quản trị hệ thống
++# ADMIN_INITIAL_PASSWORD=
+diff --git a/.gitignore b/.gitignore
+index 2e6d9a5..fd9b734 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -14,4 +14,7 @@ apps/web/.next/
+ .claude/
+ .codegraph/
+ users.md
+-_bmad/
+\ No newline at end of file
++_bmad/
++.env.production
++backups/
++nginx/ssl/
+diff --git a/Dockerfile b/Dockerfile
+index abcfad4..2ebb304 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,44 +1,66 @@
+-# Build environment
+-FROM node:22-alpine AS builder
+-
+-# Enable corepack for modern package management if needed
+-# RUN corepack enable
++# syntax=docker/dockerfile:1
++#
++# Một image dùng chung cho các service `migrate`, `api` và `web` trong docker-compose.prod.yml.
++# Mỗi service chạy đúng một tiến trình (lệnh khác nhau), nên Docker theo dõi và khởi động lại
++# được từng phần khi phần đó dừng.
+ 
++############################
++# 1. Builder
++############################
++FROM node:22-alpine AS builder
+ WORKDIR /app
+-COPY package*.json ./
+-# Cài đặt toàn bộ dependencies (bao gồm devDependencies) để build
++
++# Manifest của workspace phải có mặt TRƯỚC `npm ci` để npm liên kết các gói nội bộ
++# (@rtms/permissions, @rtms/contracts, ...) vào node_modules.
++COPY package.json package-lock.json ./
++COPY packages/contracts/package.json   packages/contracts/
++COPY packages/permissions/package.json packages/permissions/
++COPY packages/ui-tokens/package.json   packages/ui-tokens/
++COPY packages/validation/package.json  packages/validation/
+ RUN npm ci
+ 
+ COPY . .
+-# Build Next.js và NestJS
+-RUN npm run build:web
+-RUN npm run build:api
+ 
+-# Production runtime
++# Biến NEXT_PUBLIC_* được gắn cố định vào bundle trình duyệt lúc build.
++# Mặc định là đường dẫn tương đối: trình duyệt gọi API qua chính tên miền đang mở (nginx /api/).
++ARG NEXT_PUBLIC_API_BASE_URL=/api/v1
++ARG NEXT_PUBLIC_APP_NAME=DocManS
++ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL} \
++    NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME} \
++    NEXT_TELEMETRY_DISABLED=1
++
++RUN npm run build:web && npm run build:api
++
++############################
++# 2. Runtime
++############################
+ FROM node:22-alpine AS runner
+ WORKDIR /app
++ENV NODE_ENV=production \
++    NEXT_TELEMETRY_DISABLED=1
+ 
+-ENV NODE_ENV=production
++# Chỉ cài dependencies production, kèm mã nguồn các gói workspace (API import @rtms/permissions lúc chạy).
++COPY package.json package-lock.json ./
++COPY packages ./packages
++RUN npm ci --omit=dev && npm cache clean --force
+ 
+-# Copy package.json và cài đặt chỉ production dependencies
+-COPY package*.json ./
+-RUN npm ci --omit=dev
++# Prisma: schema, migrations, seed và prisma.config.ts (Prisma 7 đọc DATABASE_URL từ file này).
++COPY apps/api/prisma ./apps/api/prisma
++COPY prisma.config.ts ./
++RUN node_modules/.bin/prisma generate --schema apps/api/prisma/schema.prisma
+ 
+-# Copy build artifacts từ builder
++# Kết quả build
++COPY --from=builder /app/dist/apps/api ./dist/apps/api
+ COPY --from=builder /app/apps/web/.next ./apps/web/.next
+ COPY --from=builder /app/apps/web/public ./apps/web/public
+-COPY --from=builder /app/dist/apps/api ./dist/apps/api
+-COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+-
+-# Sinh Prisma client
+-RUN npx prisma generate --schema apps/api/prisma/schema.prisma
++COPY --from=builder /app/apps/web/next.config.ts ./apps/web/next.config.ts
+ 
+-# Đặt quyền sở hữu cho node user
+-RUN chown -R node:node /app
++# Next.js cần ghi vào .next/cache lúc chạy; phần còn lại giữ quyền root, chỉ đọc với user node.
++# (Không `chown -R /app`: thao tác đó nhân đôi dung lượng lớp node_modules.)
++RUN mkdir -p apps/web/.next/cache && chown -R node:node apps/web/.next
+ USER node
+ 
+-# Expose ports
+ EXPOSE 3000 4000
+ 
+-# Chạy cả Next.js và NestJS bằng concurrently hoặc command tuỳ chỉnh
+-CMD ["sh", "-c", "node dist/apps/api/main.js & npx next start apps/web"]
++# Không đặt CMD chạy hai tiến trình nền (`&`): mỗi service trong compose khai báo `command` riêng.
++CMD ["node", "dist/apps/api/main.js"]
+diff --git a/apps/api/prisma/seed.mjs b/apps/api/prisma/seed.mjs
+index 68af6ee..1fc238a 100644
+--- a/apps/api/prisma/seed.mjs
++++ b/apps/api/prisma/seed.mjs
+@@ -2,6 +2,7 @@ import "dotenv/config";
+ import { PrismaClient } from "@prisma/client";
+ import { PrismaPg } from "@prisma/adapter-pg";
+ import { Client as MinioClient } from "minio";
++import { randomBytes, scryptSync } from "node:crypto";
+ 
+ const databaseUrl = process.env.DATABASE_URL?.trim();
+ 
+@@ -159,21 +160,47 @@ const users = [
+   }
+ ];
+ 
+-if (process.env.NODE_ENV === "production") {
+-  console.log("🌱 Chạy seed cho môi trường PRODUCTION. Chỉ khởi tạo 1 tài khoản admin.");
+-  // Giữ lại mỗi admin
++const isProduction = process.env.NODE_ENV === "production";
++
++// Cùng định dạng với apps/api/src/auth/password.service.ts: "scrypt:<salt>:<hex 64 byte>".
++function hashPassword(password) {
++  const salt = randomBytes(16).toString("hex");
++  return `scrypt:${salt}:${scryptSync(password, salt, 64).toString("hex")}`;
++}
++
++// Cùng chính sách với apps/api/src/auth/password-request.pipe.ts.
++function assertPasswordPolicy(password) {
++  if (password.length < 12 || password.length > 256 || /\s/.test(password) || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
++    throw new Error("ADMIN_INITIAL_PASSWORD phải dài 12–256 ký tự, không có khoảng trắng, gồm chữ thường, chữ hoa và chữ số.");
++  }
++}
++
++if (isProduction) {
++  // Production: chỉ tạo đúng một tài khoản quản trị, lấy thông tin từ biến môi trường.
++  // Không có mật khẩu mặc định; tài khoản buộc phải đổi mật khẩu ở lần đăng nhập đầu tiên.
++  const adminPassword = process.env.ADMIN_INITIAL_PASSWORD ?? "";
++  if (!adminPassword) {
++    throw new Error("Thiếu ADMIN_INITIAL_PASSWORD. Seed production cần mật khẩu ban đầu cho tài khoản quản trị.");
++  }
++  assertPasswordPolicy(adminPassword);
++
++  const adminUsername = (process.env.ADMIN_USERNAME ?? "admin").trim();
++  if (!/^[a-z0-9][a-z0-9._-]{2,63}$/i.test(adminUsername)) {
++    throw new Error("ADMIN_USERNAME chỉ gồm chữ, số, dấu chấm, gạch dưới, gạch ngang (3–64 ký tự).");
++  }
++
+   users.length = 0;
+   users.push({
+     id: "user-admin-prod",
+-    username: "admin",
+-    passwordHash:
+-      "scrypt:user-admin-prod:88577689e88df3ec17a117384f8a68ff4e516d4ccc3c4a7783764eb66f4a72a8c35ae574d915e01d7ba3fe5e3a800b30463e721c488544ca3fc90192544e0c43",
+-    displayName: "Quản trị Hệ thống",
++    username: adminUsername,
++    passwordHash: hashPassword(adminPassword),
++    mustChangePassword: true,
++    displayName: (process.env.ADMIN_DISPLAY_NAME ?? "Quản trị hệ thống").trim() || "Quản trị hệ thống",
+     status: "active",
+     systemRole: "SYSTEM_ADMIN",
+     unit: "Ban Giám Đốc"
+   });
+-  console.warn("⚠️ VUI LÒNG ĐĂNG NHẬP BẰNG TÀI KHOẢN admin/1234 VÀ ĐỔI MẬT KHẨU NGAY LẬP TỨC.");
++  console.log(`🌱 Seed PRODUCTION: tạo tài khoản quản trị "${adminUsername}" (buộc đổi mật khẩu khi đăng nhập lần đầu).`);
+ }
+ 
+ const organizationUnits = [
+@@ -314,15 +341,18 @@ for (const [id, code, name] of organizationUnits) {
+ for (const user of users) {
+   await prisma.user.upsert({
+     where: { id: user.id },
+-    update: {
+-      username: user.username,
+-      usernameKey: user.username.toLowerCase(),
+-      displayName: user.displayName,
+-      passwordHash: user.passwordHash,
+-      status: user.status,
+-      systemRole: user.systemRole,
+-      unit: user.unit
+-    },
++    // Production: chạy lại seed KHÔNG được ghi đè tài khoản đã tồn tại (sẽ đặt lại mật khẩu admin).
++    update: isProduction
++      ? {}
++      : {
++          username: user.username,
++          usernameKey: user.username.toLowerCase(),
++          displayName: user.displayName,
++          passwordHash: user.passwordHash,
++          status: user.status,
++          systemRole: user.systemRole,
++          unit: user.unit
++        },
+     create: {
+       ...user,
+       usernameKey: user.username.toLowerCase()
+diff --git a/docker-compose.prod.yml b/docker-compose.prod.yml
+index ffeed0a..daa4728 100644
+--- a/docker-compose.prod.yml
++++ b/docker-compose.prod.yml
+@@ -1,69 +1,142 @@
+-version: '3.8'
++# Triển khai production.
++#
++#   cp .env.production.example .env.production   # điền giá trị thật
++#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
++#
++# Lần đầu, tạo tài khoản quản trị (chỉ chạy một lần):
++#   docker compose -f docker-compose.prod.yml --env-file .env.production run --rm \
++#     -e ADMIN_INITIAL_PASSWORD='...' migrate node apps/api/prisma/seed.mjs
++#
++# Mọi bí mật đều BẮT BUỘC (cú pháp ${VAR:?}) — thiếu là compose dừng ngay, không có mật khẩu mặc định.
++
++x-app-env: &app-env
++  NODE_ENV: production
++  DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER bắt buộc}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD bắt buộc}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB bắt buộc}?schema=public
++  # Tên biến phải khớp với mã: apps/api/src/infrastructure/minio/minio-object-storage.service.ts
++  MINIO_ENDPOINT: minio
++  MINIO_PORT: "9000"
++  MINIO_USE_SSL: "false"
++  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER bắt buộc}
++  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD bắt buộc}
++  MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-docmans-files}
++  MINIO_REGION: us-east-1
++
+ services:
+   postgres:
+-    image: postgres:15-alpine
+-    restart: always
++    image: postgres:16-alpine          # cùng phiên bản với môi trường dev
++    restart: unless-stopped
+     environment:
+-      POSTGRES_USER: ${POSTGRES_USER:-docmansystem}
+-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prod_password}
+-      POSTGRES_DB: ${POSTGRES_DB:-docmansystem_prod}
++      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER bắt buộc}
++      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD bắt buộc}
++      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB bắt buộc}
+     volumes:
+       - postgres_data:/var/lib/postgresql/data
+-    networks:
+-      - docman_network
++    healthcheck:
++      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
++      interval: 10s
++      timeout: 5s
++      retries: 10
++    networks: [internal]
+ 
+   minio:
+     image: minio/minio:RELEASE.2024-01-28T22-35-53Z
+-    restart: always
+-    environment:
+-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-prod_miniopassword}
++    restart: unless-stopped
+     command: server /data --console-address ":9001"
++    environment:
++      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER bắt buộc}
++      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD bắt buộc}
+     volumes:
+       - minio_data:/data
+-    networks:
+-      - docman_network
++    networks: [internal]
+ 
+-  app:
++  # Chạy migration một lần rồi thoát; api chỉ khởi động khi bước này thành công.
++  migrate:
+     build:
+       context: .
+       dockerfile: Dockerfile
+-    restart: always
++      args:
++        NEXT_PUBLIC_API_BASE_URL: /api/v1
++    image: docmans-app:latest
++    command: ["node_modules/.bin/prisma", "migrate", "deploy", "--schema", "apps/api/prisma/schema.prisma"]
+     environment:
+-      NODE_ENV: production
+-      DATABASE_URL: postgresql://${POSTGRES_USER:-docmansystem}:${POSTGRES_PASSWORD:-prod_password}@postgres:5432/${POSTGRES_DB:-docmansystem_prod}?schema=public
+-      S3_ENDPOINT: minio
+-      S3_PORT: 9000
+-      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-prod_miniopassword}
+-      S3_BUCKET: docmansystem
+-      API_PORT: 4000
+-      WEB_ORIGIN: "https://docmans.hvqy.edu.vn"
++      <<: *app-env
++    depends_on:
++      postgres:
++        condition: service_healthy
++    restart: "no"
++    networks: [internal]
++
++  api:
++    image: docmans-app:latest
++    restart: unless-stopped
++    command: ["node", "dist/apps/api/main.js"]
++    environment:
++      <<: *app-env
++      API_PORT: "4000"
++      WEB_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN bắt buộc, ví dụ https://docmans.example.edu.vn}
+       TRUST_PROXY: "loopback, linklocal, uniquelocal"
++      FILE_MAX_UPLOAD_BYTES: "10485760"
++      FILE_ALLOWED_EXTENSIONS: ".doc,.docx,.pdf,.xls,.xlsx"
++      ACCOUNT_LOGIN_URL: ${PUBLIC_ORIGIN}/login
++      SMTP_HOST: ${SMTP_HOST:-}
++      SMTP_PORT: ${SMTP_PORT:-587}
++      SMTP_FROM: ${SMTP_FROM:-}
++      SMTP_USER: ${SMTP_USER:-}
++      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
++      SMTP_SECURE: ${SMTP_SECURE:-false}
++    depends_on:
++      migrate:
++        condition: service_completed_successfully
++      minio:
++        condition: service_started
++    healthcheck:
++      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/api/v1/health"]
++      interval: 15s
++      timeout: 5s
++      retries: 5
++      start_period: 20s
++    networks: [internal]
++
++  web:
++    image: docmans-app:latest
++    restart: unless-stopped
++    command: ["node_modules/.bin/next", "start", "apps/web", "-p", "3000", "-H", "0.0.0.0"]
++    environment:
++      NODE_ENV: production
++      # middleware.ts gọi API từ phía server qua mạng nội bộ, không qua tên miền công khai.
++      API_INTERNAL_BASE_URL: http://api:4000/api/v1
+     depends_on:
+-      - postgres
+-      - minio
+-    networks:
+-      - docman_network
++      api:
++        condition: service_healthy
++    healthcheck:
++      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/login"]
++      interval: 15s
++      timeout: 5s
++      retries: 5
++      start_period: 20s
++    networks: [internal]
+ 
+   nginx:
+-    image: nginx:alpine
+-    restart: always
++    image: nginx:1.27-alpine
++    restart: unless-stopped
+     ports:
+       - "80:80"
+       - "443:443"
+     volumes:
+-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
++      # Chỉ mount cấu hình production. nginx/conf.d/rtms.conf dành cho docker-compose.yml (dev).
++      - ./nginx/prod:/etc/nginx/conf.d:ro
+       - ./nginx/ssl:/etc/nginx/ssl:ro
+     depends_on:
+-      - app
+-    networks:
+-      - docman_network
++      web:
++        condition: service_healthy
++      api:
++        condition: service_healthy
++    networks: [internal]
+ 
+ volumes:
+   postgres_data:
+   minio_data:
+ 
+ networks:
+-  docman_network:
++  internal:
+     driver: bridge
+diff --git a/nginx/conf.d/default.conf b/nginx/conf.d/default.conf
+deleted file mode 100644
+index 9c4fa8e..0000000
+--- a/nginx/conf.d/default.conf
++++ /dev/null
+@@ -1,49 +0,0 @@
+-server {
+-    listen 80;
+-    server_name docmans.hvqy.edu.vn;
+-
+-    location / {
+-        return 301 https://$host$request_uri;
+-    }
+-}
+-
+-server {
+-    listen 443 ssl;
+-    server_name docmans.hvqy.edu.vn;
+-
+-    ssl_certificate /etc/nginx/ssl/fullchain.pem;
+-    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+-
+-    ssl_protocols TLSv1.2 TLSv1.3;
+-    ssl_ciphers HIGH:!aNULL:!MD5;
+-
+-    # Cấu hình bảo mật nâng cao (Helmet bổ trợ thêm)
+-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+-    add_header X-Frame-Options SAMEORIGIN;
+-    add_header X-Content-Type-Options nosniff;
+-
+-    # Giới hạn kích thước upload (cũng được bắt ở backend)
+-    client_max_body_size 50M;
+-
+-    # Proxy tới Next.js frontend
+-    location / {
+-        proxy_pass http://app:3000;
+-        proxy_http_version 1.1;
+-        proxy_set_header Upgrade $http_upgrade;
+-        proxy_set_header Connection 'upgrade';
+-        proxy_set_header Host $host;
+-        proxy_cache_bypass $http_upgrade;
+-    }
+-
+-    # Proxy tới NestJS API
+-    location /api/ {
+-        proxy_pass http://app:4000/api/;
+-        proxy_http_version 1.1;
+-        proxy_set_header Upgrade $http_upgrade;
+-        proxy_set_header Connection 'upgrade';
+-        proxy_set_header Host $host;
+-        proxy_set_header X-Real-IP $remote_addr;
+-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+-        proxy_set_header X-Forwarded-Proto $scheme;
+-    }
+-}
+diff --git a/nginx/prod/default.conf b/nginx/prod/default.conf
+new file mode 100644
+index 0000000..47fc8b3
+--- /dev/null
++++ b/nginx/prod/default.conf
+@@ -0,0 +1,52 @@
++# Cấu hình nginx cho docker-compose.prod.yml.
++# Đổi server_name thành tên miền thật; đặt fullchain.pem và privkey.pem vào nginx/ssl/.
++
++server {
++    listen 80;
++    server_name _;
++
++    location / {
++        return 301 https://$host$request_uri;
++    }
++}
++
++server {
++    listen 443 ssl;
++    http2 on;
++    server_name _;
++
++    ssl_certificate     /etc/nginx/ssl/fullchain.pem;
++    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
++    ssl_protocols TLSv1.2 TLSv1.3;
++    ssl_ciphers HIGH:!aNULL:!MD5;
++    ssl_session_cache shared:SSL:10m;
++
++    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
++    add_header X-Frame-Options SAMEORIGIN always;
++    add_header X-Content-Type-Options nosniff always;
++    add_header Referrer-Policy strict-origin-when-cross-origin always;
++
++    # Khớp FILE_MAX_UPLOAD_BYTES = 10 MB, cộng phần dư cho phần đầu multipart.
++    client_max_body_size 11m;
++
++    location /api/ {
++        proxy_pass http://api:4000;
++        proxy_http_version 1.1;
++        proxy_set_header Host $host;
++        proxy_set_header X-Real-IP $remote_addr;
++        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
++        proxy_set_header X-Forwarded-Proto $scheme;
++        proxy_read_timeout 120s;
++    }
++
++    location / {
++        proxy_pass http://web:3000;
++        proxy_http_version 1.1;
++        proxy_set_header Upgrade $http_upgrade;
++        proxy_set_header Connection "upgrade";
++        proxy_set_header Host $host;
++        proxy_set_header X-Real-IP $remote_addr;
++        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
++        proxy_set_header X-Forwarded-Proto $scheme;
++    }
++}
+diff --git a/scripts/backup.sh b/scripts/backup.sh
+index 98df58d..719de84 100755
+--- a/scripts/backup.sh
++++ b/scripts/backup.sh
+@@ -1,19 +1,57 @@
+-#!/bin/bash
+-set -e
++#!/usr/bin/env bash
++# Sao lưu PostgreSQL và MinIO của bản triển khai docker-compose.prod.yml.
++#
++#   ./scripts/backup.sh                       # dùng .env.production, lưu vào ./backups
++#   ENV_FILE=/etc/docmans.env BACKUP_DIR=/mnt/backup ./scripts/backup.sh
++#
++# Đặt lịch (cron, 01:30 hằng ngày):
++#   30 1 * * * cd /opt/docmans && ./scripts/backup.sh >> /var/log/docmans-backup.log 2>&1
++#
++# Mọi lỗi đều làm script dừng với mã khác 0 để cron/giám sát phát hiện được.
++# Nên chép thư mục backup sang máy hoặc ổ khác (rsync/rclone): backup nằm cùng máy với dữ liệu
++# không bảo vệ được khi hỏng ổ đĩa hoặc mất máy chủ.
++set -Eeuo pipefail
+ 
+-BACKUP_DIR="./backups"
+-DATE=$(date +%Y%m%d_%H%M%S)
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
++COMPOSE_FILE="${COMPOSE_FILE:-$PROJECT_DIR/docker-compose.prod.yml}"
++ENV_FILE="${ENV_FILE:-$PROJECT_DIR/.env.production}"
++BACKUP_DIR="${BACKUP_DIR:-$PROJECT_DIR/backups}"
++RETENTION_DAYS="${RETENTION_DAYS:-30}"
++STAMP="$(date +%Y%m%d_%H%M%S)"
++TARGET="$BACKUP_DIR/$STAMP"
+ 
+-mkdir -p "$BACKUP_DIR"
++log() { echo "[$(date '+%F %T')] $*"; }
++trap 'log "LỖI: sao lưu thất bại ở dòng $LINENO"; rm -rf "$TARGET"' ERR
+ 
+-echo "Bắt đầu sao lưu cơ sở dữ liệu PostgreSQL..."
+-docker exec -t docmans-postgres-1 pg_dump -U docmansystem docmansystem_prod > "$BACKUP_DIR/db_backup_$DATE.sql"
++[[ -f "$ENV_FILE" ]] || { log "Không tìm thấy $ENV_FILE"; exit 1; }
++set -a; source "$ENV_FILE"; set +a
++: "${POSTGRES_USER:?thiếu POSTGRES_USER trong $ENV_FILE}"
++: "${POSTGRES_DB:?thiếu POSTGRES_DB trong $ENV_FILE}"
+ 
+-echo "Bắt đầu sao lưu MinIO..."
+-# Tuỳ chọn cài đặt mc (MinIO Client) hoặc chỉ backup thư mục volume
+-# Cách đơn giản nhất nếu có docker volume mount:
+-tar -czf "$BACKUP_DIR/minio_backup_$DATE.tar.gz" -C ./minio_data . 2>/dev/null || true
++compose() { docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
+ 
+-echo "Sao lưu hoàn tất vào thư mục $BACKUP_DIR."
+-# Dọn dẹp backup cũ hơn 30 ngày
+-find "$BACKUP_DIR" -type f -mtime +30 -exec rm {} \;
++mkdir -p "$TARGET"
++chmod 700 "$BACKUP_DIR" "$TARGET"
++
++# 1. PostgreSQL: định dạng custom (-Fc) đã nén, khôi phục bằng pg_restore.
++#    Dùng `exec -T` (KHÔNG cấp TTY) để dữ liệu nhị phân không bị biến đổi.
++log "Sao lưu PostgreSQL ($POSTGRES_DB)..."
++compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc --no-owner > "$TARGET/postgres.dump"
++compose exec -T postgres pg_restore --list < "$TARGET/postgres.dump" > /dev/null   # kiểm tra file dump đọc được
++
++# 2. MinIO: đọc trực tiếp volume của container minio (named volume, không phải thư mục ./minio_data).
++MINIO_CONTAINER="$(compose ps -q minio)"
++[[ -n "$MINIO_CONTAINER" ]] || { log "Container minio không chạy"; exit 1; }
++log "Sao lưu MinIO..."
++docker run --rm --volumes-from "$MINIO_CONTAINER":ro -v "$TARGET":/backup alpine:3.20 \
++  tar -czf /backup/minio-data.tar.gz -C /data .
++tar -tzf "$TARGET/minio-data.tar.gz" > /dev/null                                   # kiểm tra file nén đọc được
++
++# 3. Checksum để phát hiện file hỏng trước khi khôi phục.
++( cd "$TARGET" && sha256sum postgres.dump minio-data.tar.gz > SHA256SUMS )
++
++log "Hoàn tất: $TARGET ($(du -sh "$TARGET" | cut -f1))"
++
++# 4. Xoá các bản sao lưu cũ hơn RETENTION_DAYS ngày (chỉ thư mục dạng YYYYMMDD_HHMMSS).
++find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*_[0-9]*' -mtime +"$RETENTION_DAYS" -print -exec rm -rf {} +
+diff --git a/scripts/restore.sh b/scripts/restore.sh
+new file mode 100755
+index 0000000..99c8a7f
+--- /dev/null
++++ b/scripts/restore.sh
+@@ -0,0 +1,43 @@
++#!/usr/bin/env bash
++# Khôi phục một bản sao lưu do scripts/backup.sh tạo ra.
++#
++#   ./scripts/restore.sh backups/20261009_013000
++#
++# CẢNH BÁO: GHI ĐÈ toàn bộ cơ sở dữ liệu và tệp hiện tại. Nên diễn tập khôi phục định kỳ
++# trên một máy thử (yêu cầu RPO 24 giờ / RTO 1 ngày làm việc) để chắc chắn backup dùng được.
++set -Eeuo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
++COMPOSE_FILE="${COMPOSE_FILE:-$PROJECT_DIR/docker-compose.prod.yml}"
++ENV_FILE="${ENV_FILE:-$PROJECT_DIR/.env.production}"
++SOURCE="${1:?Cách dùng: $0 <thư mục backup>}"
++SOURCE="$(cd "$SOURCE" && pwd)"
++
++log() { echo "[$(date '+%F %T')] $*"; }
++
++[[ -f "$ENV_FILE" ]] || { log "Không tìm thấy $ENV_FILE"; exit 1; }
++set -a; source "$ENV_FILE"; set +a
++compose() { docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
++
++log "Kiểm tra checksum..."
++( cd "$SOURCE" && sha256sum -c SHA256SUMS )
++
++read -r -p "Ghi đè dữ liệu hiện tại bằng bản $SOURCE? Gõ 'KHOI PHUC' để tiếp tục: " answer
++[[ "$answer" == "KHOI PHUC" ]] || { log "Đã huỷ."; exit 1; }
++
++log "Dừng ứng dụng (giữ postgres và minio)..."
++compose stop nginx web api
++
++log "Khôi phục PostgreSQL..."
++compose exec -T postgres pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner --single-transaction < "$SOURCE/postgres.dump"
++
++log "Khôi phục MinIO..."
++compose stop minio
++MINIO_CONTAINER="$(compose ps -aq minio)"
++docker run --rm --volumes-from "$MINIO_CONTAINER" -v "$SOURCE":/backup:ro alpine:3.20 \
++  sh -c 'find /data -mindepth 1 -delete && tar -xzf /backup/minio-data.tar.gz -C /data'
++
++log "Khởi động lại..."
++compose up -d
++log "Hoàn tất. Kiểm tra: đăng nhập, mở một hồ sơ, tải xuống một tệp đính kèm."
+-- 
+2.43.0
+

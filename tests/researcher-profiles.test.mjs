@@ -10,7 +10,7 @@ const staff = {
   id: "staff-1",
   username: "staff",
   displayName: "Staff",
-  systemRole: "SCIENTIFIC_MANAGEMENT_STAFF",
+  systemRole: "RESEARCH_MANAGEMENT_STAFF",
   unit: "Phòng KHQS",
   organizationScopes: [{ id: "org-1", code: "ORG1", name: "Đơn vị 1" }]
 };
@@ -68,7 +68,7 @@ function createFakePrisma({ profiles = [], failAudit = false } = {}) {
       username: "staff",
       displayName: "Staff",
       status: "active",
-      systemRole: "SCIENTIFIC_MANAGEMENT_STAFF",
+      systemRole: "RESEARCH_MANAGEMENT_STAFF",
       unit: "Đơn vị 1",
       mustChangePassword: false,
       organizationScopes: [{ organizationUnitId: "org-1", organizationUnit: { id: "org-1", code: "ORG1", name: "Đơn vị 1", status: "active" } }]

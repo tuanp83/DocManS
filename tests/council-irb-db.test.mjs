@@ -106,10 +106,10 @@ describe("Council and IRB writes on real PostgreSQL", () => {
       data: { code: unique("DOT"), title: "Đợt kiểm thử", startsAt: new Date(Date.now() - 86400000), endsAt: new Date(Date.now() + 86400000), status: "open", requiredPackage: {} }
     });
     owner = await createUser("RESEARCHER_INTERNAL_USER", orgA);
-    staff = await createUser("SCIENTIFIC_MANAGEMENT_STAFF", orgA);
-    outsiderStaff = await createUser("SCIENTIFIC_MANAGEMENT_STAFF", orgB);
+    staff = await createUser("RESEARCH_MANAGEMENT_STAFF", orgA);
+    outsiderStaff = await createUser("RESEARCH_MANAGEMENT_STAFF", orgB);
     leader = await createUser("LEADERSHIP_APPROVAL_AUTHORITY", orgA);
-    irbManager = await createUser("SCIENTIFIC_MANAGEMENT_STAFF", orgA, { unit: "Trưởng phòng KHQS" });
+    irbManager = await createUser("RESEARCH_MANAGEMENT_STAFF", orgA, { unit: "Trưởng phòng KHQS" });
     memberA = await createUser("RESEARCHER_INTERNAL_USER", orgB);
     memberB = await createUser("RESEARCHER_INTERNAL_USER", orgB);
     outsider = await createUser("RESEARCHER_INTERNAL_USER", orgB);
@@ -296,7 +296,7 @@ describe("Council and IRB writes on real PostgreSQL", () => {
 
   it("IRB certificate and disbursement authority: leadership or in-scope staff only; username, unit title and SYSTEM_ADMIN grant nothing", async () => {
     const admin = await createUser("SYSTEM_ADMIN", orgA);
-    const titledOutsider = await createUser("SCIENTIFIC_MANAGEMENT_STAFF", orgB, { unit: "Trưởng phòng KHQS" });
+    const titledOutsider = await createUser("RESEARCH_MANAGEMENT_STAFF", orgB, { unit: "Trưởng phòng KHQS" });
     const proposal = await newProposal();
 
     for (const denied of [admin, titledOutsider, outsiderStaff, owner]) {

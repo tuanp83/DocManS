@@ -33,7 +33,7 @@ export class ScientificDocumentsService {
   ) {}
 
   assertCanManage(actor: SafeUserContext) {
-    const allowedRoles = ["SCIENTIFIC_MANAGEMENT_STAFF", "SCIENTIFIC_MANAGEMENT_HEAD", "SYSTEM_ADMIN"];
+    const allowedRoles = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD", "SYSTEM_ADMIN"];
     if (!allowedRoles.includes(actor.systemRole)) {
       throw new ForbiddenException({
         message: "Chỉ nhà quản lý khoa học hoặc quản trị hệ thống mới có quyền quản lý văn bản, biểu mẫu."

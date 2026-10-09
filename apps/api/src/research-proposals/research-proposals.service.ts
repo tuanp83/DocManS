@@ -15,8 +15,8 @@ import {
   intakeAppliesToUser,
   isIntakeOpenForSubmission,
   isInternalResearcherEligible,
-  isScientificManagementHead,
-  isScientificManagementStaff,
+  isResearchManagementHead,
+  isResearchManagementStaff,
   isSystemAdmin
 } from "../proposals-shared/proposal-access.js";
 import {
@@ -890,7 +890,7 @@ export class ResearchProposalsService {
 
   /** Completeness and supplement requests belong to the proposal's current Staff officer only. */
   private async assertCanRequestSupplement(actor: SafeUserContext, proposal: ResearchProposalRecord) {
-    if (!isScientificManagementStaff(actor)) {
+    if (!isResearchManagementStaff(actor)) {
       throw new ForbiddenException({ message: "Chỉ chuyên viên phụ trách hồ sơ được yêu cầu bổ sung hồ sơ." });
     }
     assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
@@ -901,7 +901,7 @@ export class ResearchProposalsService {
   }
 
   private assertManagementOfficerAuthority(actor: SafeUserContext, proposal: ResearchProposalRecord) {
-    if (!isScientificManagementHead(actor)) {
+    if (!isResearchManagementHead(actor)) {
       throw new ForbiddenException({ message: "Chỉ Trưởng phòng quản lý khoa học được phân công hoặc thu hồi cán bộ phụ trách hồ sơ." });
     }
     assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
@@ -1131,7 +1131,7 @@ export class ResearchProposalsService {
     const missingFiles = requiredPackage
       .filter((item) => !attachments.some((attachment) => attachment.requirementCode === item.code && item.allowedMimeTypes.includes(attachment.mimeType) && (item.maxSizeMb === null || attachment.sizeBytes <= item.maxSizeMb * 1024 * 1024)))
       .map((item) => ({ code: item.code, label: item.label }));
-
+    // console.log("COMPUTE READINESS:", { requiredPackage, attachments, missingFiles });
     return {
       ready: missingFields.length === 0 && missingFiles.length === 0,
       missingFields,

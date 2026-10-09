@@ -55,7 +55,7 @@ describe("Story 1.9 proposal relationship lifecycle", () => {
 
   it("keeps a staff secretary blocked from reviewer assignment and all decision actions", () => {
     const decision = projectProposalViewerAuthorizationV1({
-      actor: { id: "secretary", systemRole: "SCIENTIFIC_MANAGEMENT_STAFF", organizationScopes: [{ id: "org-1" }] },
+      actor: { id: "secretary", systemRole: "RESEARCH_MANAGEMENT_STAFF", organizationScopes: [{ id: "org-1" }] },
       proposal: {
         id: "proposal-1", hostOrganizationUnitId: "org-1", status: "submitted", updatedAt: asOf,
         authorizationContextUpdatedAt: asOf, authorizationRelationshipVersion: 1, authorizationConflictVersion: 1
@@ -68,7 +68,7 @@ describe("Story 1.9 proposal relationship lifecycle", () => {
     });
 
     assert.equal(decision.allowedActions.includes("file.upload"), true);
-    assert.equal(decision.blockedActions.find((item) => item.action === "proposal.review.assign")?.code, "CONFLICT_DENIED");
+    assert.equal(decision.blockedActions.find((item) => item.action === "proposal.review.assign")?.code, "ACTION_NOT_GRANTED");
     assert.equal(decision.blockedActions.find((item) => item.action === "proposal.decision.approve")?.code, "ACTION_NOT_GRANTED");
     assert.equal(decision.blockedActions.find((item) => item.action === "proposal.decision.reject")?.code, "ACTION_NOT_GRANTED");
   });

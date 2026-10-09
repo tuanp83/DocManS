@@ -6,6 +6,7 @@ import { ProposalIntakePeriodsService } from "../dist/apps/api/proposal-intake-p
 import { ProposalParticipationService } from "../dist/apps/api/research-proposals/proposal-participation.service.js";
 import { ProposalReviewAccessService } from "../dist/apps/api/proposals-shared/proposal-review-access.service.js";
 import { ResearchProposalsService } from "../dist/apps/api/research-proposals/research-proposals.service.js";
+import { ProposalManagementOfficerService } from "../dist/apps/api/proposals-shared/proposal-management-officer.service.js";
 import { createEvaluationTables } from "./helpers/evaluation-prisma.mjs";
 import {
   evaluateProposalConflict,
@@ -18,7 +19,7 @@ const staffUser = {
   username: "staff",
   displayName: "Chuyên viên KHQS",
   role: "scientific-management",
-  systemRole: "SCIENTIFIC_MANAGEMENT_STAFF",
+  systemRole: "RESEARCH_MANAGEMENT_STAFF",
   roleLabel: "Chuyên viên quản lý khoa học",
   unit: "Phòng KHQS",
   roles: ["scientific-management"],
@@ -123,6 +124,7 @@ function createPrisma() {
     fileRecords: [],
     submissionEvents: [],
     supplementRequests: [],
+    officers: [],
     auditLogs: []
   };
 
@@ -250,6 +252,29 @@ function createPrisma() {
         return store.members.filter((item) => proposalIds.includes(item.proposalId));
       }
     },
+    proposalManagementOfficer: {
+      async deleteMany({ where }) {
+        const before = store.officers.length;
+        store.officers = store.officers.filter((item) => item.proposalId !== where.proposalId);
+        return { count: before - store.officers.length };
+      },
+      async createMany({ data }) {
+        const records = data.map((item) => ({
+          id: nextId("officer", store.officers),
+          createdAt: new Date(),
+          status: "ACTIVE",
+          effectiveFrom: new Date(),
+          effectiveUntil: null,
+          ...item
+        }));
+        store.officers.push(...records);
+        return { count: records.length };
+      },
+      async findMany({ where }) {
+        const proposalIds = Array.isArray(where?.proposalId?.in) ? where.proposalId.in : [where?.proposalId];
+        return store.officers.filter((item) => proposalIds.includes(item.proposalId));
+      }
+    },
     user: {
       async findMany({ where }) {
         const ids = where?.OR?.flatMap((clause) => clause.id?.in ?? []) ?? [];
@@ -261,6 +286,9 @@ function createPrisma() {
       }
     },
     fileRecord: {
+      async findFirst({ where }) {
+        return store.fileRecords.find(item => item.id === where.id) ?? null;
+      },
       async create({ data }) {
         const record = {
           id: nextId("file", store.fileRecords),
@@ -278,27 +306,13 @@ function createPrisma() {
       async findUnique({ where }) {
         return store.fileRecords.find((item) => item.id === where.id) ?? null;
       },
-      async findFirst({ where }) {
-        const matches = store.fileRecords.filter((item) => {
-          if (where.relatedEntityType && item.relatedEntityType !== where.relatedEntityType) return false;
-          if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
-          if (where.filePurpose && item.filePurpose !== where.filePurpose) return false;
-          if (where.status && !(typeof where.status === "object" ? where.status.in.includes(item.status) : item.status === where.status)) return false;
-          if (where.deletedAt === null && item.deletedAt !== null) return false;
-          return true;
-        });
-        return matches.sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0] ?? null;
-      },
-      async update({ where, data }) {
-        const record = store.fileRecords.find((item) => item.id === where.id);
-        if (!record) throw new Error("file record not found");
-        Object.assign(record, data, { updatedAt: new Date() });
-        return record;
-      },
       async findMany({ where }) {
         return store.fileRecords.filter((item) => {
           if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
-          if (where.status && !(typeof where.status === "object" ? where.status.in.includes(item.status) : item.status === where.status)) return false;
+          if (where.status) {
+            if (where.status.in && !where.status.in.includes(item.status)) return false;
+            if (typeof where.status === "string" && item.status !== where.status) return false;
+          }
           if (where.deletedAt === null && item.deletedAt !== null) return false;
           return true;
         });
@@ -370,7 +384,7 @@ function createServices() {
     objectStorage,
     participationService,
     intakeService: new ProposalIntakePeriodsService(prisma, auditLog),
-    proposalService: new ResearchProposalsService(prisma, auditLog, participationService, new ProposalReviewAccessService(prisma)),
+    proposalService: new ResearchProposalsService(prisma, auditLog, participationService, new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma)),
     filesService: new FilesService(prisma, objectStorage, auditLog, participationService, new ProposalReviewAccessService(prisma), {
       maxFileSizeBytes: 1024 * 1024,
       allowedExtensions: [".doc", ".docx", ".pdf", ".xls", ".xlsx"]
@@ -394,7 +408,7 @@ async function createOpenIntake(intakeService) {
 
 async function createProposalWithParticipants(services, members) {
   const intake = await createOpenIntake(services.intakeService);
-  return services.proposalService.createDraft(piUser, {
+  const created = await services.proposalService.createDraft(piUser, {
     intakePeriodId: intake.id,
     title: "Nghiên cứu ứng dụng AI trong y học quân sự",
     hostOrganizationUnitId: "org-khti",
@@ -407,6 +421,12 @@ async function createProposalWithParticipants(services, members) {
     budgetMetadata: { amount: 120000000, currency: "VND" },
     members
   });
+
+  await services.prisma.proposalManagementOfficer.createMany({
+    data: [{ proposalId: created.id, officerUserId: staffUser.id }]
+  });
+
+  return created;
 }
 
 const LINKED_TEAM = [

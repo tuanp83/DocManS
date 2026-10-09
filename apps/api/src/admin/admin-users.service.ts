@@ -343,9 +343,9 @@ export class AdminUsersService {
   private toRoleLabel(systemRole: SystemRole) {
     return systemRole === "SYSTEM_ADMIN"
       ? "Quản trị hệ thống"
-      : systemRole === "SCIENTIFIC_MANAGEMENT_STAFF"
+      : systemRole === "RESEARCH_MANAGEMENT_STAFF"
         ? "Chuyên viên quản lý khoa học"
-        : systemRole === "SCIENTIFIC_MANAGEMENT_HEAD"
+        : systemRole === "RESEARCH_MANAGEMENT_HEAD"
           ? "Trưởng phòng quản lý khoa học"
         : systemRole === "LEADERSHIP_APPROVAL_AUTHORITY"
           ? "Lãnh đạo phê duyệt"

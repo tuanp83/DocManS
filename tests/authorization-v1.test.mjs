@@ -120,19 +120,30 @@ describe("Story 1.8 viewer capability V1", () => {
       relationshipEffectiveFrom: { TOPIC_MEMBER: "2026-07-01T00:00:00.000Z" }
     };
     const staffCapability = projectProposalViewerAuthorizationV1({
-      actor: { ...actor, systemRole: "SCIENTIFIC_MANAGEMENT_STAFF" },
+      actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" },
       proposal: { ...proposal, status: "under_review" },
       participation: participant,
+      reviewAccess: { isAssignedReviewer: false },
       canRead: true,
       canEdit: false,
       canManageFiles: false
     });
-    assert.equal(staffCapability.blockedActions.find((item) => item.action === "proposal.review.consolidate")?.code, "CONFLICT_DENIED");
+    const headCapability = projectProposalViewerAuthorizationV1({
+      actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_HEAD" },
+      proposal: { ...proposal, status: "under_review" },
+      participation: participant,
+      reviewAccess: { isAssignedReviewer: false },
+      canRead: true,
+      canEdit: false,
+      canManageFiles: false
+    });
+    assert.equal(headCapability.blockedActions.find((item) => item.action === "proposal.review.consolidate")?.code, "CONFLICT_DENIED");
     assert.equal(staffCapability.blockedActions.find((item) => item.action === "proposal.supplement.request")?.code, "CONFLICT_DENIED");
 
     const authorityCapability = projectProposalViewerAuthorizationV1({
       actor: { ...actor, systemRole: "LEADERSHIP_APPROVAL_AUTHORITY" },
       proposal: { ...proposal, status: "ready_for_approval" },
+      participation: { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} },
       reviewAccess: { isAssignedReviewer: true, assignmentId: "assignment-1", assignmentRole: "reviewer", effectiveFrom: "2026-07-01T00:00:00.000Z" },
       canRead: true,
       canEdit: false,
@@ -143,9 +154,11 @@ describe("Story 1.8 viewer capability V1", () => {
 
   it("keeps PI submission record-scoped and blocks a repeated completeness check", () => {
     const staffCapability = projectProposalViewerAuthorizationV1({
-      actor: { ...actor, systemRole: "SCIENTIFIC_MANAGEMENT_STAFF" },
+      actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" },
       proposal: { ...proposal, status: "submitted" },
       participation: { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} },
+      reviewAccess: { isAssignedReviewer: false },
+      managementOfficer: { resolved: true, officer: { officerUserId: actor.id, username: actor.username, effectiveFrom: new Date() } },
       canRead: true,
       canEdit: false,
       canManageFiles: false,

@@ -6,6 +6,7 @@ import { AuditLogService } from "../dist/apps/api/auth/audit-log.service.js";
 import { DashboardExportService } from "../dist/apps/api/dashboard/dashboard-export.service.js";
 import { DashboardService } from "../dist/apps/api/dashboard/dashboard.service.js";
 import { ProposalReviewAccessService } from "../dist/apps/api/proposals-shared/proposal-review-access.service.js";
+import { ProposalManagementOfficerService } from "../dist/apps/api/proposals-shared/proposal-management-officer.service.js";
 import { ProposalParticipationService } from "../dist/apps/api/research-proposals/proposal-participation.service.js";
 
 const past = new Date("2024-01-01T00:00:00.000Z");
@@ -56,13 +57,15 @@ function createPrisma() {
         auditLogs.push(row);
         return row;
       }
-    }
+    },
+    proposalReview: { findMany: async () => [] },
+    proposalManagementOfficer: { findMany: async () => [] }
   };
 }
 
 function services() {
   const prisma = createPrisma();
-  const dashboard = new DashboardService(prisma, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma));
+  const dashboard = new DashboardService(prisma, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
   const exporter = new DashboardExportService(dashboard, new AuditLogService(prisma));
   return { prisma, dashboard, exporter };
 }
@@ -71,14 +74,14 @@ function actor(id, systemRole, scopes = [unitA]) {
   return { id, username: id, displayName: id, systemRole, organizationScopes: scopes.map((unit) => ({ id: unit.id, code: unit.id, name: unit.name })) };
 }
 
-const staffA = actor("staff-a", "SCIENTIFIC_MANAGEMENT_STAFF");
+const staffA = actor("staff-a", "RESEARCH_MANAGEMENT_HEAD");
 const leaderA = actor("leader-a", "LEADERSHIP_APPROVAL_AUTHORITY");
 const ownerR1 = actor("r1", "RESEARCHER_INTERNAL_USER");
 const memberR2 = actor("r2", "RESEARCHER_INTERNAL_USER");
 const reviewer = actor("reviewer", "EXTERNAL_RESEARCHER_USER");
 const outsiderB = actor("outsider", "EXTERNAL_RESEARCHER_USER", [unitB]);
 const adminAB = actor("admin", "SYSTEM_ADMIN", [unitA, unitB]);
-const staffNoScope = actor("staff-none", "SCIENTIFIC_MANAGEMENT_STAFF", []);
+const staffNoScope = actor("staff-none", "RESEARCH_MANAGEMENT_HEAD", []);
 
 async function readableIds(dashboard, user) {
   return (await dashboard.findReadableProposals(user)).map((row) => row.id).sort();

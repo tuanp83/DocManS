@@ -14,7 +14,7 @@ describe("ScientificDocumentsService", () => {
     id: "user-staff",
     username: "nmphuong",
     displayName: "TS. Nguyễn Minh Phương",
-    systemRole: "SCIENTIFIC_MANAGEMENT_STAFF"
+    systemRole: "RESEARCH_MANAGEMENT_STAFF"
   };
 
   const adminActor = {

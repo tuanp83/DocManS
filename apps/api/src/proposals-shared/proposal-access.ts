@@ -23,15 +23,15 @@ export function isSystemAdmin(user?: SafeUserContext) {
   return user?.systemRole === "SYSTEM_ADMIN";
 }
 
-export function isScientificManagement(user?: SafeUserContext) {
-  return isScientificManagementStaff(user) || isScientificManagementHead(user);
+export function isResearchManagement(user?: SafeUserContext) {
+  return isResearchManagementStaff(user) || isResearchManagementHead(user);
 }
 
-export function isScientificManagementStaff(user?: SafeUserContext) {
+export function isResearchManagementStaff(user?: SafeUserContext) {
   return user?.systemRole === "RESEARCH_MANAGEMENT_STAFF";
 }
 
-export function isScientificManagementHead(user?: SafeUserContext) {
+export function isResearchManagementHead(user?: SafeUserContext) {
   return user?.systemRole === "RESEARCH_MANAGEMENT_HEAD";
 }
 
@@ -52,7 +52,7 @@ export function isLeadership(user?: SafeUserContext) {
 }
 
 export function assertCanManageIntakePeriods(user?: SafeUserContext) {
-  if (!user || !isScientificManagement(user)) {
+  if (!user || !isResearchManagement(user)) {
     throw new ForbiddenException({ message: "Không có quyền quản lý đợt tiếp nhận." });
   }
 
@@ -121,7 +121,7 @@ export function canReadProposal(
     return true;
   }
 
-  if (isScientificManagementHead(user) || isResearchOversightAuthority(user)) {
+  if (isResearchManagementHead(user) || isResearchOversightAuthority(user)) {
     return true;
   }
 
@@ -129,7 +129,7 @@ export function canReadProposal(
     return isWorkflowVisibleStatus(proposal.status);
   }
 
-  if (isScientificManagementStaff(user)) {
+  if (isResearchManagementStaff(user)) {
     return managementOfficer?.resolved === true && managementOfficer.officer?.officerUserId === user.id;
   }
 

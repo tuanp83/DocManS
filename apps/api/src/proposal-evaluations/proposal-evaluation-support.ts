@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import type { PrismaService } from "../infrastructure/prisma/prisma.service.js";
-import { assertHasOrganizationScope, isLeadership, isScientificManagement } from "../proposals-shared/proposal-access.js";
+import { assertHasOrganizationScope, isLeadership, isResearchManagementStaff } from "../proposals-shared/proposal-access.js";
 import type { ProposalConflictDecision } from "../proposals-shared/proposal-participation.js";
 import { isWorkflowVisibleStatus, PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
 
@@ -106,7 +106,7 @@ export async function findEvaluationProposal(prisma: PrismaService, proposalId: 
  * AC-ST-3.4-03) rather than only on the first one.
  */
 export function assertScientificManagementScope(actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
-  if (!actor || !isScientificManagement(actor)) {
+  if (!actor || !isResearchManagementStaff(actor)) {
     throw new ForbiddenException({ message: "Chỉ cán bộ quản lý khoa học được thực hiện thao tác này." });
   }
 
@@ -139,7 +139,7 @@ export function assertCanReadEvaluation(actor: SafeUserContext | undefined, prop
     return actor;
   }
 
-  if (actor && isScientificManagement(actor)) {
+  if (actor && isResearchManagementStaff(actor)) {
     if ((actor.unit || "").toLowerCase().includes("chuyên viên")) {
       throw new ForbiddenException({ message: "Chuyên viên QLKH không có quyền xem thông tin đánh giá hồ sơ." });
     }
@@ -242,7 +242,7 @@ export function assertProposalStatus(proposal: EvaluationProposalRecord, allowed
  */
 function assertProposalGovernanceAuthority(actor: SafeUserContext | undefined, proposal: Pick<EvaluationProposalRecord, "hostOrganizationUnitId">, message: string): SafeUserContext {
   if (actor && isLeadership(actor)) return actor;
-  if (!actor || !isScientificManagement(actor)) throw new ForbiddenException({ message });
+  if (!actor || !isResearchManagementStaff(actor)) throw new ForbiddenException({ message });
   assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
   return actor;
 }

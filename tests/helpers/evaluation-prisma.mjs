@@ -105,6 +105,9 @@ export function createEvaluationTables(store, accounts = []) {
       },
       async findMany({ where, include } = {}) {
         return store.reviewAssignments.filter((item) => matchesWhere(item, where)).map((item) => withAssignmentRelations(item, include));
+      },
+      async count({ where } = {}) {
+        return store.reviewAssignments.filter((item) => matchesWhere(item, where)).length;
       }
     },
     proposalReview: {
