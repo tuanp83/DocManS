@@ -79,7 +79,7 @@ export function ProposalReviewsWorkspace() {
   const [modalTargetProposal, setModalTargetProposal] = useState<ResearchProposal | null>(null);
 
   // Chuyên viên QLKH không có quyền Đánh giá hồ sơ
-  if (account?.systemRole === "SCIENTIFIC_MANAGEMENT_STAFF") {
+  if (account?.systemRole === "RESEARCH_MANAGEMENT_STAFF") {
     return (
       <div className="card p-8 border border-amber-200 bg-amber-50/60 rounded-xl max-w-2xl mx-auto my-12 text-center shadow-sm">
         <div className="inline-flex p-3 bg-amber-100 text-amber-800 rounded-full mb-4">

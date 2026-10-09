@@ -148,7 +148,6 @@ export type ViewerAuthorizationV1 = {
   accessReasons?: string[];
   evaluatedAsOf: string;
   contextVersion: ContextVersionTokenV1;
-  accessReasons?: string[];
 };
 
 export type AuthorizationContextV1 = {

@@ -291,7 +291,7 @@ export class ApprovedProjectsService {
     const loaded = await this.loadAuthorized(this.prisma, actor, projectId);
     this.assertScope(actor, loaded.project);
     this.assertOfficerAssigner(actor, loaded.project);
-    const users = await (this.prisma as any).user.findMany({ where: { status: "active", systemRole: "SCIENTIFIC_MANAGEMENT_STAFF" }, include: { organizationScopes: { include: { organizationUnit: true } } }, orderBy: { displayName: "asc" } });
+    const users = await (this.prisma as any).user.findMany({ where: { status: "active", systemRole: "RESEARCH_MANAGEMENT_STAFF" }, include: { organizationScopes: { include: { organizationUnit: true } } }, orderBy: { displayName: "asc" } });
     const eligible = users.filter((user: any) => user.organizationScopes?.some((scope: any) => scope.organizationUnitId === loaded.project.hostOrganizationUnitId && scope.organizationUnit?.status === "active") && !(loaded.project.members ?? []).some((member: any) => member.userId === user.id && isRelationshipActiveAt(member, new Date())));
     const reviewAccess = new ProposalReviewAccessService(this.prisma);
     const checks = await Promise.all(eligible.map((user: AnyRecord) => reviewAccess.resolveConflictForProposal(user.id, loaded.project.proposalId)));
@@ -303,7 +303,7 @@ export class ApprovedProjectsService {
       this.assertOfficerAssigner(currentActor, project);
       await this.assertNoEvaluationConflict(tx, currentActor.id, project.proposalId);
       const candidate = await tx.user.findUnique({ where: { id: input.officerUserId }, include: { organizationScopes: { include: { organizationUnit: true } } } });
-      if (!candidate || candidate.status !== "active" || candidate.systemRole !== "SCIENTIFIC_MANAGEMENT_STAFF" || !candidate.organizationScopes?.some((scope: any) => scope.organizationUnitId === project.hostOrganizationUnitId && scope.organizationUnit.status === "active")) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chuyên viên được chọn không hoạt động hoặc ngoài phạm vi đề tài." });
+      if (!candidate || candidate.status !== "active" || candidate.systemRole !== "RESEARCH_MANAGEMENT_STAFF" || !candidate.organizationScopes?.some((scope: any) => scope.organizationUnitId === project.hostOrganizationUnitId && scope.organizationUnit.status === "active")) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chuyên viên được chọn không hoạt động hoặc ngoài phạm vi đề tài." });
       if ((project.members ?? []).some((member: any) => member.userId === candidate.id && isRelationshipActiveAt(member, new Date()))) throw new ForbiddenException({ code: "CONFLICT_DENIED", message: "Thành viên đề tài không được đồng thời là chuyên viên quản lý." });
       await this.assertNoEvaluationConflict(tx, candidate.id, project.proposalId);
       const now = await readTransactionClockV1(tx);

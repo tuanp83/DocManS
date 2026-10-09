@@ -472,6 +472,11 @@ function createEp02Prisma() {
         return record;
       }
     },
+    approvedProject: {
+      async findUnique() {
+        return null;
+      }
+    },
     // EP-03 tables: the proposal and file read paths resolve reviewer assignments (ST-3.2).
     ...createEvaluationTables(store, [adminUser, staffUser, piUser, otherPiUser]),
     async $queryRaw() {
@@ -868,7 +873,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     await assert.rejects(
       () =>
         filesService.uploadFile(piUser, {
-          relatedEntityType: "approved_project",
+          relatedEntityType: "invalid_entity",
           relatedEntityId: draft.id,
           filePurpose: "budget-form",
           fileName: "du-toan.pdf",

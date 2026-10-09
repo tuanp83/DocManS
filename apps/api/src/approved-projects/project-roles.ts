@@ -1,10 +1,10 @@
 import type { SafeUserContext } from "../auth/auth.types.js";
-import { getOrganizationScopeIds, isLeadership, isScientificManagement } from "../proposals-shared/proposal-access.js";
+import { getOrganizationScopeIds, isLeadership, isResearchManagement } from "../proposals-shared/proposal-access.js";
 
 /**
  * Ánh xạ vai trò cho module thực hiện đề tài theo mô hình 5 vai trò của nhánh này.
  *
- * Nhánh chính (thanhdotien278) dùng thêm SCIENTIFIC_MANAGEMENT_HEAD và RESEARCH_OVERSIGHT_AUTHORITY.
+ * Nhánh chính (thanhdotien278) dùng thêm RESEARCH_MANAGEMENT_HEAD và RESEARCH_OVERSIGHT_AUTHORITY.
  * Ở đây không có hai vai trò đó, nên:
  *   - Phân công / thu hồi chuyên viên phụ trách đề tài: lãnh đạo, hoặc chuyên viên QLKH có phạm vi đơn vị.
  *   - Thao tác nghiệp vụ hằng ngày (thiết lập mốc, xét báo cáo, xét điều chỉnh, thẩm định gia hạn):
@@ -17,7 +17,7 @@ import { getOrganizationScopeIds, isLeadership, isScientificManagement } from ".
  */
 
 export function isProjectStaff(actor?: SafeUserContext) {
-  return isScientificManagement(actor);
+  return isResearchManagement(actor);
 }
 
 export function isProjectLeadership(actor?: SafeUserContext) {
@@ -26,7 +26,7 @@ export function isProjectLeadership(actor?: SafeUserContext) {
 
 /** Người được phân công / thu hồi chuyên viên phụ trách đề tài. */
 export function canAssignProjectOfficer(actor?: SafeUserContext) {
-  return isLeadership(actor) || isScientificManagement(actor);
+  return isLeadership(actor) || isResearchManagement(actor);
 }
 
 /** Người quyết định phê duyệt / từ chối gia hạn. */
@@ -36,7 +36,7 @@ export function canDecideProjectExtension(actor?: SafeUserContext) {
 
 /** Vai trò được xem danh sách theo dõi tiến độ các đề tài (ngoài chủ nhiệm và thành viên). */
 export function canMonitorProjects(actor?: SafeUserContext) {
-  return isLeadership(actor) || isScientificManagement(actor);
+  return isLeadership(actor) || isResearchManagement(actor);
 }
 
 export function isInProjectScope(actor: SafeUserContext | undefined, hostOrganizationUnitId: string) {

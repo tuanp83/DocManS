@@ -65,7 +65,7 @@ export const accountProfiles: AccountProfile[] = [
     id: "staff-nmphuong",
     username: "nmphuong",
     name: "PGS. TS. Nguyễn Minh Phương",
-    role: "SCIENTIFIC_MANAGEMENT_STAFF",
+    role: "RESEARCH_MANAGEMENT_STAFF",
     roleLabel: "Trưởng Phòng KHQS",
     unit: "Trưởng Phòng KHQS",
     initials: "P"
@@ -74,7 +74,7 @@ export const accountProfiles: AccountProfile[] = [
     id: "staff-dmtrung",
     username: "dmtrung",
     name: "TS. Đỗ Minh Trung",
-    role: "SCIENTIFIC_MANAGEMENT_STAFF",
+    role: "RESEARCH_MANAGEMENT_STAFF",
     roleLabel: "Trưởng Ban QLKH, Phòng KHQS",
     unit: "Trưởng Ban QLKH, Phòng KHQS",
     initials: "T"
@@ -83,7 +83,7 @@ export const accountProfiles: AccountProfile[] = [
     id: "staff-hdtien1",
     username: "hdtien1",
     name: "ThS. Hoàng Đình Tiến",
-    role: "SCIENTIFIC_MANAGEMENT_STAFF",
+    role: "RESEARCH_MANAGEMENT_STAFF",
     roleLabel: "Chuyên viên QLKH, Phòng KHQS",
     unit: "Chuyên viên QLKH, Phòng KHQS",
     initials: "T"
@@ -290,7 +290,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 }
   ],
-  SCIENTIFIC_MANAGEMENT_HEAD: [
+  RESEARCH_MANAGEMENT_HEAD: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/proposals", label: "Quản lý đề tài", icon: Files },
     { href: "/researcher-profiles", label: "Hồ sơ nhà khoa học", icon: UserRoundSearch },
@@ -301,7 +301,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 }
   ],
-  SCIENTIFIC_MANAGEMENT_STAFF: [
+  RESEARCH_MANAGEMENT_STAFF: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/proposals", label: "Quản lý đề tài", icon: Files },
     { href: "/researcher-profiles", label: "Hồ sơ nhà khoa học", icon: UserRoundSearch },

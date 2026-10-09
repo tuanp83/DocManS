@@ -7,11 +7,11 @@ import {
 export function getNavigationItems(role: UserRole, account?: { unit?: string }) {
   let items = getRoleNavigationItems(role);
   if (role === "SYSTEM_ADMIN" && !items.some((item) => item.href === "/researcher-profiles")) {
-    const profileItem = getRoleNavigationItems("SCIENTIFIC_MANAGEMENT_STAFF").find((item) => item.href === "/researcher-profiles");
+    const profileItem = getRoleNavigationItems("RESEARCH_MANAGEMENT_STAFF").find((item) => item.href === "/researcher-profiles");
     if (profileItem) items = [...items, profileItem];
   }
   // Chuyên viên QLKH không có quyền Đánh giá hồ sơ (/reviews); thẩm quyền thuộc Trưởng phòng QLKH.
-  if (role === "SCIENTIFIC_MANAGEMENT_STAFF") {
+  if (role === "RESEARCH_MANAGEMENT_STAFF") {
     items = items.filter((item) => item.href !== "/reviews");
   }
 

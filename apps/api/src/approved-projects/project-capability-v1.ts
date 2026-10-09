@@ -109,7 +109,7 @@ export function projectViewerAuthorizationV1(input: ProjectCapabilityInput): Vie
       delegationVersion: input.project.delegationVersion ?? 0,
       policyVersion: "v1"
     },
-    accessReasons: [isPi ? "TOPIC_PI" : "", participant ? (input.participant?.role ?? "TOPIC_MEMBER") : "", hasOfficer ? "PROJECT_MANAGEMENT_OFFICER" : "", isStaff(input.actor) && scoped && !hasOfficer ? "SCIENTIFIC_MANAGEMENT_STAFF_SCOPE" : "", isLeadership(input.actor) ? "LEADERSHIP_APPROVAL_AUTHORITY_OVERSIGHT" : ""].filter(Boolean)
+    accessReasons: [isPi ? "TOPIC_PI" : "", participant ? (input.participant?.role ?? "TOPIC_MEMBER") : "", hasOfficer ? "PROJECT_MANAGEMENT_OFFICER" : "", isStaff(input.actor) && scoped && !hasOfficer ? "RESEARCH_MANAGEMENT_STAFF_SCOPE" : "", isLeadership(input.actor) ? "LEADERSHIP_APPROVAL_AUTHORITY_OVERSIGHT" : ""].filter(Boolean)
   };
 }
 

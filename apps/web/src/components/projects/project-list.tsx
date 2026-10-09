@@ -18,7 +18,7 @@ export function ProjectList({ mine = false }: { mine?: boolean }) {
   const [message, setMessage] = useState("");
   const { account } = useSession();
   // Chỉ là gợi ý hiển thị; backend vẫn kiểm tra quyền tạo đề tài (chuyên viên QLKH có phạm vi đơn vị).
-  const canCreateProjects = account?.systemRole === "SCIENTIFIC_MANAGEMENT_STAFF";
+  const canCreateProjects = account?.systemRole === "RESEARCH_MANAGEMENT_STAFF";
 
   async function refresh() {
     setState("loading");

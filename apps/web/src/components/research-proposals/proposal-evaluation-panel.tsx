@@ -257,7 +257,7 @@ export function ProposalEvaluationPanel({
     if (unconflicted.length === 0) return;
 
     const leader = unconflicted.find((c) => c.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY") || unconflicted[0];
-    const staff = unconflicted.find((c) => c.systemRole === "SCIENTIFIC_MANAGEMENT_STAFF" && c.id !== leader?.id) || unconflicted[1];
+    const staff = unconflicted.find((c) => c.systemRole === "RESEARCH_MANAGEMENT_STAFF" && c.id !== leader?.id) || unconflicted[1];
     const researchers = unconflicted.filter((c) => c.id !== leader?.id && c.id !== staff?.id);
 
     if (leader) {
@@ -413,7 +413,7 @@ export function ProposalEvaluationPanel({
         const unconflicted = fetched.filter((c) => !c.isConflicted);
         if (unconflicted.length > 0) {
           const leader = unconflicted.find((c) => c.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY") || unconflicted[0];
-          const staff = unconflicted.find((c) => c.systemRole === "SCIENTIFIC_MANAGEMENT_STAFF" && c.id !== leader?.id) || unconflicted[1];
+          const staff = unconflicted.find((c) => c.systemRole === "RESEARCH_MANAGEMENT_STAFF" && c.id !== leader?.id) || unconflicted[1];
           const researchers = unconflicted.filter((c) => c.id !== leader?.id && c.id !== staff?.id);
 
           setChairState((prev) => (prev.candidateId || prev.name ? prev : {

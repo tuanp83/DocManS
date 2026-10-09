@@ -53,7 +53,7 @@ export function IRBApprovalModal({
   onSuccess
 }: IRBApprovalModalProps) {
   // Display hints only — the backend checks role and the proposal's organization scope.
-  const isScientificManagement = currentUserRole === "SCIENTIFIC_MANAGEMENT_STAFF" || currentUserRole === "SCIENTIFIC_MANAGEMENT_HEAD";
+  const isScientificManagement = currentUserRole === "RESEARCH_MANAGEMENT_STAFF" || currentUserRole === "RESEARCH_MANAGEMENT_HEAD";
   const isLeadership = currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY";
 
   const [loading, setLoading] = useState(false);

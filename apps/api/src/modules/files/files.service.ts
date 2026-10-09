@@ -56,7 +56,7 @@ const MIME_TYPES_BY_EXTENSION: Record<string, string[]> = {
 };
 
 /** Vai trò được xem mọi tệp của đề tài (không sửa tệp người khác). */
-const PROJECT_FILE_MANAGER_ROLES: string[] = ["SCIENTIFIC_MANAGEMENT_STAFF", "LEADERSHIP_APPROVAL_AUTHORITY"];
+const PROJECT_FILE_MANAGER_ROLES: string[] = ["RESEARCH_MANAGEMENT_STAFF", "LEADERSHIP_APPROVAL_AUTHORITY"];
 
 export type FileModuleConfig = {
   allowedExtensions: string[];

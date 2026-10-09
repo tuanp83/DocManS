@@ -23,10 +23,10 @@ test("PI can report and request changes but cannot decide them", () => {
 });
 
 test("assigned Staff decides adjustments; Leadership decides extensions only", () => {
-  const staff = projectViewerAuthorizationV1({ actor: actor("staff", "SCIENTIFIC_MANAGEMENT_STAFF"), project, projectOfficer: officer, request: { requestType: "adjustment", status: "under_staff_review", requesterId: "pi" } });
+  const staff = projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project, projectOfficer: officer, request: { requestType: "adjustment", status: "under_staff_review", requesterId: "pi" } });
   assert(has(staff, "project.adjustment.approve"));
   assert(!has(staff, "project.extension.approve"));
-  const staffOnExtension = projectViewerAuthorizationV1({ actor: actor("staff", "SCIENTIFIC_MANAGEMENT_STAFF"), project, projectOfficer: officer, request: { requestType: "extension", status: "ready_for_head_decision", requesterId: "pi" } });
+  const staffOnExtension = projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project, projectOfficer: officer, request: { requestType: "extension", status: "ready_for_head_decision", requesterId: "pi" } });
   assert(!has(staffOnExtension, "project.extension.approve"));
 
   const leader = projectViewerAuthorizationV1({ actor: actor("leader", "LEADERSHIP_APPROVAL_AUTHORITY"), project, request: { requestType: "extension", status: "ready_for_head_decision", requesterId: "pi" } });
@@ -41,13 +41,13 @@ test("Leadership is academy-wide; Staff needs the host unit scope", () => {
   const leaderNoScope = projectViewerAuthorizationV1({ actor: actor("leader", "LEADERSHIP_APPROVAL_AUTHORITY", false), project });
   assert(has(leaderNoScope, "project.read"));
   assert(has(leaderNoScope, "project.officer.assign"));
-  const staffNoScope = projectViewerAuthorizationV1({ actor: actor("staff", "SCIENTIFIC_MANAGEMENT_STAFF", false), project, projectOfficer: officer });
+  const staffNoScope = projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF", false), project, projectOfficer: officer });
   assert(!has(staffNoScope, "project.read"));
   assert(!has(staffNoScope, "project.adjustment.approve"));
 });
 
 test("Staff in scope reads and assigns officers but operates only when assigned", () => {
-  const staff = actor("staff", "SCIENTIFIC_MANAGEMENT_STAFF");
+  const staff = actor("staff", "RESEARCH_MANAGEMENT_STAFF");
   const unassigned = projectViewerAuthorizationV1({ actor: staff, project, request: { requestType: "adjustment", status: "under_staff_review", requesterId: "pi" } });
   assert(has(unassigned, "project.read"));
   assert(has(unassigned, "project.officer.assign"));
@@ -58,7 +58,7 @@ test("Staff in scope reads and assigns officers but operates only when assigned"
 });
 
 test("participants cannot manage or decide on their own project", () => {
-  const conflictedStaff = projectViewerAuthorizationV1({ actor: actor("staff", "SCIENTIFIC_MANAGEMENT_STAFF"), project, projectOfficer: officer, participant: { isParticipant: true, role: "TOPIC_MEMBER" } });
+  const conflictedStaff = projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project, projectOfficer: officer, participant: { isParticipant: true, role: "TOPIC_MEMBER" } });
   assert(!has(conflictedStaff, "project.adjustment.approve"));
   assert(!has(conflictedStaff, "project.officer.assign"));
   const conflictedLeader = projectViewerAuthorizationV1({ actor: actor("leader", "LEADERSHIP_APPROVAL_AUTHORITY"), project, participant: { isParticipant: true, role: "TOPIC_MEMBER" }, request: { requestType: "extension", status: "ready_for_head_decision", requesterId: "pi" } });

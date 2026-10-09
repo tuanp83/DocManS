@@ -83,9 +83,9 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     pi = await createUser("RESEARCHER_INTERNAL_USER", orgA);
     member = await createUser("RESEARCHER_INTERNAL_USER", orgA);
     researcher = await createUser("RESEARCHER_INTERNAL_USER", orgA);
-    staff = await createUser("SCIENTIFIC_MANAGEMENT_STAFF", orgA);
-    otherStaff = await createUser("SCIENTIFIC_MANAGEMENT_STAFF", orgA);
-    outsiderStaff = await createUser("SCIENTIFIC_MANAGEMENT_STAFF", orgB);
+    staff = await createUser("RESEARCH_MANAGEMENT_STAFF", orgA);
+    otherStaff = await createUser("RESEARCH_MANAGEMENT_STAFF", orgA);
+    outsiderStaff = await createUser("RESEARCH_MANAGEMENT_STAFF", orgB);
     leader = await createUser("LEADERSHIP_APPROVAL_AUTHORITY", orgB); // academy-wide, no scope on orgA
   });
 

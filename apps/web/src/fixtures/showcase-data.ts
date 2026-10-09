@@ -214,7 +214,7 @@ export function getProposalById(id: string) {
 
 export function getDashboardSnapshot(role: UserRole): DashboardSnapshot {
   switch (role) {
-    case "SCIENTIFIC_MANAGEMENT_STAFF":
+    case "RESEARCH_MANAGEMENT_STAFF":
       return {
         eyebrow: "Điều hành nghiệp vụ",
         title: "Dashboard chuyên viên quản lý khoa học",
