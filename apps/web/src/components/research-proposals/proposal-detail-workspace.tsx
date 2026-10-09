@@ -10,6 +10,7 @@ import { useSession } from "@/components/auth/session-provider";
 import { ProposalDecisionPanel } from "@/components/research-proposals/proposal-decision-panel";
 import { ProposalEvaluationPanel } from "@/components/research-proposals/proposal-evaluation-panel";
 import { ProposalReviewForm } from "@/components/research-proposals/proposal-review-form";
+import { ProposalManagementOfficerPanel } from "@/components/research-proposals/proposal-management-officer-panel";
 import { ProposalDeliverablesPanel } from "@/components/research-proposals/proposal-deliverables-panel";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ParticipationBadge } from "@/components/ui/participation-badge";
@@ -163,6 +164,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
   const showCompletenessCheck = shouldRenderAction("proposal.completeness.check");
   const showSubmitPanel = shouldRenderAction("proposal.submit");
   const showStaffProposalSummary = (["proposal.completeness.check", "proposal.supplement.request", "proposal.review.assign", "proposal.review.consolidate"] as const).some(shouldRenderAction);
+  const showManagementOfficerPanel = shouldRenderAction("proposal.management-officer.assign") || shouldRenderAction("proposal.management-officer.revoke");
   const requirementOptions = proposal?.requiredPackage ?? [];
   const documentGroups = useMemo(
     () =>
@@ -632,6 +634,17 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
               ) : <p className="record-meta">Chưa có thành viên.</p>}
             </div>
           </SectionCard>
+        ) : null}
+
+        {showManagementOfficerPanel ? (
+          <ProposalManagementOfficerPanel
+            proposalId={proposal.id}
+            state={proposal.managementOfficer}
+            contextVersion={proposal.viewerAuthorization?.contextVersion}
+            canAssign={canPerformProposalAction(capabilityState, "proposal.management-officer.assign")}
+            canRevoke={canPerformProposalAction(capabilityState, "proposal.management-officer.revoke")}
+            onChanged={refreshWorkflowState}
+          />
         ) : null}
 
         {proposal.supplementRequests?.length || canRequestSupplement || blockedProposalAction(capabilityState, "proposal.supplement.request") ? (

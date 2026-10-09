@@ -10,8 +10,8 @@ export function getNavigationItems(role: UserRole, account?: { unit?: string }) 
     const profileItem = getRoleNavigationItems("SCIENTIFIC_MANAGEMENT_STAFF").find((item) => item.href === "/researcher-profiles");
     if (profileItem) items = [...items, profileItem];
   }
-  // Chuyên viên QLKH không có quyền Đánh giá hồ sơ (/reviews)
-  if (account?.unit && account.unit.toLowerCase().includes("chuyên viên")) {
+  // Chuyên viên QLKH không có quyền Đánh giá hồ sơ (/reviews); thẩm quyền thuộc Trưởng phòng QLKH.
+  if (role === "SCIENTIFIC_MANAGEMENT_STAFF") {
     items = items.filter((item) => item.href !== "/reviews");
   }
 

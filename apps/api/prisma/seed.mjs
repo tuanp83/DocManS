@@ -57,7 +57,7 @@ const users = [
       "scrypt:user-staff:ea925bf5f31fe306cb863a45afec44a4e67d84423e431cb93de5af91425c6723cb66ac59963afe1f47ad86d3c16aec95f73bffc74c22d75b032fd1093f7a71d5",
     displayName: "PGS. TS. Nguyễn Minh Phương",
     status: "active",
-    systemRole: "SCIENTIFIC_MANAGEMENT_STAFF",
+    systemRole: "SCIENTIFIC_MANAGEMENT_HEAD",
     unit: "Trưởng Phòng KHQS"
   },
   {
@@ -77,8 +77,18 @@ const users = [
       "scrypt:user-reviewer:b0782812a1c75cef9db6596a7c88ae497fac0d08b7c7230c908d3c413fc08c2bed386eccfc0cbc10a64a088f1ad9bf6a2f6507410ea3d833bbb0907d958ac12a",
     displayName: "TS. Đỗ Minh Trung",
     status: "active",
-    systemRole: "SCIENTIFIC_MANAGEMENT_STAFF",
+    systemRole: "SCIENTIFIC_MANAGEMENT_HEAD",
     unit: "Trưởng Ban QLKH, Phòng KHQS"
+  },
+  {
+    id: "user-oversight",
+    username: "ttlan",
+    passwordHash:
+      "scrypt:user-oversight:b828efcba1228240ed21b01ec45208a51cca96277da1d2ab7ea7bea7beaca10a84c19fcea8ee3a512c47a6fde10daf4b5d76652116623480fd6b251a3b53e704",
+    displayName: "TS. Trần Thị Lan",
+    status: "active",
+    systemRole: "RESEARCH_OVERSIGHT_AUTHORITY",
+    unit: "Ban Giám Đốc"
   },
   {
     id: "user-researcher1",
@@ -332,6 +342,7 @@ const additionalOrganizationScopes = {
   "user-admin": allUnitIds,
   "user-admin2": allUnitIds,
   "user-leadership": allUnitIds,
+  "user-oversight": allUnitIds,
   "user-staff": allUnitIds,
   "user-reviewer": allUnitIds,
   "user-staff-hdtien1": allUnitIds,
@@ -1441,6 +1452,24 @@ const proposal3 = await prisma.researchProposal.upsert({
     },
     submittedAt: new Date(),
     submittedById: "user-researcher1"
+  }
+});
+
+await prisma.researchProposal.update({
+  where: { id: proposal3.id },
+  data: {
+    managementOfficers: {
+      create: [
+        {
+          id: "officer-001",
+          officerUserId: "user-staff-hdtien1",
+          status: "ACTIVE",
+          effectiveFrom: new Date(),
+          reason: "Phân công xử lý hồ sơ BQP-2026-NC01",
+          assignedById: "user-staff"
+        }
+      ]
+    }
   }
 });
 

@@ -43,9 +43,7 @@ export function toShellAccount(user: CurrentUser): ShellAccount {
     username: user.username,
     name: user.displayName,
     systemRole: user.systemRole,
-    systemRoleLabel: user.unit && (user.unit.toLowerCase().includes("trưởng") || user.unit.toLowerCase().includes("giám đốc") || user.unit.toLowerCase().includes("chuyên viên"))
-      ? user.unit
-      : getSystemRoleLabel(user.systemRole),
+    systemRoleLabel: getSystemRoleLabel(user.systemRole),
     unit: user.unit,
     initials: user.displayName.trim().charAt(0).toUpperCase() || "U",
     organizationScopes: user.organizationScopes
@@ -57,8 +55,12 @@ export function getSystemRoleLabel(systemRole: CurrentUser["systemRole"]) {
     ? "Quản trị hệ thống"
     : systemRole === "SCIENTIFIC_MANAGEMENT_STAFF"
       ? "Chuyên viên quản lý khoa học"
+      : systemRole === "SCIENTIFIC_MANAGEMENT_HEAD"
+        ? "Trưởng phòng quản lý khoa học"
       : systemRole === "LEADERSHIP_APPROVAL_AUTHORITY"
         ? "Lãnh đạo phê duyệt"
+        : systemRole === "RESEARCH_OVERSIGHT_AUTHORITY"
+          ? "Lãnh đạo giám sát nghiên cứu"
         : systemRole === "RESEARCHER_INTERNAL_USER"
           ? "Người dùng nghiên cứu nội bộ"
           : "Nhà nghiên cứu bên ngoài";

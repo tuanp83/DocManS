@@ -79,7 +79,7 @@ export function ProposalReviewsWorkspace() {
   const [modalTargetProposal, setModalTargetProposal] = useState<ResearchProposal | null>(null);
 
   // Chuyên viên QLKH không có quyền Đánh giá hồ sơ
-  if (account?.unit && account.unit.toLowerCase().includes("chuyên viên")) {
+  if (account?.systemRole === "SCIENTIFIC_MANAGEMENT_STAFF") {
     return (
       <div className="card p-8 border border-amber-200 bg-amber-50/60 rounded-xl max-w-2xl mx-auto my-12 text-center shadow-sm">
         <div className="inline-flex p-3 bg-amber-100 text-amber-800 rounded-full mb-4">
@@ -87,7 +87,7 @@ export function ProposalReviewsWorkspace() {
         </div>
         <h3 className="text-xl font-bold text-gray-900 mb-2">Quyền hạn không cho phép</h3>
         <p className="text-gray-700 mb-6 leading-relaxed">
-          Tài khoản của đồng chí được phân công là <strong>{account.unit}</strong>.
+          Tài khoản của đồng chí có vai trò <strong>Chuyên viên quản lý khoa học</strong>.
           <br />
           Theo quy chế quản lý khoa học, Chuyên viên QLKH không có quyền truy cập phân hệ Đánh giá hồ sơ và Hội đồng thẩm định (thẩm quyền này thuộc Trưởng Phòng KHQS và Trưởng Ban QLKH).
         </p>

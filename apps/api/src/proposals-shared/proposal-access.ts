@@ -1,7 +1,8 @@
 import { ForbiddenException } from "@nestjs/common";
 import type { SafeUserContext } from "../auth/auth.types.js";
-import type { ProposalParticipation } from "./proposal-participation.js";
+import { evaluateProposalConflict, type ProposalParticipation } from "./proposal-participation.js";
 import type { ProposalReviewAccess } from "./proposal-review-access.js";
+import type { ProposalManagementOfficerResolution } from "./proposal-management-officer.service.js";
 import { isWorkflowVisibleStatus } from "./proposal-workflow.js";
 
 type IntakeLike = {
@@ -23,11 +24,27 @@ export function isSystemAdmin(user?: SafeUserContext) {
 }
 
 export function isScientificManagement(user?: SafeUserContext) {
-  return user?.systemRole === "SCIENTIFIC_MANAGEMENT_STAFF";
+  return isScientificManagementStaff(user) || isScientificManagementHead(user);
+}
+
+export function isScientificManagementStaff(user?: SafeUserContext) {
+  return user?.systemRole === "RESEARCH_MANAGEMENT_STAFF";
+}
+
+export function isScientificManagementHead(user?: SafeUserContext) {
+  return user?.systemRole === "RESEARCH_MANAGEMENT_HEAD";
+}
+
+export function isResearchOversightAuthority(user?: SafeUserContext) {
+  return user?.systemRole === "RESEARCH_OVERSIGHT_AUTHORITY";
 }
 
 export function isResearcherInternalUser(user?: SafeUserContext) {
   return user?.systemRole === "RESEARCHER_INTERNAL_USER";
+}
+
+export function isInternalResearcherEligible(user?: SafeUserContext) {
+  return isResearcherInternalUser(user) || isResearchOversightAuthority(user);
 }
 
 export function isLeadership(user?: SafeUserContext) {
@@ -43,7 +60,7 @@ export function assertCanManageIntakePeriods(user?: SafeUserContext) {
 }
 
 export function assertCanCreateProposalDraft(user?: SafeUserContext) {
-  if (!isResearcherInternalUser(user)) {
+  if (!isInternalResearcherEligible(user)) {
     throw new ForbiddenException({ message: "Chỉ người dùng nghiên cứu nội bộ được tạo hồ sơ đề xuất." });
   }
 
@@ -84,34 +101,36 @@ export function canReadProposal(
   user: SafeUserContext | undefined,
   proposal: ProposalLike,
   participation?: ProposalParticipation,
-  reviewAccess?: ProposalReviewAccess
+  reviewAccess?: ProposalReviewAccess,
+  managementOfficer?: ProposalManagementOfficerResolution
 ) {
   if (!user) {
     return false;
+  }
+
+  // An effective assignment grants review reads across units, never participant access.
+  if (reviewAccess?.isAssignedReviewer && isWorkflowVisibleStatus(proposal.status) && !evaluateProposalConflict(participation).conflicted) {
+    return true;
   }
 
   if (!getOrganizationScopeIds(user).includes(proposal.hostOrganizationUnitId)) {
     return false;
   }
 
-  if (isScientificManagement(user)) {
-    return true;
-  }
-
   if (participation?.isParticipant) {
     return true;
   }
 
-  // ST-3.2: assignment-scoped, and only for a proposal that has entered the formal workflow. A
-  // `reviewer` account with no assignment on this proposal reads nothing (AC-ST-3.2-02).
-  if (reviewAccess?.isAssignedReviewer && isWorkflowVisibleStatus(proposal.status)) {
+  if (isScientificManagementHead(user) || isResearchOversightAuthority(user)) {
     return true;
   }
 
-  // ST-3.5: approval authority needs the whole decision package (AC-ST-3.5-01). Drafts stay
-  // private to their owner until the proposal is formally submitted.
   if (isLeadership(user)) {
     return isWorkflowVisibleStatus(proposal.status);
+  }
+
+  if (isScientificManagementStaff(user)) {
+    return managementOfficer?.resolved === true && managementOfficer.officer?.officerUserId === user.id;
   }
 
   return proposal.ownerId === user.id;
@@ -121,9 +140,10 @@ export function assertCanReadProposal(
   user: SafeUserContext | undefined,
   proposal: ProposalLike,
   participation?: ProposalParticipation,
-  reviewAccess?: ProposalReviewAccess
+  reviewAccess?: ProposalReviewAccess,
+  managementOfficer?: ProposalManagementOfficerResolution
 ) {
-  if (!canReadProposal(user, proposal, participation, reviewAccess)) {
+  if (!canReadProposal(user, proposal, participation, reviewAccess, managementOfficer)) {
     throw new ForbiddenException({ message: "Không có quyền xem hồ sơ đề xuất này." });
   }
 

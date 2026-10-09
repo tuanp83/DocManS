@@ -61,7 +61,7 @@ export function MilestoneDisbursementModal({
 }: MilestoneDisbursementModalProps) {
   // Display hint only — the backend (assertCanManageDisbursement) checks role and the proposal's organization scope.
   const canManage =
-    currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY" || currentUserRole === "SCIENTIFIC_MANAGEMENT_STAFF";
+    currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY" || currentUserRole === "SCIENTIFIC_MANAGEMENT_STAFF" || currentUserRole === "SCIENTIFIC_MANAGEMENT_HEAD";
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

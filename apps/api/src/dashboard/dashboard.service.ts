@@ -3,6 +3,7 @@ import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { canReadProposal } from "../proposals-shared/proposal-access.js";
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
+import { ProposalManagementOfficerService } from "../proposals-shared/proposal-management-officer.service.js";
 import { ProposalParticipationService } from "../research-proposals/proposal-participation.service.js";
 
 export type DashboardProposalRecord = {
@@ -32,7 +33,8 @@ export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly participation: ProposalParticipationService,
-    private readonly reviewAccess: ProposalReviewAccessService
+    private readonly reviewAccess: ProposalReviewAccessService,
+    private readonly managementOfficers: ProposalManagementOfficerService
   ) {}
 
   /**
@@ -62,13 +64,14 @@ export class DashboardService {
       }
     })) as DashboardProposalRecord[];
 
-    const [participationByProposal, reviewAccessByProposal] = await Promise.all([
+    const [participationByProposal, reviewAccessByProposal, managementOfficerByProposal] = await Promise.all([
       this.participation.resolveForProposals(actor.id, records, asOf),
-      this.reviewAccess.resolveForProposals(actor.id, records.map((record) => record.id), asOf)
+      this.reviewAccess.resolveForProposals(actor.id, records.map((record) => record.id), asOf),
+      this.managementOfficers.resolveForProposals(records.map((record) => record.id), asOf)
     ]);
 
     return records.filter((record) =>
-      canReadProposal(actor, record, participationByProposal.get(record.id), reviewAccessByProposal.get(record.id))
+      canReadProposal(actor, record, participationByProposal.get(record.id), reviewAccessByProposal.get(record.id), managementOfficerByProposal.get(record.id))
     );
   }
 

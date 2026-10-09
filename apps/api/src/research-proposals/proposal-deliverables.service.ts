@@ -33,7 +33,7 @@ export class ProposalDeliverablesService {
     );
 
     const isOwner = proposal.ownerId === actor.id;
-    const isStaff = actor.systemRole === "SCIENTIFIC_MANAGEMENT_STAFF" || actor.systemRole === "SYSTEM_ADMIN" || actor.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY";
+    const isStaff = actor.systemRole === "RESEARCH_MANAGEMENT_STAFF" || actor.systemRole === "RESEARCH_MANAGEMENT_HEAD" || actor.systemRole === "SYSTEM_ADMIN" || actor.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY";
 
     if (!isOwner && !(isStaff && hasOrgScope)) {
       throw new ForbiddenException({ message: "Không có quyền truy cập sản phẩm đầu ra của đề tài này." });

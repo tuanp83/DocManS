@@ -92,6 +92,7 @@ export function ProjectTrackingWorkspace() {
   // Quyền: Có phải quản lý không?
   const isManager =
     account?.systemRole === "SCIENTIFIC_MANAGEMENT_STAFF" ||
+    account?.systemRole === "SCIENTIFIC_MANAGEMENT_HEAD" ||
     account?.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY" ||
     account?.systemRole === "SYSTEM_ADMIN";
 

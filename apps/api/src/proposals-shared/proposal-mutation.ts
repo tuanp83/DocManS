@@ -20,7 +20,13 @@ export function assertProposalContext(expected: unknown, proposal: Parameters<ty
 // Existing domain operations compose transactions. Inside this scope they join the same
 // transaction, so relationship changes, workflow evidence and audit commit together.
 export function joinedTransaction(tx: Prisma.TransactionClient): PrismaService {
-  return new Proxy(tx, { get(target, key) { return key === "$transaction" ? (work: (client: Prisma.TransactionClient) => unknown) => work(tx) : Reflect.get(target, key); } }) as PrismaService;
+  return new Proxy(tx, {
+    get(target, key) {
+      if (key === "$transaction") return (work: (client: Prisma.TransactionClient) => unknown) => work(tx);
+      const value = (target as any)[key];
+      return typeof value === "function" ? value.bind(target) : value;
+    }
+  }) as PrismaService;
 }
 
 export async function runProposalMutation<T>(prisma: PrismaService, actor: SafeUserContext, proposalId: string | null, expected: unknown, work: (client: PrismaService, currentActor: SafeUserContext) => Promise<T>): Promise<T> {
@@ -38,6 +44,7 @@ export async function runProposalMutation<T>(prisma: PrismaService, actor: SafeU
         if (!proposal) throw new NotFoundException({ message: "Không tìm thấy hồ sơ đề xuất." });
         assertProposalContext(expected, proposal);
       }
+      console.log("tx keys:", Object.keys(tx).filter(k => k.toLowerCase().includes("officer")));
       return work(joinedTransaction(tx), currentActor);
     }, { isolationLevel: "Serializable", timeout: 15000 });
   } catch (error) {

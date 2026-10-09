@@ -188,6 +188,7 @@ export function ScientificDocumentsPanel() {
   const canManage = useMemo(() => {
     return (
       account?.systemRole === "SCIENTIFIC_MANAGEMENT_STAFF" ||
+      account?.systemRole === "SCIENTIFIC_MANAGEMENT_HEAD" ||
       account?.systemRole === "SYSTEM_ADMIN"
     );
   }, [account]);

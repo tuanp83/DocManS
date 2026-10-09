@@ -77,6 +77,12 @@ export type ProposalReviewAccess = {
   assignmentRole: ReviewAssignmentRole | "none";
   effectiveFrom: string;
   effectiveUntil: string | null;
+  /** A retained draft/submitted review remains a conflict after its assignment expires. */
+  hasPersistedReview?: boolean;
+  /** Non-revoked review duties also conflict before their access interval starts. */
+  hasReviewConflict?: boolean;
+  /** True when the review history could not be resolved safely. */
+  conflictUnresolved?: boolean;
 };
 
 const NO_REVIEW_ACCESS: ProposalReviewAccess = {
@@ -84,7 +90,9 @@ const NO_REVIEW_ACCESS: ProposalReviewAccess = {
   assignmentId: "",
   assignmentRole: "none",
   effectiveFrom: "",
-  effectiveUntil: null
+  effectiveUntil: null,
+  hasPersistedReview: false,
+  conflictUnresolved: false
 };
 
 export function normalizeAssignmentRole(value: unknown): ReviewAssignmentRole {
@@ -114,11 +122,13 @@ export function resolveProposalReviewAccess(assignments?: ReviewAssignmentLike[]
     return NO_REVIEW_ACCESS;
   }
 
-  const active = assignments.find((assignment) =>
-    (assignment.status === REVIEW_ASSIGNMENT_STATUS.assigned || assignment.status === REVIEW_ASSIGNMENT_STATUS.completed) &&
-    (!assignment.effectiveFrom || assignment.effectiveFrom <= asOf) &&
-    (!assignment.effectiveUntil || asOf < assignment.effectiveUntil)
-  );
+  const active = assignments
+    .filter((assignment) =>
+      (assignment.status === REVIEW_ASSIGNMENT_STATUS.assigned || assignment.status === REVIEW_ASSIGNMENT_STATUS.completed) &&
+      (!assignment.effectiveFrom || assignment.effectiveFrom <= asOf) &&
+      (!assignment.effectiveUntil || asOf < assignment.effectiveUntil)
+    )
+    .sort((left, right) => ((right.effectiveFrom ?? right.assignedAt)?.getTime() ?? 0) - ((left.effectiveFrom ?? left.assignedAt)?.getTime() ?? 0))[0];
 
   if (!active) {
     return NO_REVIEW_ACCESS;

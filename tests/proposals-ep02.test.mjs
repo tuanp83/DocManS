@@ -14,6 +14,7 @@ import { uploadFilePipe } from "../dist/apps/api/modules/files/files.dto.js";
 import { ProposalIntakePeriodsService } from "../dist/apps/api/proposal-intake-periods/proposal-intake-periods.service.js";
 import { ProposalParticipationService } from "../dist/apps/api/research-proposals/proposal-participation.service.js";
 import { ProposalReviewAccessService } from "../dist/apps/api/proposals-shared/proposal-review-access.service.js";
+import { ProposalManagementOfficerService } from "../dist/apps/api/proposals-shared/proposal-management-officer.service.js";
 import { ResearchProposalsService } from "../dist/apps/api/research-proposals/research-proposals.service.js";
 import { FilesService } from "../dist/apps/api/modules/files/files.service.js";
 import { createEvaluationTables } from "./helpers/evaluation-prisma.mjs";
@@ -35,8 +36,23 @@ const staffUser = {
   id: "user-staff",
   username: "staff",
   role: "scientific-management",
-  systemRole: "SCIENTIFIC_MANAGEMENT_STAFF",
+  systemRole: "RESEARCH_MANAGEMENT_STAFF",
   roleLabel: "Chuyên viên",
+  roles: ["scientific-management"],
+  organizationScopes: [
+    { id: "org-hvqy", code: "HVQY", name: "Học viện Quân y" },
+    { id: "org-khqs", code: "KHQS", name: "Phòng KHQS" },
+    { id: "org-khti", code: "KHTI", name: "Khoa Toán - Tin học" }
+  ]
+};
+
+const headUser = {
+  ...adminUser,
+  id: "user-head",
+  username: "head",
+  role: "scientific-management",
+  systemRole: "RESEARCH_MANAGEMENT_HEAD",
+  roleLabel: "Trưởng phòng",
   roles: ["scientific-management"],
   organizationScopes: [
     { id: "org-khqs", code: "KHQS", name: "Phòng KHQS" },
@@ -115,14 +131,15 @@ function createEp02Prisma() {
     fileRecords: [],
     supplementRequests: [],
     submissionEvents: [],
-    auditLogs: []
+    auditLogs: [],
+    managementOfficers: []
   };
 
   function nextId(prefix, collection) {
     return `${prefix}-${collection.length + 1}`;
   }
 
-  const knownUsers = [adminUser, staffUser, piUser, otherPiUser].map((user) => ({
+  const knownUsers = [adminUser, staffUser, headUser, piUser, otherPiUser].map((user) => ({
     id: user.id,
     username: user.username,
     usernameKey: user.username.toLowerCase(),
@@ -135,6 +152,23 @@ function createEp02Prisma() {
 
   const prisma = {
     store,
+    proposalManagementOfficer: {
+      async findMany({ where }) {
+        if (!where) return store.managementOfficers;
+        const status = where.status || "ACTIVE";
+        return store.managementOfficers.filter((o) => o.proposalId === where.proposalId && (o.status === status || o.status === status.toLowerCase()));
+      },
+      async create({ data }) {
+        const record = {
+          id: nextId("officer", store.managementOfficers),
+          ...data
+        };
+        store.managementOfficers.push(record);
+        return record;
+      }
+    },
+
+
     proposalIntakePeriod: {
       async create({ data }) {
         const record = {
@@ -157,7 +191,9 @@ function createEp02Prisma() {
         return store.intakePeriods[index];
       },
       async findUnique({ where }) {
-        return store.intakePeriods.find((item) => item.id === where.id || item.code === where.code) ?? null;
+        const found = store.intakePeriods.find((item) => item.id === where.id || item.code === where.code) ?? null;
+        console.log("findUnique proposalIntakePeriod called with", where, "found:", found?.id);
+        return found;
       },
       async findMany() {
         return [...store.intakePeriods].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
@@ -200,8 +236,20 @@ function createEp02Prisma() {
         store.proposals[index] = { ...current, ...values, updatedAt: new Date() };
         return store.proposals[index];
       },
-      async findUnique({ where }) {
-        return store.proposals.find((item) => item.id === where.id) ?? null;
+      async findUnique({ where, include }) {
+        const item = store.proposals.find((item) => item.id === where.id) ?? null;
+        if (!item) return null;
+        const result = { ...item };
+        if (include?.fileRecord) {
+          result.fileRecord = store.fileRecords.filter((f) => f.relatedEntityType === "research_proposal" && f.relatedEntityId === item.id && f.status === "active" && f.deletedAt === null);
+        }
+        if (include?.proposalParticipation) {
+          result.proposalParticipation = store.participations.filter((p) => p.proposalId === item.id);
+        }
+        if (include?.proposalManagementOfficer) {
+          result.proposalManagementOfficer = store.officers.filter((o) => o.proposalId === item.id);
+        }
+        return result;
       },
       async findMany() {
         return [...store.proposals].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -255,6 +303,19 @@ function createEp02Prisma() {
       }
     },
     user: {
+      async findUnique({ where }) {
+        const fullUser = [adminUser, staffUser, headUser, piUser, otherPiUser].find((u) => u.id === where.id);
+        if (!fullUser) return null;
+        return { 
+          ...fullUser, 
+          status: "active", 
+          systemRole: fullUser.systemRole,
+          organizationScopes: (fullUser.organizationScopes || []).map(s => ({
+            organizationUnitId: s.id,
+            organizationUnit: { ...s, status: "active" }
+          }))
+        };
+      },
       async findMany({ where }) {
         const ids = where?.OR?.flatMap((clause) => clause.id?.in ?? []) ?? [];
         const usernameKeys = where?.OR?.flatMap((clause) => clause.usernameKey?.in ?? []) ?? [];
@@ -280,6 +341,18 @@ function createEp02Prisma() {
       }
     },
     fileRecord: {
+      async findFirst({ where }) {
+        return store.fileRecords
+          .filter((item) => {
+            if (where.relatedEntityType && item.relatedEntityType !== where.relatedEntityType) return false;
+            if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
+            if (where.filePurpose && item.filePurpose !== where.filePurpose) return false;
+            if (where.status && item.status !== where.status) return false;
+            if (where.deletedAt === null && item.deletedAt !== null) return false;
+            return true;
+          })
+          .sort((a, b) => b.version - a.version)[0] ?? null;
+      },
       async create({ data }) {
         if (store.failNextFileRecordCreate) {
           store.failNextFileRecordCreate = false;
@@ -302,24 +375,19 @@ function createEp02Prisma() {
           if (where.id && item.id !== where.id) return false;
           if (where.relatedEntityType && item.relatedEntityType !== where.relatedEntityType) return false;
           if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
-          if (where.status && !(typeof where.status === "object" ? where.status.in.includes(item.status) : item.status === where.status)) return false;
+          if (where.status) {
+            if (typeof where.status === "object" && where.status.in) {
+              if (!where.status.in.includes(item.status)) return false;
+            } else if (item.status !== where.status) {
+              return false;
+            }
+          }
           if (where.deletedAt === null && item.deletedAt !== null) return false;
           return true;
         });
       },
       async findUnique({ where }) {
         return store.fileRecords.find((item) => item.id === where.id) ?? null;
-      },
-      async findFirst({ where }) {
-        const matches = store.fileRecords.filter((item) => {
-          if (where.relatedEntityType && item.relatedEntityType !== where.relatedEntityType) return false;
-          if (where.relatedEntityId && item.relatedEntityId !== where.relatedEntityId) return false;
-          if (where.filePurpose && item.filePurpose !== where.filePurpose) return false;
-          if (where.status && !(typeof where.status === "object" ? where.status.in.includes(item.status) : item.status === where.status)) return false;
-          if (where.deletedAt === null && item.deletedAt !== null) return false;
-          return true;
-        });
-        return matches.sort((a, b) => (b.version ?? 1) - (a.version ?? 1))[0] ?? null;
       },
       async update({ where, data }) {
         const index = store.fileRecords.findIndex((item) => item.id === where.id);
@@ -512,15 +580,15 @@ describe("EP-02 proposal intake and submission behavior", () => {
     );
     assert.throws(() => requestProposalSupplementPipe.transform({ reason: "", dueDate: futureDate(7) }), BadRequestException);
     assert.throws(() => requestProposalSupplementPipe.transform({ reason: "Thiếu tài liệu", dueDate: "bad-date" }), BadRequestException);
-    assert.throws(
+    assert.doesNotThrow(
       () =>
         uploadFilePipe.transform({
-          relatedEntityType: "approved_project",
+          relatedEntityType: "research_proposal",
           relatedEntityId: "project-1",
-          filePurpose: "proposal-form"
+          filePurpose: "PROPOSAL_ATTACHMENT"
         }),
-      BadRequestException
     );
+    assert.throws(() => uploadFilePipe.transform({ relatedEntityType: "unknown", relatedEntityId: "record-1", filePurpose: "PROJECT_EVIDENCE" }), BadRequestException);
   });
 
   it("staff can create, open, and close intake periods with audit rows while PIs only see open applicable periods", async () => {
@@ -591,7 +659,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     const prisma = createEp02Prisma();
     const auditLog = createAuditLog();
     const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
-    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma));
+    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
     const intake = await createOpenIntake(intakeService);
 
     const draft = await proposalService.createDraft(piUser, {
@@ -600,7 +668,6 @@ describe("EP-02 proposal intake and submission behavior", () => {
       hostOrganizationUnitId: "org-khti"
     });
     const piDetail = await proposalService.getProposal(piUser, draft.id);
-    const staffDetail = await proposalService.getProposal(staffUser, draft.id);
     const updated = await proposalService.updateDraft(piUser, draft.id, {
       title: "Nghiên cứu cập nhật",
       summary: "Tóm tắt mới"
@@ -609,8 +676,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     assert.equal(draft.status, "draft");
     assert.equal(piDetail.canEdit, true);
     assert.equal(piDetail.canSubmit, true);
-    assert.equal(staffDetail.canEdit, false);
-    assert.equal(staffDetail.canSubmit, false);
+    await assert.rejects(() => proposalService.getProposal(staffUser, draft.id), ForbiddenException);
     assert.equal(updated.title, "Nghiên cứu cập nhật");
     assert.equal(updated.summary, "Tóm tắt mới");
     assert.deepEqual(
@@ -631,7 +697,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     const auditLog = createAuditLog();
     const objectStorage = createObjectStorage();
     const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
-    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma));
+    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
     const filesService = createFilesService({ prisma, auditLog, objectStorage });
     const draft = await createDraft({ prisma, intakeService, proposalService });
 
@@ -832,14 +898,9 @@ describe("EP-02 proposal intake and submission behavior", () => {
     );
     await assert.rejects(() => filesService.listFiles(otherPiUser, { relatedEntityType: "research_proposal", relatedEntityId: draft.id }), ForbiddenException);
     await assert.rejects(() => filesService.downloadFile(otherPiUser, attachment.id), ForbiddenException);
-    const staffProposalAttachments = await proposalService.listAttachments(staffUser, draft.id);
-    assert.equal(staffProposalAttachments[0].canEdit, false);
-    assert.equal(staffProposalAttachments[0].canDelete, false);
-    const staffMetadata = await filesService.listFiles(staffUser, { relatedEntityType: "research_proposal", relatedEntityId: draft.id });
-    assert.equal(staffMetadata.length, 7);
-    assert.equal(staffMetadata[0].canEdit, false);
-    assert.equal(staffMetadata[0].canDelete, false);
-    assert.equal((await filesService.downloadFile(staffUser, attachment.id)).fileName, "Chỉ số Glucose.docx");
+    await assert.rejects(() => proposalService.listAttachments(staffUser, draft.id), ForbiddenException);
+    await assert.rejects(() => filesService.listFiles(staffUser, { relatedEntityType: "research_proposal", relatedEntityId: draft.id }), ForbiddenException);
+    await assert.rejects(() => filesService.downloadFile(staffUser, attachment.id), ForbiddenException);
     assert.ok(prisma.store.auditLogs.some((record) => record.action === "upload-file"));
     assert.equal(auditLog.records.at(-1).action, "download-file");
   });
@@ -849,7 +910,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     const auditLog = createAuditLog();
     const objectStorage = createObjectStorage();
     const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
-    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma));
+    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
     const filesService = createFilesService({ prisma, auditLog, objectStorage });
     const draft = await createDraft({ prisma, intakeService, proposalService });
 
@@ -900,7 +961,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
       }
     };
     const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
-    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma));
+    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
     const filesService = createFilesService({ prisma, auditLog, objectStorage });
     const draft = await createDraft({ prisma, intakeService, proposalService });
 
@@ -943,7 +1004,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     const prisma = createEp02Prisma();
     const auditLog = createAuditLog();
     const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
-    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma));
+    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
     const draft = await createDraft({ prisma, intakeService, proposalService });
 
     await assert.rejects(() => proposalService.submitProposal(piUser, draft.id), (error) => {
@@ -995,6 +1056,9 @@ describe("EP-02 proposal intake and submission behavior", () => {
       missingFields: 0,
       missingFiles: 0
     });
+    
+    await proposalService.assignManagementOfficer(headUser, draft.id, { officerUserId: staffUser.id, reason: "Test assign" });
+    
     const checked = await proposalService.completeCheck(staffUser, draft.id, {});
     assert.equal(checked.viewerAuthorization.blockedActions.find((action) => action.action === "proposal.completeness.check").code, "WORKFLOW_STATE_DENIED");
     assert.equal(prisma.store.submissionEvents.filter((event) => event.snapshot?.kind === "completeness_check").length, 1);
@@ -1025,7 +1089,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     const prisma = createEp02Prisma();
     const auditLog = createAuditLog();
     const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
-    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma));
+    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
     const intake = await createOpenIntake(intakeService);
 
     const incompleteDraft = await proposalService.createDraft(piUser, {
@@ -1067,7 +1131,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     const prisma = createEp02Prisma();
     const auditLog = createAuditLog();
     const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
-    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma));
+    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
     const filesService = createFilesService({ prisma, auditLog });
     const draft = await createDraft({ prisma, intakeService, proposalService });
 
@@ -1098,6 +1162,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
     );
 
     const scopedStaff = { ...staffUser, organizationScopes: [{ id: "org-khti", code: "KHTI", name: "Khoa Toán - Tin học" }] };
+    await proposalService.assignManagementOfficer(headUser, draft.id, { officerUserId: scopedStaff.id, reason: "Test assign" });
     const supplementRequested = await proposalService.requestSupplement(scopedStaff, submitted.id, {
       reason: "Thiếu bản giải trình chỉnh sửa và bảng dự toán chi tiết.",
       dueDate: futureDate(7)
