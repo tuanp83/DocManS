@@ -44,7 +44,6 @@ export async function runProposalMutation<T>(prisma: PrismaService, actor: SafeU
         if (!proposal) throw new NotFoundException({ message: "Không tìm thấy hồ sơ đề xuất." });
         assertProposalContext(expected, proposal);
       }
-      console.log("tx keys:", Object.keys(tx).filter(k => k.toLowerCase().includes("officer")));
       return work(joinedTransaction(tx), currentActor);
     }, { isolationLevel: "Serializable", timeout: 15000 });
   } catch (error) {

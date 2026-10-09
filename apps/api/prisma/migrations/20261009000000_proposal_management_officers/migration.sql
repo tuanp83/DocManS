@@ -1,4 +1,9 @@
 ALTER TABLE "users" DROP CONSTRAINT "users_system_role_check";
+
+-- Mô hình 7 vai trò: đổi tên vai trò QLKH cũ TRƯỚC khi đặt ràng buộc mới,
+-- nếu không DB đã có chuyên viên QLKH sẽ làm `migrate deploy` thất bại.
+UPDATE "users" SET "system_role" = 'RESEARCH_MANAGEMENT_STAFF' WHERE "system_role" = 'SCIENTIFIC_MANAGEMENT_STAFF';
+UPDATE "users" SET "system_role" = 'RESEARCH_MANAGEMENT_HEAD'  WHERE "system_role" = 'SCIENTIFIC_MANAGEMENT_HEAD';
 ALTER TABLE "users" ADD CONSTRAINT "users_system_role_check"
   CHECK ("system_role" IS NULL OR "system_role" IN (
     'SYSTEM_ADMIN', 'RESEARCH_MANAGEMENT_HEAD', 'RESEARCH_MANAGEMENT_STAFF',

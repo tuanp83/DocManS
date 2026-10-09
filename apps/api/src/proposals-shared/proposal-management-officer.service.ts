@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 
 export const MANAGEMENT_OFFICER_STATUS = {
@@ -42,14 +42,13 @@ function isEffective(row: ProposalManagementOfficer, asOf: Date) {
 /** Source-owned proposal officer lookup. Zero rows is a valid unassigned state; read failures fail closed. */
 @Injectable()
 export class ProposalManagementOfficerService {
+  private readonly logger = new Logger(ProposalManagementOfficerService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async resolveForProposal(proposalId: string, asOf = new Date()): Promise<ProposalManagementOfficerResolution> {
     if (!proposalId || Number.isNaN(asOf.valueOf())) return { resolved: false, officer: null };
     try {
-      if (!this.prisma.proposalManagementOfficer) {
-        console.error("CRITICAL: this.prisma.proposalManagementOfficer is falsy! Keys:", Object.keys(this.prisma).filter(k => k.toLowerCase().includes('officer')));
-      }
       const rows = (await this.prisma.proposalManagementOfficer.findMany({
         where: { proposalId, status: MANAGEMENT_OFFICER_STATUS.active },
         include: OFFICER_INCLUDE,
@@ -57,8 +56,9 @@ export class ProposalManagementOfficerService {
       })) as ProposalManagementOfficer[];
       const current = rows.filter((row) => isEffective(row, asOf));
       return { resolved: current.length <= 1, officer: current.length === 1 ? current[0]! : null };
-    } catch (e) {
-      console.error("resolveForProposal error:", e);
+    } catch (error) {
+      // Fail closed (no officer resolved) like upstream, but keep the cause visible in the API log.
+      this.logger.warn(`Không xác định được chuyên viên phụ trách hồ sơ ${proposalId}: ${error instanceof Error ? error.message : String(error)}`);
       return { resolved: false, officer: null };
     }
   }
@@ -83,7 +83,8 @@ export class ProposalManagementOfficerService {
         const current = byProposal.get(proposalId) ?? [];
         resolved.set(proposalId, { resolved: current.length <= 1, officer: current.length === 1 ? current[0]! : null });
       }
-    } catch {
+    } catch (error) {
+      this.logger.warn(`Không xác định được chuyên viên phụ trách ${proposalIds.length} hồ sơ: ${error instanceof Error ? error.message : String(error)}`);
       for (const proposalId of proposalIds) resolved.set(proposalId, { resolved: false, officer: null });
     }
     return resolved;

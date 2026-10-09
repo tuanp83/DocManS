@@ -429,10 +429,10 @@ export function ProposalReviewsWorkspace() {
                     const prog = progressMap[proposal.id];
                     const isSelected = proposal.id === selectedProposalId;
                     const membersCount = proposal.councilMetadata?.members?.length || 0;
-                    const reviewers = proposal.councilMetadata?.members?.filter((m) => m.role.includes("reviewer")) || [];
-                    const submittedReviewsCount = prog?.submittedCount ?? (proposal.status === "approved" ? 3 : reviewers.length > 0 ? 2 : 1);
-                    const totalReviewersCount = prog?.activeAssignmentCount || (reviewers.length > 0 ? reviewers.length : 3);
-                    const percent = Math.min(100, Math.round((submittedReviewsCount / (totalReviewersCount || 1)) * 100));
+                    // Chỉ dùng số liệu thật; khi chưa tải được tiến độ thì hiển thị 0/0 thay vì số giả định.
+                    const submittedReviewsCount = prog?.submittedCount ?? 0;
+                    const totalReviewersCount = prog?.activeAssignmentCount ?? 0;
+                    const percent = totalReviewersCount > 0 ? Math.min(100, Math.round((submittedReviewsCount / totalReviewersCount) * 100)) : 0;
 
                     return (
                       <tr
@@ -477,7 +477,7 @@ export function ProposalReviewsWorkspace() {
                         </td>
                         <td>
                           <span style={{ fontWeight: 700, color: "#0f172a" }}>
-                            {prog?.averageTotalScore ? `${prog.averageTotalScore}/100` : proposal.status === "approved" ? "88.5/100" : "—"}
+                            {prog?.averageTotalScore ? `${prog.averageTotalScore}/100` : "—"}
                           </span>
                         </td>
                         <td>
@@ -594,79 +594,52 @@ export function ProposalReviewsWorkspace() {
                 </div>
               </div>
 
-              {/* Danh sách các chuyên gia phản biện được phân công */}
+              {/* Danh sách chuyên gia phản biện được phân công — chỉ hiển thị dữ liệu thật từ API */}
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 <div style={{ fontSize: "14px", fontWeight: 700, color: "#334155" }}>
                   Danh sách chuyên gia phản biện và tình trạng phiếu nhận xét:
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" }}>
-                  {/* Chuyên gia phản biện 1 */}
-                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontSize: "12px", fontWeight: 700, color: "#15803d", background: "#f0fdf4", padding: "2px 8px", borderRadius: "10px" }}>
-                        Ủy viên Phản biện 1
-                      </span>
-                      <span style={{ fontSize: "12px", color: "#166534", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
-                        <CheckCircle2 size={14} color="#166534" /> Đã nộp phiếu
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", marginTop: "8px" }}>
-                      {selectedProposal.councilMetadata?.members?.find((m) => m.role === "reviewer_1")?.displayName || "GS. TS. Hoàng Văn Minh"}
-                    </div>
-                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
-                      {selectedProposal.councilMetadata?.members?.find((m) => m.role === "reviewer_1")?.unit || "Khoa Ngoại Dã chiến — Học viện Quân y"}
-                    </div>
-                    <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
-                      <span style={{ color: "#475569" }}>Điểm đánh giá: <strong>89/100</strong></span>
-                      <span style={{ color: "#166534", fontWeight: 600 }}>Kết luận: Đồng ý</span>
-                    </div>
+                {!currentProgress ? (
+                  <div style={{ fontSize: "13px", color: "#64748b" }}>Đang tải tình trạng phản biện…</div>
+                ) : currentProgress.assignments.filter((assignment) => assignment.status !== "revoked").length === 0 ? (
+                  <div style={{ fontSize: "13px", color: "#64748b" }}>Chưa phân công chuyên gia phản biện cho hồ sơ này.</div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" }}>
+                    {currentProgress.assignments
+                      .filter((assignment) => assignment.status !== "revoked")
+                      .map((assignment) => {
+                        const review = currentProgress.reviews.find((item) => item.assignmentId === assignment.id);
+                        const submitted = Boolean(review);
+                        return (
+                          <div key={assignment.id} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                              <span style={{ fontSize: "12px", fontWeight: 700, color: "#15803d", background: "#f0fdf4", padding: "2px 8px", borderRadius: "10px" }}>
+                                {assignment.assignmentRoleLabel || "Chuyên gia phản biện"}
+                              </span>
+                              <span style={{ fontSize: "12px", color: submitted ? "#166534" : "#b45309", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
+                                {submitted ? <CheckCircle2 size={14} color="#166534" /> : null}
+                                {submitted ? "Đã nộp phiếu" : "Chưa nộp phiếu"}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", marginTop: "8px" }}>{assignment.reviewerDisplayName}</div>
+                            {assignment.reviewerUnit ? (
+                              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>{assignment.reviewerUnit}</div>
+                            ) : null}
+                            <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", gap: "8px", fontSize: "12px" }}>
+                              <span style={{ color: "#475569" }}>
+                                Điểm đánh giá:{" "}
+                                <strong>{review && review.totalScore !== null ? `${review.totalScore}/${review.maxTotalScore}` : "—"}</strong>
+                              </span>
+                              <span style={{ color: "#334155", fontWeight: 600 }}>
+                                {review?.recommendationLabel ? `Kết luận: ${review.recommendationLabel}` : assignment.dueDate ? `Hạn nộp: ${new Date(assignment.dueDate).toLocaleDateString("vi-VN")}` : ""}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
-
-                  {/* Chuyên gia phản biện 2 */}
-                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontSize: "12px", fontWeight: 700, color: "#15803d", background: "#f0fdf4", padding: "2px 8px", borderRadius: "10px" }}>
-                        Ủy viên Phản biện 2
-                      </span>
-                      <span style={{ fontSize: "12px", color: "#166534", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
-                        <CheckCircle2 size={14} color="#166534" /> Đã nộp phiếu
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", marginTop: "8px" }}>
-                      {selectedProposal.councilMetadata?.members?.find((m) => m.role === "reviewer_2")?.displayName || "GS. TS. Nguyễn Văn Khoa"}
-                    </div>
-                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
-                      {selectedProposal.councilMetadata?.members?.find((m) => m.role === "reviewer_2")?.unit || "Bệnh viện Trung ương Quân đội 108"}
-                    </div>
-                    <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
-                      <span style={{ color: "#475569" }}>Điểm đánh giá: <strong>88/100</strong></span>
-                      <span style={{ color: "#166534", fontWeight: 600 }}>Kết luận: Đồng ý</span>
-                    </div>
-                  </div>
-
-                  {/* Ủy viên Hội đồng */}
-                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontSize: "12px", fontWeight: 700, color: "#2563eb", background: "#eff6ff", padding: "2px 8px", borderRadius: "10px" }}>
-                        Ủy viên Hội đồng
-                      </span>
-                      <span style={{ fontSize: "12px", color: "#166534", fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
-                        <CheckCircle2 size={14} color="#166534" /> Đã nộp nhận xét
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", marginTop: "8px" }}>
-                      {selectedProposal.councilMetadata?.members?.find((m) => m.role === "member")?.displayName || "PGS. TS. Lê Quang Đạo"}
-                    </div>
-                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
-                      {selectedProposal.councilMetadata?.members?.find((m) => m.role === "member")?.unit || "Khoa Toán - Tin học — Học viện Quân y"}
-                    </div>
-                    <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
-                      <span style={{ color: "#475569" }}>Điểm đánh giá: <strong>88.5/100</strong></span>
-                      <span style={{ color: "#166534", fontWeight: 600 }}>Kết luận: Đồng ý</span>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           )}
