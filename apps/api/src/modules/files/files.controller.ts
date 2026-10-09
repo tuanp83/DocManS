@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { uploadInterceptorOptions } from "./upload-limits.js";
 import { SessionAuthGuard } from "../../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../../proposals-shared/proposal-types.js";
 import { listFilesPipe, type ListFilesDto, updateFilePipe, type UpdateFileDto, uploadFilePipe, type UploadFileDto } from "./files.dto.js";
@@ -43,7 +44,7 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Post()
-  @UseInterceptors(FileInterceptor("file"))
+  @UseInterceptors(FileInterceptor("file", uploadInterceptorOptions()))
   async uploadFile(
     @Req() request: RequestWithCurrentUser,
     @Body(uploadFilePipe) body: UploadFileDto,

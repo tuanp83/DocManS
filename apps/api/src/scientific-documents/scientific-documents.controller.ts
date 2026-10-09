@@ -14,6 +14,7 @@ import {
   UseInterceptors
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { uploadInterceptorOptions } from "../modules/files/upload-limits.js";
 import { Readable } from "node:stream";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
@@ -86,7 +87,7 @@ export class ScientificDocumentsController {
   }
 
   @Post()
-  @UseInterceptors(FileInterceptor("file"))
+  @UseInterceptors(FileInterceptor("file", uploadInterceptorOptions()))
   async createDocument(
     @Req() request: RequestWithCurrentUser,
     @Body() body: CreateScientificDocumentDto,
@@ -97,7 +98,7 @@ export class ScientificDocumentsController {
   }
 
   @Patch(":id")
-  @UseInterceptors(FileInterceptor("file"))
+  @UseInterceptors(FileInterceptor("file", uploadInterceptorOptions()))
   async updateDocument(
     @Req() request: RequestWithCurrentUser,
     @Param("id") id: string,
