@@ -310,7 +310,71 @@ describe("Council and IRB writes on real PostgreSQL", () => {
     assert.equal(byStaff.irb.certificate.approvedById, staff.id);
     const byLeader = await decisions.updateIRBStatus(leader, proposal.id, { status: "APPROVED", contextVersion: byStaff.contextVersion });
     assert.equal(byLeader.irb.certificate.certificateNumber, byStaff.irb.certificate.certificateNumber);
-    assert.equal((await decisions.updateDisbursement(staff, proposal.id, { totalBudget: 2 })).success, true);
-    assert.equal((await decisions.updateDisbursement(leader, proposal.id, { totalBudget: 3 })).success, true);
+    assert.equal((await decisions.updateDisbursement(staff, proposal.id, { milestones: [] })).success, true);
+    assert.equal((await decisions.updateDisbursement(leader, proposal.id, { milestones: [] })).success, true);
+  });
+
+  it("disbursement keeps only validated fields, computes totals server-side and audits before/after", async () => {
+    const proposal = await newProposal();
+    await db.researchProposal.update({ where: { id: proposal.id }, data: { budgetMetadata: { amount: 1000 } } });
+
+    const empty = await decisions.getDisbursement(staff, proposal.id);
+    assert.equal(empty.disbursement.totalBudget, 1000);
+    assert.deepEqual(empty.disbursement.milestones, []);
+
+    const saved = await decisions.updateDisbursement(staff, proposal.id, {
+      milestones: [
+        { id: "M1", name: "Đợt 1", percentage: 40, expectedAmount: 400, disbursedAmount: 400, status: "DISBURSED", injected: "drop me" },
+        { id: "M2", name: "Đợt 2", percentage: 60, expectedAmount: 600, disbursedAmount: 0, status: "PENDING" }
+      ],
+      costItems: [{ code: "C1", name: "Vật tư", allocatedAmount: 500, spentAmount: 300, settledAmount: 200 }],
+      totalDisbursed: 999999,
+      totalBudget: 1,
+      approvedById: "forged"
+    });
+    const stored = (await db.researchProposal.findUnique({ where: { id: proposal.id } })).disbursementMetadata;
+    assert.equal(stored.totalBudget, 1000);
+    assert.equal(stored.totalDisbursed, 400);
+    assert.equal(stored.totalSettled, 200);
+    assert.equal(stored.approvedById, undefined);
+    assert.equal(stored.milestones[0].injected, undefined);
+    assert.match(stored.milestones[0].disbursedDate, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(stored.milestones[1].disbursedDate, undefined);
+    assert.equal(stored.lastUpdatedById, staff.id);
+    assert.ok(saved.contextVersion);
+
+    const audit = await db.auditLog.findFirst({ where: { targetEntityId: proposal.id, action: "update-disbursement" }, orderBy: { timestamp: "desc" } });
+    assert.equal(audit.beforeFacts, null);
+    assert.equal(audit.afterFacts.disbursement.totalDisbursed, 400);
+
+    await decisions.updateDisbursement(leader, proposal.id, { milestones: stored.milestones, costItems: stored.costItems, contextVersion: saved.contextVersion });
+    const second = await db.auditLog.findFirst({ where: { targetEntityId: proposal.id, action: "update-disbursement" }, orderBy: { timestamp: "desc" } });
+    assert.equal(second.beforeFacts.disbursement.lastUpdatedById, staff.id);
+    assert.equal(await auditCount(proposal.id, "update-disbursement"), 2);
+
+    // A stale contextVersion is rejected and changes nothing.
+    await assert.rejects(decisions.updateDisbursement(staff, proposal.id, { milestones: [], contextVersion: saved.contextVersion }), ConflictException);
+  });
+
+  it("disbursement rejects invalid amounts and over-budget totals with 400 and writes nothing", async () => {
+    const proposal = await newProposal();
+    await db.researchProposal.update({ where: { id: proposal.id }, data: { budgetMetadata: { amount: 1000 } } });
+    const milestone = (overrides) => ({ id: "M1", name: "Đợt 1", percentage: 100, expectedAmount: 1000, disbursedAmount: 0, status: "PENDING", ...overrides });
+
+    for (const payload of [
+      {},
+      { milestones: "nope" },
+      { milestones: [milestone({ expectedAmount: -1 })] },
+      { milestones: [milestone({ disbursedAmount: 1500, expectedAmount: 1500 })] },
+      { milestones: [milestone({ disbursedAmount: 1200 })] },
+      { milestones: [milestone({ status: "PAID" })] },
+      { milestones: [milestone({}), milestone({})] },
+      { milestones: [milestone({})], costItems: [{ code: "C1", name: "x", allocatedAmount: 1, spentAmount: 1, settledAmount: 2 }] },
+      { milestones: [milestone({})], settlementStatus: "COMPLETED" }
+    ]) {
+      await assert.rejects(decisions.updateDisbursement(staff, proposal.id, payload), BadRequestException, JSON.stringify(payload));
+    }
+    assert.equal((await db.researchProposal.findUnique({ where: { id: proposal.id } })).disbursementMetadata, null);
+    assert.equal(await auditCount(proposal.id, "update-disbursement"), 0);
   });
 });

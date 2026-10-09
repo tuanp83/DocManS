@@ -43,12 +43,13 @@ interface MilestoneDisbursementModalProps {
   onSuccess?: () => void;
 }
 
+// Danh mục khoản chi mẫu; số tiền để 0 cho cán bộ nhập, không điền sẵn số liệu giả.
 const DEFAULT_COST_ITEMS: DisbursementCostItem[] = [
-  { code: "REMUNERATION", name: "1. Thù lao trực tiếp cho các nhà khoa học, chuyên gia", allocatedAmount: 180000000, spentAmount: 160000000, settledAmount: 160000000 },
-  { code: "OUTSOURCING", name: "2. Thuê khoán chuyên môn, xét nghiệm y sinh, thử nghiệm lâm sàng", allocatedAmount: 150000000, spentAmount: 140000000, settledAmount: 140000000 },
-  { code: "MATERIALS", name: "3. Mua sắm nguyên vật liệu, hóa chất, sinh phẩm y tế chuyên dụng", allocatedAmount: 120000000, spentAmount: 115000000, settledAmount: 110000000 },
-  { code: "CONFERENCE_TRAVEL", name: "4. Hội thảo khoa học, công tác thực địa, điều tra dịch tễ", allocatedAmount: 30000000, spentAmount: 25000000, settledAmount: 25000000 },
-  { code: "MANAGEMENT", name: "5. Chi phí quản lý chung, kiểm toán và nghiệm thu nhiệm vụ", allocatedAmount: 20000000, spentAmount: 18000000, settledAmount: 15000000 },
+  { code: "REMUNERATION", name: "1. Thù lao trực tiếp cho các nhà khoa học, chuyên gia", allocatedAmount: 0, spentAmount: 0, settledAmount: 0 },
+  { code: "OUTSOURCING", name: "2. Thuê khoán chuyên môn, xét nghiệm y sinh, thử nghiệm lâm sàng", allocatedAmount: 0, spentAmount: 0, settledAmount: 0 },
+  { code: "MATERIALS", name: "3. Mua sắm nguyên vật liệu, hóa chất, sinh phẩm y tế chuyên dụng", allocatedAmount: 0, spentAmount: 0, settledAmount: 0 },
+  { code: "CONFERENCE_TRAVEL", name: "4. Hội thảo khoa học, công tác thực địa, điều tra dịch tễ", allocatedAmount: 0, spentAmount: 0, settledAmount: 0 },
+  { code: "MANAGEMENT", name: "5. Chi phí quản lý chung, kiểm toán và nghiệm thu nhiệm vụ", allocatedAmount: 0, spentAmount: 0, settledAmount: 0 },
 ];
 
 export function MilestoneDisbursementModal({
@@ -82,11 +83,12 @@ export function MilestoneDisbursementModal({
     try {
       setLoading(true);
       const res = await fetchDisbursement(proposal.id);
-      const budget = proposal.totalBudget || 500000000;
+      // Mẫu 3 đợt để cán bộ điền; KHÔNG giả định đợt nào đã giải ngân và không bịa số chứng từ.
+      const budget = Number(res?.disbursement?.totalBudget) || Number(proposal.totalBudget) || 0;
       const defaultMilestones: DisbursementMilestone[] = [
-        { id: "M1", name: "Đợt 1: Tạm ứng kinh phí ban đầu", percentage: 40, expectedAmount: budget * 0.4, disbursedAmount: budget * 0.4, status: "DISBURSED", evidenceNotes: "UNC số 48/KB ngày 10/01/2026" },
-        { id: "M2", name: "Đợt 2: Giải ngân sau đánh giá giữa kỳ", percentage: 40, expectedAmount: budget * 0.4, disbursedAmount: 0, status: "PENDING", evidenceNotes: "Chờ biên bản đánh giá giữa kỳ" },
-        { id: "M3", name: "Đợt 3: Quyết toán kinh phí sau nghiệm thu", percentage: 20, expectedAmount: budget * 0.2, disbursedAmount: 0, status: "PENDING", evidenceNotes: "Sau nghiệm thu chính thức và thanh lý HĐ" }
+        { id: "M1", name: "Đợt 1: Tạm ứng kinh phí ban đầu", percentage: 40, expectedAmount: Math.round(budget * 0.4), disbursedAmount: 0, status: "PENDING" },
+        { id: "M2", name: "Đợt 2: Giải ngân sau đánh giá giữa kỳ", percentage: 40, expectedAmount: Math.round(budget * 0.4), disbursedAmount: 0, status: "PENDING" },
+        { id: "M3", name: "Đợt 3: Quyết toán kinh phí sau nghiệm thu", percentage: 20, expectedAmount: budget - 2 * Math.round(budget * 0.4), disbursedAmount: 0, status: "PENDING" }
       ];
 
       if (res && res.disbursement) {
@@ -209,7 +211,7 @@ export function MilestoneDisbursementModal({
     }
   };
 
-  const totalBudget = milestones.reduce((sum, m) => sum + (Number(m.expectedAmount) || 0), 0) || proposal.totalBudget || 500000000;
+  const totalBudget = milestones.reduce((sum, m) => sum + (Number(m.expectedAmount) || 0), 0) || Number(proposal.totalBudget) || 0;
   const totalDisbursed = milestones.reduce((sum, m) => sum + (Number(m.disbursedAmount) || 0), 0);
   const totalSettled = costItems.reduce((sum, c) => sum + (Number(c.settledAmount) || 0), 0);
   const disbursementPercent = totalBudget > 0 ? Math.round((totalDisbursed / totalBudget) * 100) : 0;

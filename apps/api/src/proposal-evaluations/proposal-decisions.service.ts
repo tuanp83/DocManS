@@ -24,6 +24,7 @@ import { ProposalEvaluationSummaryService } from "./proposal-evaluation-summary.
 import { ProposalReviewAssignmentsService } from "./proposal-review-assignments.service.js";
 import { ProposalReviewsService } from "./proposal-reviews.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
+import { computeDisbursementTotals, emptyDisbursement, readApprovedBudget, readDisbursementInput, stampMilestoneDates, type DisbursementRecord } from "./disbursement.js";
 
 export const PROPOSAL_DECISIONS = {
   approved: "approved",
@@ -906,63 +907,75 @@ export class ProposalDecisionsService {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
     assertCanReadEvaluation(actor, proposal);
 
-    const totalAmount = Number((proposal.budgetMetadata as any)?.amount ?? 850000000);
+    const totalBudget = readApprovedBudget(proposal.budgetMetadata);
     const existing = proposal.disbursementMetadata as Record<string, unknown> | null;
-
-    if (existing) {
-      return { proposalId, disbursement: existing };
-    }
-
-    const defaultData = {
-      totalBudget: totalAmount,
-      totalDisbursed: 0,
-      totalSettled: 0,
-      milestones: [],
-      expenseCategories: [],
-      updatedAt: new Date().toISOString()
-    };
-
-    return { proposalId, disbursement: defaultData };
+    // Chưa có dữ liệu thì trả về bản trống (không bịa mốc hay số tiền mặc định).
+    const disbursement = existing ? { ...emptyDisbursement(totalBudget), ...existing, totalBudget } : emptyDisbursement(totalBudget);
+    return { success: true, proposalId, disbursement, contextVersion: proposalContextVersion(proposal as never) };
   }
 
+  /**
+   * Cập nhật giải ngân & quyết toán. Chỉ các trường đã kiểm tra (readDisbursementInput) được lưu; tổng
+   * tiền do máy chủ tính. Ghi trong transaction có contextVersion như các thao tác hội đồng/IRB, và mỗi
+   * lần ghi để lại bản trước/sau trong audit log (append-only) nên không mất lịch sử khi ghi đè JSON.
+   */
   async updateDisbursement(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    // Lãnh đạo Học viện, hoặc cán bộ QLKH có phạm vi đơn vị chủ trì của hồ sơ.
-    assertCanManageDisbursement(actor, proposal);
+    let notice: { ownerId: string; label: string } | null = null;
 
-    const payload = {
-      ...input,
-      updatedAt: new Date().toISOString(),
-      updatedById: actor.id,
-      updatedByName: actor.displayName || actor.username
-    };
+    const result = await this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
+      // Lãnh đạo Học viện, hoặc cán bộ QLKH có phạm vi đơn vị chủ trì của hồ sơ.
+      assertCanManageDisbursement(actor, proposal);
 
-    await this.prisma.researchProposal.update({
-      where: { id: proposalId },
-      data: {
-        disbursementMetadata: payload
-      }
+      const totalBudget = readApprovedBudget(proposal.budgetMetadata);
+      const previous = (proposal.disbursementMetadata as Record<string, unknown> | null) ?? null;
+      const accepted = readDisbursementInput(input, totalBudget);
+      const milestones = stampMilestoneDates(accepted.milestones, previous);
+      const totals = computeDisbursementTotals(milestones, accepted.costItems);
+
+      const disbursement: DisbursementRecord = {
+        ...accepted,
+        milestones,
+        totalBudget,
+        ...totals,
+        lastUpdatedAt: new Date().toISOString(),
+        lastUpdatedById: actor.id,
+        lastUpdatedBy: actor.displayName || actor.username
+      };
+
+      await tx.researchProposal.update({
+        where: { id: proposalId },
+        data: { disbursementMetadata: disbursement as never }
+      });
+
+      await auditLog.record({
+        action: "update-disbursement",
+        result: "success",
+        actorId: actor.id,
+        targetEntity: "proposal",
+        targetEntityId: proposalId,
+        username: actor.username,
+        beforeFacts: previous ? { disbursement: previous } : undefined,
+        afterFacts: { disbursement }
+      });
+
+      notice = { ownerId: proposal.ownerId, label: proposal.code || proposal.title };
+      return { success: true, proposalId, disbursement };
     });
 
-    await this.notifications.createNotification({
-      userId: proposal.ownerId,
-      title: "Cập nhật giải ngân",
-      message: `Thông tin giải ngân của đề tài ${proposal.code || proposal.title} vừa được cập nhật.`,
-      type: "DISBURSEMENT_UPDATE",
-      link: `/research-proposals/${proposalId}?tab=progress`,
-      metadata: { proposalId }
-    });
+    // Thông báo chỉ gửi sau khi dữ liệu đã commit.
+    const committed = notice as { ownerId: string; label: string } | null;
+    if (committed) {
+      await this.notifications.createNotification({
+        userId: committed.ownerId,
+        title: "Cập nhật giải ngân",
+        message: `Thông tin giải ngân của đề tài ${committed.label} vừa được cập nhật.`,
+        type: "DISBURSEMENT_UPDATE",
+        link: `/research-proposals/${proposalId}?tab=progress`,
+        metadata: { proposalId }
+      });
+    }
 
-    await this.auditLog.record({
-      action: "update-disbursement",
-      result: "success",
-      actorId: actor.id,
-      targetEntity: "proposal",
-      targetEntityId: proposalId,
-      username: actor.username
-    });
-
-    return { success: true, disbursement: payload };
+    return result;
   }
 
   // =========================================================================================
