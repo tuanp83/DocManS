@@ -316,32 +316,33 @@ export class ResearcherProfilesService {
         status: "ACTIVE",
         contactEmail: email,
         contactEmailKey: email.toLowerCase(),
-        contactPhone: "0912345678",
-        contactPhoneKey: "0912345678",
+        // Hồ sơ tự tạo chỉ chứa dữ liệu hệ thống thực sự biết về tài khoản. Không điền sẵn thông tin
+        // cá nhân (CCCD, ngày sinh, giới tính, điện thoại, học vị, ngoại ngữ) và KHÔNG mặc định đồng ý
+        // chia sẻ dữ liệu: nhà khoa học tự khai báo và tự xác nhận.
+        contactPhone: null,
+        contactPhoneKey: null,
         curriculumVitae: {
           personalInfo: {
             fullName,
-            gender: "Nam",
-            birthDate: "1980-01-01",
-            birthPlace: "Hà Nội",
-            nationality: "Việt Nam",
-            idNumber: "DEMO-ID-0002",
-            idIssueDate: "2021-05-10",
-            idIssuePlace: "Cục Cảnh sát QLHC về TTXH",
+            gender: "",
+            birthDate: "",
+            birthPlace: "",
+            nationality: "",
+            idNumber: "",
+            idIssueDate: "",
+            idIssuePlace: "",
             organization: actor.unit || organization.name,
-            position: "Giảng viên / Nghiên cứu viên",
-            academicTitle: "Tiến sĩ",
-            phone: "0912345678",
+            position: "",
+            academicTitle: "",
+            phone: "",
             email,
-            address: "Học viện Quân y, 160 Phùng Hưng, Phúc La, Hà Đông, Hà Nội",
-            languages: [
-              { language: "Tiếng Anh", level: "Thành thạo", certificate: "IELTS 7.0" }
-            ],
-            dataSharingConsent: true
+            address: "",
+            languages: [],
+            dataSharingConsent: false
           },
           training: [],
           workHistory: [],
-          researchSummary: "Nghiên cứu ứng dụng công nghệ thông tin và trí tuệ nhân tạo trong y dược học quân sự.",
+          researchSummary: "",
           publications: [],
           intellectualProperty: [],
           awards: [],

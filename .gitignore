@@ -19,3 +19,10 @@ _bmad/
 .env.production
 nginx/ssl/
 backups/
+# Tài liệu nội bộ, báo cáo, ảnh chụp màn hình và file tạm: không đưa lên repo công khai
+reports/
+output/
+tmp/
+*.dump
+*.pem
+*.key

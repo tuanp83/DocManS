@@ -1,0 +1,115 @@
+# CI cho DocManS: chạy mỗi lần push lên nhánh DocManS và mỗi pull request.
+#
+#   hygiene : chặn dữ liệu nhạy cảm/tài liệu nội bộ (scripts/check-repo-hygiene.sh)
+#   test    : typecheck + toàn bộ test, gồm test trên PostgreSQL thật
+#   docker  : build image production và kiểm tra docker-compose.prod.yml
+#
+# Khi đã chạy ổn, bật bảo vệ nhánh: Settings → Branches → Branch protection rule cho "DocManS"
+# → "Require status checks to pass" → chọn hygiene, test, docker.
+name: CI
+
+on:
+  push:
+    branches: [DocManS]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"   # cùng phiên bản với Dockerfile production
+
+jobs:
+  hygiene:
+    name: Vệ sinh repo
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kiểm tra dữ liệu nhạy cảm và file không thuộc mã nguồn
+        run: ./scripts/check-repo-hygiene.sh
+
+  test:
+    name: Typecheck và test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: docmans_ci
+          POSTGRES_PASSWORD: docmans_ci
+          POSTGRES_DB: docmans_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U docmans_ci -d docmans_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Test PostgreSQL thật tạo database tạm bên cạnh database này (tests/helpers/disposable-database.mjs).
+      DATABASE_URL: postgresql://docmans_ci:docmans_ci@localhost:5432/docmans_ci?schema=public
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cài dependencies
+        run: npm ci
+
+      - name: Sinh Prisma client
+        run: npm run prisma:generate
+
+      - name: Kiểm tra migration áp dụng được trên database trống
+        run: npm run prisma:deploy
+
+      - name: Typecheck (web + api)
+        run: npm run typecheck
+
+      - name: Test (build api + node --test)
+        run: npm test
+
+  docker:
+    name: Build image production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: hygiene
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kiểm tra cú pháp docker-compose.prod.yml
+        run: |
+          cat > /tmp/ci.env <<'EOF'
+          PUBLIC_URL=https://ci.example.invalid
+          SERVER_NAME=ci.example.invalid
+          POSTGRES_USER=ci
+          POSTGRES_PASSWORD=ci
+          POSTGRES_DB=ci
+          MINIO_ROOT_USER=ci
+          MINIO_ROOT_PASSWORD=ci-secret-ci
+          SMTP_HOST=smtp.example.invalid
+          SMTP_FROM=ci@example.invalid
+          EOF
+          docker compose -f docker-compose.prod.yml --env-file /tmp/ci.env config --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build Dockerfile (không push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          tags: docmans-app:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
