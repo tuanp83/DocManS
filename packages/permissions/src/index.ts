@@ -38,6 +38,34 @@ export const PERMISSION_ACTION_IDS_V1 = [
   "proposal.completeness.check",
   "proposal.management-officer.assign",
   "proposal.management-officer.revoke",
+  "project.read",
+  "project.monitor",
+  "project.setup.confirm",
+  "project.setup.configure",
+  "project.officer.assign",
+  "project.officer.revoke",
+  "project.report.draft",
+  "project.report.submit",
+  "project.report.review",
+  "project.report.request-supplement",
+  "project.report.accept",
+  "project.evidence.contribute",
+  "project.adjustment.create",
+  "project.adjustment.edit-draft",
+  "project.adjustment.submit",
+  "project.adjustment.review",
+  "project.adjustment.request-supplement",
+  "project.adjustment.approve",
+  "project.adjustment.reject",
+  "project.extension.create",
+  "project.extension.edit-draft",
+  "project.extension.submit",
+  "project.extension.validate",
+  "project.extension.prepare",
+  "project.extension.request-supplement",
+  "project.extension.approve",
+  "project.extension.reject",
+  "project.history.read",
   "proposal.decision.approve",
   "proposal.decision.reject",
   "file.read",
@@ -83,7 +111,8 @@ export const VIEWER_RELATIONSHIP_TYPES_V1 = [
   "COUNCIL_SCIENTIFIC_SECRETARY",
   "ETHICS_REVIEWER_ASSIGNMENT",
   "TASK_ASSIGNEE",
-  "PROPOSAL_MANAGEMENT_OFFICER"
+  "PROPOSAL_MANAGEMENT_OFFICER",
+  "PROJECT_MANAGEMENT_OFFICER"
 ] as const;
 export type ViewerRelationshipTypeV1 = (typeof VIEWER_RELATIONSHIP_TYPES_V1)[number];
 export const RELATIONSHIP_MULTIPLICITY_V1: Record<ViewerRelationshipTypeV1, "one"> = Object.fromEntries(
@@ -116,6 +145,7 @@ export type ViewerAuthorizationV1 = {
   allowedActions: PermissionActionV1[];
   blockedActions: BlockedActionV1[];
   policyVersion: string;
+  accessReasons?: string[];
   evaluatedAsOf: string;
   contextVersion: ContextVersionTokenV1;
   accessReasons?: string[];

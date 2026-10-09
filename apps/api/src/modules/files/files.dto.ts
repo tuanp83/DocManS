@@ -1,6 +1,9 @@
 import { BadRequestException, type PipeTransform } from "@nestjs/common";
 import { readCode, readText } from "../../proposals-shared/proposal-validation.js";
 
+export const APPROVED_PROJECT_ENTITY_TYPE = "approved_project";
+/** Chứng từ giải ngân gắn với đề xuất đã duyệt; nhiều tệp cùng mục đích, không thay thế nhau. */
+export const DISBURSEMENT_VOUCHER_PURPOSE = "disbursement_voucher";
 export const RESEARCH_PROPOSAL_ENTITY_TYPE = "research_proposal";
 
 export class ListFilesDto {
@@ -29,7 +32,7 @@ function assertRecord(value: unknown) {
 
 function validateRelatedEntity(input: Record<string, unknown>) {
   const relatedEntityType = readCode(input.relatedEntityType, "relatedEntityType");
-  if (relatedEntityType !== RESEARCH_PROPOSAL_ENTITY_TYPE) {
+  if (![RESEARCH_PROPOSAL_ENTITY_TYPE, APPROVED_PROJECT_ENTITY_TYPE].includes(relatedEntityType)) {
     throw new BadRequestException({ message: "Loại thực thể liên kết chưa được hỗ trợ." });
   }
   readText(input.relatedEntityId, "relatedEntityId", 80);

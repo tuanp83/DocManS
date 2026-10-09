@@ -80,7 +80,7 @@ describe("workspace smoke checks", () => {
     assert.match(shellSource, /EXTERNAL_RESEARCHER_USER:\s*\[/);
   });
 
-  it("keeps database scope focused on auth, access, catalogs, config, audit, and the EP-02/EP-03 proposal models", () => {
+  it("keeps database scope focused on auth, access, catalogs, config, audit, the EP-02/EP-03 proposal models and approved-project execution", () => {
     const schemaSource = readFileSync("apps/api/prisma/schema.prisma", "utf8");
     const models = [...schemaSource.matchAll(/^model\s+(\w+)/gm)].map((match) => match[1]);
 
@@ -119,7 +119,19 @@ describe("workspace smoke checks", () => {
       "ProposalEvaluationSummary",
       "ProposalDecision",
       "UserNotification",
-      "ScientificDocument"
+      "ScientificDocument",
+      "ApprovedProject",
+      "ApprovedProjectMember",
+      "ProjectManagementOfficer",
+      "ProjectMilestone",
+      "ProjectCheckpoint",
+      "ProjectReportRevision",
+      "ProjectReportEvidence",
+      "ProjectRequest",
+      "ProjectRequestRevision",
+      "ProjectRequestEvidence",
+      "ProjectRequestHistory",
+      "ProjectHistory"
     ]);
     assert.match(schemaSource, /@@map\("users"\)/);
     assert.match(schemaSource, /@@map\("system_role_migration_issues"\)/);

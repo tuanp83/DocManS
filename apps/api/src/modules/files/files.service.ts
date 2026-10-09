@@ -1,6 +1,9 @@
-import { runProposalMutation } from "../../proposals-shared/proposal-mutation.js";
+import { joinedTransaction, runProposalMutation } from "../../proposals-shared/proposal-mutation.js";
+import { ApprovedProjectsService } from "../../approved-projects/approved-projects.service.js";
+import { projectContextVersion } from "../../approved-projects/project-capability-v1.js";
+import { assertCanManageDisbursement } from "../../proposal-evaluations/proposal-evaluation-support.js";
 import { ResearchProposalsService } from "../../research-proposals/research-proposals.service.js";
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -12,7 +15,7 @@ import { assertHasOrganizationScope, isInternalResearcherEligible } from "../../
 import { ProposalManagementOfficerService } from "../../proposals-shared/proposal-management-officer.service.js";
 import { ProposalReviewAccessService } from "../../proposals-shared/proposal-review-access.service.js";
 import { ProposalParticipationService } from "../../research-proposals/proposal-participation.service.js";
-import { RESEARCH_PROPOSAL_ENTITY_TYPE } from "./files.dto.js";
+import { APPROVED_PROJECT_ENTITY_TYPE, DISBURSEMENT_VOUCHER_PURPOSE, RESEARCH_PROPOSAL_ENTITY_TYPE } from "./files.dto.js";
 
 type FileRecord = {
   id: string;
@@ -51,6 +54,9 @@ const MIME_TYPES_BY_EXTENSION: Record<string, string[]> = {
   ".xls": ["application/vnd.ms-excel"],
   ".xlsx": ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
 };
+
+/** Vai trò được xem mọi tệp của đề tài (không sửa tệp người khác). */
+const PROJECT_FILE_MANAGER_ROLES: string[] = ["SCIENTIFIC_MANAGEMENT_STAFF", "LEADERSHIP_APPROVAL_AUTHORITY"];
 
 export type FileModuleConfig = {
   allowedExtensions: string[];
@@ -113,13 +119,45 @@ export class FilesService {
     }
   }
 
+  /** Giao dịch cho tệp gắn với đề tài đang thực hiện (chuyển từ nhánh chính): khoá đề tài, kiểm tra contextVersion. */
+  private async mutateProject<T>(actor: SafeUserContext, projectId: string, expected: unknown, work: (service: FilesService, actor: SafeUserContext) => Promise<T>): Promise<T> {
+    let uploadedKey: string | undefined;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.id} FOR SHARE`;
+        await tx.$queryRaw`SELECT id FROM approved_projects WHERE id = ${projectId} FOR UPDATE`;
+        const user = await tx.user.findUnique({ where: { id: actor.id }, include: { organizationScopes: { include: { organizationUnit: true } } } });
+        const project = await tx.approvedProject.findUnique({ where: { id: projectId } });
+        if (!user || user.status !== "active") throw new ForbiddenException({ code: "ACCOUNT_INACTIVE" });
+        if (!project) throw new NotFoundException({ message: "Không tìm thấy đề tài." });
+        const current = projectContextVersion(project);
+        if (!expected || typeof expected !== "object" || Object.entries(current).some(([key, value]) => (expected as Record<string, unknown>)[key] !== value)) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
+        const currentActor: SafeUserContext = { id: user.id, username: user.username ?? "", displayName: user.displayName, systemRole: user.systemRole as SafeUserContext["systemRole"], unit: user.unit, organizationScopes: user.organizationScopes.filter((scope) => scope.organizationUnit.status === "active").map((scope) => ({ id: scope.organizationUnit.id, code: scope.organizationUnit.code, name: scope.organizationUnit.name })) };
+        const client = joinedTransaction(tx);
+        const scoped = new FilesService(client, this.objectStorage, new AuditLogService(client), new ProposalParticipationService(client), new ProposalReviewAccessService(client), this.config);
+        scoped.transactional = true;
+        try { return await work(scoped, currentActor); } finally { uploadedKey = scoped.uploadedObjectKey; }
+      }, { isolationLevel: "Serializable", timeout: 15000 });
+    } catch (error) {
+      if (uploadedKey) await this.objectStorage.deleteObject?.(uploadedKey);
+      throw error;
+    }
+  }
+
   async uploadFile(actor: SafeUserContext, input: FileUploadInput): Promise<any> {
+    if (!this.transactional && input.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) return this.mutateProject(actor, input.relatedEntityId, input.contextVersion, (s, a) => s.uploadFile(a, input));
     if (!this.transactional) return this.mutate(actor, input.relatedEntityId, input.contextVersion, (s, a) => s.uploadFile(a, input));
     this.assertSupportedEntity(input.relatedEntityType);
     const originalFileName = this.readFileName(input.originalFileName ?? input.fileName);
     const description = this.readDescription(input.description);
     this.assertUploadInput({ ...input, fileName: originalFileName });
-    await this.assertCanUpload(actor, input.relatedEntityType, input.relatedEntityId);
+    await this.assertCanUpload(actor, input.relatedEntityType, input.relatedEntityId, input.filePurpose);
+    if (input.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) {
+      // Thành viên phụ trách mốc chỉ được tải tệp đóng góp; chủ nhiệm quyết định minh chứng chính thức.
+      const project = await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, input.relatedEntityId);
+      const isPi = project.viewerAuthorization.viewerRelationships.some((relationship: { type: string }) => relationship.type === "TOPIC_PI");
+      if (!isPi && input.filePurpose !== "PROJECT_CONTRIBUTION") throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
+    }
 
     const fileId = randomUUID();
     const objectKey = this.createObjectKey({ ...input, fileName: originalFileName }, fileId);
@@ -136,10 +174,13 @@ export class FilesService {
       record = (await this.prisma.$transaction(async (tx) => {
         // Object storage has no transaction with Postgres. Rechecking here ensures a lifecycle
         // change between the initial authorization and metadata write rolls back the usable file.
-        await this.assertCanUpload(actor, input.relatedEntityType, input.relatedEntityId);
+        await this.assertCanUpload(actor, input.relatedEntityType, input.relatedEntityId, input.filePurpose);
 
+        // Tệp minh chứng đề tài và chứng từ giải ngân là nhiều tệp độc lập cùng một mục đích: không
+        // được "thay thế" nhau (nếu không, minh chứng đã gắn vào báo cáo hay mốc trước sẽ mất).
+        const versioned = input.relatedEntityType === RESEARCH_PROPOSAL_ENTITY_TYPE && input.filePurpose !== DISBURSEMENT_VOUCHER_PURPOSE;
         // Find existing file for versioning
-        const existingFile = await tx.fileRecord.findFirst({
+        const existingFile = !versioned ? null : await tx.fileRecord.findFirst({
           where: {
             relatedEntityType: input.relatedEntityType,
             relatedEntityId: input.relatedEntityId,
@@ -197,11 +238,20 @@ export class FilesService {
       reason: `${record.relatedEntityType}:${record.relatedEntityId}`
     });
 
+    if (record.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) await this.prisma.projectHistory.create({ data: { projectId: record.relatedEntityId, actorId: actor.id, action: record.filePurpose === "PROJECT_CONTRIBUTION" ? "project.evidence.contribute" : "project.evidence.upload", reason: record.originalFileName, afterFacts: { fileRecordId: record.id, purpose: record.filePurpose } } });
+
     return this.toFileResponse(record, { canMutate: true });
   }
 
   async listFiles(actor: SafeUserContext, input: { relatedEntityType: string; relatedEntityId: string }) {
     this.assertSupportedEntity(input.relatedEntityType);
+    if (input.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) {
+      await this.assertCanRead(actor, input.relatedEntityType, input.relatedEntityId);
+      const records = (await this.prisma.fileRecord.findMany({ where: { relatedEntityType: input.relatedEntityType, relatedEntityId: input.relatedEntityId, status: "active", deletedAt: null }, include: { uploadedBy: { select: { displayName: true } } }, orderBy: { createdAt: "desc" } })) as FileRecord[];
+      const project = await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, input.relatedEntityId);
+      const fullAccess = project.viewerAuthorization.viewerRelationships.some((relationship: { type: string }) => relationship.type === "TOPIC_PI") || PROJECT_FILE_MANAGER_ROLES.includes(actor.systemRole);
+      return Promise.all(records.filter((record) => fullAccess || record.uploadedById === actor.id).map(async (record) => this.toFileResponse(record, { canMutate: await this.canMutateFile(actor, record) })));
+    }
     const proposal = await new ResearchProposalsService(this.prisma, this.auditLog, this.participation, this.reviewAccess, this.managementOfficers).getProposal(actor, input.relatedEntityId);
     return proposal.attachments;
   }
@@ -209,7 +259,8 @@ export class FilesService {
   async downloadFile(actor: SafeUserContext, fileId: string) {
     const record = await this.findActiveFile(fileId);
     await this.assertCanRead(actor, record.relatedEntityType, record.relatedEntityId);
-    const canMutate = await this.canMutateEntity(actor, record.relatedEntityType, record.relatedEntityId);
+    await this.assertProjectFileOwnership(actor, record, false);
+    const canMutate = await this.canMutateFile(actor, record);
     let content: Awaited<ReturnType<ObjectStorage["getObject"]>>;
     try {
       content = await this.objectStorage.getObject(record.storageObjectKey);
@@ -234,6 +285,14 @@ export class FilesService {
   }
 
   private async assertUnsubmittedFile(record: FileRecord) {
+    if (record.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) {
+      const [report, request] = await Promise.all([
+        this.prisma.projectReportEvidence.findFirst({ where: { fileRecordId: record.id } }),
+        this.prisma.projectRequestEvidence.findFirst({ where: { fileRecordId: record.id } })
+      ]);
+      if (report || request) throw new BadRequestException({ code: "EVIDENCE_PINNED", message: "Tệp minh chứng đã nộp được giữ nguyên. Hãy tải lên phiên bản mới." });
+      return;
+    }
     const events = await this.prisma.proposalSubmissionEvent.findMany({ where: { proposalId: record.relatedEntityId }, select: { snapshot: true } });
     if (events.some((event) => {
       const files = (event.snapshot as { attachments?: Array<{ id: string }> } | null)?.attachments;
@@ -242,9 +301,10 @@ export class FilesService {
   }
 
   async updateFile(actor: SafeUserContext, fileId: string, input: { description: string | null; contextVersion?: unknown }): Promise<any> {
-    if (!this.transactional) { const file = await this.findActiveFile(fileId); return this.mutate(actor, file.relatedEntityId, input.contextVersion, (s, a) => s.updateFile(a, fileId, input)); }
+    if (!this.transactional) { const file = await this.findActiveFile(fileId); return file.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE ? this.mutateProject(actor, file.relatedEntityId, input.contextVersion, (s, a) => s.updateFile(a, fileId, input)) : this.mutate(actor, file.relatedEntityId, input.contextVersion, (s, a) => s.updateFile(a, fileId, input)); }
     const record = await this.findActiveFile(fileId);
-    await this.assertCanUpload(actor, record.relatedEntityType, record.relatedEntityId);
+    await this.assertCanUpload(actor, record.relatedEntityType, record.relatedEntityId, record.filePurpose);
+    await this.assertProjectFileOwnership(actor, record, true);
     await this.assertUnsubmittedFile(record);
     const updated = (await this.prisma.fileRecord.update({
       where: { id: fileId },
@@ -257,6 +317,8 @@ export class FilesService {
         }
       }
     })) as FileRecord;
+
+    if (updated.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) await this.prisma.projectHistory.create({ data: { projectId: updated.relatedEntityId, actorId: actor.id, action: "project.evidence.metadata", afterFacts: { fileRecordId: updated.id, description: updated.description } } });
 
     await this.auditLog.record({
       action: "update-file-description",
@@ -272,9 +334,10 @@ export class FilesService {
   }
 
   async deleteFile(actor: SafeUserContext, fileId: string, contextVersion?: unknown): Promise<any> {
-    if (!this.transactional) { const file = await this.findActiveFile(fileId); return this.mutate(actor, file.relatedEntityId, contextVersion, (s, a) => s.deleteFile(a, fileId, contextVersion)); }
+    if (!this.transactional) { const file = await this.findActiveFile(fileId); return file.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE ? this.mutateProject(actor, file.relatedEntityId, contextVersion, (s, a) => s.deleteFile(a, fileId, contextVersion)) : this.mutate(actor, file.relatedEntityId, contextVersion, (s, a) => s.deleteFile(a, fileId, contextVersion)); }
     const record = await this.findActiveFile(fileId);
-    await this.assertCanUpload(actor, record.relatedEntityType, record.relatedEntityId);
+    await this.assertCanUpload(actor, record.relatedEntityType, record.relatedEntityId, record.filePurpose);
+    await this.assertProjectFileOwnership(actor, record, true);
     await this.assertUnsubmittedFile(record);
     const deleted = (await this.prisma.fileRecord.update({
       where: { id: fileId },
@@ -288,6 +351,8 @@ export class FilesService {
         }
       }
     })) as FileRecord;
+
+    if (deleted.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) await this.prisma.projectHistory.create({ data: { projectId: deleted.relatedEntityId, actorId: actor.id, action: "project.evidence.delete", afterFacts: { fileRecordId: deleted.id } } });
 
     await this.auditLog.record({
       action: "delete-file",
@@ -320,7 +385,7 @@ export class FilesService {
   }
 
   private assertSupportedEntity(relatedEntityType: string) {
-    if (relatedEntityType !== RESEARCH_PROPOSAL_ENTITY_TYPE) {
+    if (relatedEntityType !== RESEARCH_PROPOSAL_ENTITY_TYPE && relatedEntityType !== APPROVED_PROJECT_ENTITY_TYPE) {
       throw new BadRequestException({ message: "Loại thực thể liên kết chưa được hỗ trợ." });
     }
   }
@@ -353,7 +418,19 @@ export class FilesService {
     return trimmed;
   }
 
-  private async assertCanUpload(actor: SafeUserContext, relatedEntityType: string, relatedEntityId: string) {
+  private async assertCanUpload(actor: SafeUserContext, relatedEntityType: string, relatedEntityId: string, filePurpose?: string) {
+    if (relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) {
+      const project = await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, relatedEntityId);
+      if (!project.viewerAuthorization.allowedActions.includes("project.evidence.contribute")) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
+      return;
+    }
+    if (relatedEntityType === RESEARCH_PROPOSAL_ENTITY_TYPE && filePurpose === DISBURSEMENT_VOUCHER_PURPOSE) {
+      // Chứng từ giải ngân: cùng thẩm quyền với cập nhật giải ngân, chỉ khi đề tài đã được phê duyệt.
+      const proposal = await this.findRelatedProposal(relatedEntityType, relatedEntityId);
+      assertCanManageDisbursement(actor, proposal);
+      if (proposal.status !== "approved") throw new ForbiddenException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ đề tài đã được phê duyệt mới có chứng từ giải ngân." });
+      return;
+    }
     if (relatedEntityType === RESEARCH_PROPOSAL_ENTITY_TYPE && !isInternalResearcherEligible(actor)) {
       throw new ForbiddenException({ message: "Chỉ PI hoặc thư ký nội bộ được tải tệp cho hồ sơ đề xuất." });
     }
@@ -371,12 +448,30 @@ export class FilesService {
 
   private async assertCanRead(actor: SafeUserContext, relatedEntityType: string, relatedEntityId: string) {
     this.assertSupportedEntity(relatedEntityType);
+    if (relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) {
+      await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, relatedEntityId);
+      return;
+    }
     await new ResearchProposalsService(this.prisma, this.auditLog, this.participation, this.reviewAccess, this.managementOfficers).getProposal(actor, relatedEntityId);
   }
 
-  private async canMutateEntity(actor: SafeUserContext, relatedEntityType: string, relatedEntityId: string) {
+  private async canMutateFile(actor: SafeUserContext, record: FileRecord) {
+    if (!await this.canMutateEntity(actor, record.relatedEntityType, record.relatedEntityId, record.filePurpose)) return false;
+    try { await this.assertProjectFileOwnership(actor, record, true); await this.assertUnsubmittedFile(record); return true; } catch { return false; }
+  }
+
+  /** Tệp đề tài: chủ nhiệm xem/sửa mọi tệp; chuyên viên/lãnh đạo xem; người khác chỉ tệp mình tải. */
+  private async assertProjectFileOwnership(actor: SafeUserContext, record: FileRecord, mutate: boolean) {
+    if (record.relatedEntityType !== APPROVED_PROJECT_ENTITY_TYPE) return;
+    const project = await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, record.relatedEntityId);
+    const isPi = project.viewerAuthorization.viewerRelationships.some((relationship: { type: string }) => relationship.type === "TOPIC_PI");
+    const manager = PROJECT_FILE_MANAGER_ROLES.includes(actor.systemRole);
+    if (!isPi && (!manager || mutate) && record.uploadedById !== actor.id) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
+  }
+
+  private async canMutateEntity(actor: SafeUserContext, relatedEntityType: string, relatedEntityId: string, filePurpose?: string) {
     try {
-      await this.assertCanUpload(actor, relatedEntityType, relatedEntityId);
+      await this.assertCanUpload(actor, relatedEntityType, relatedEntityId, filePurpose);
       return true;
     } catch {
       return false;
@@ -413,7 +508,7 @@ export class FilesService {
 
   private createObjectKey(input: FileUploadInput, fileId: string) {
     const extension = path.extname(input.fileName).toLowerCase();
-    const entityPath = input.relatedEntityType === RESEARCH_PROPOSAL_ENTITY_TYPE ? "research-proposals" : input.relatedEntityType;
+    const entityPath = input.relatedEntityType === RESEARCH_PROPOSAL_ENTITY_TYPE ? "research-proposals" : input.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE ? "approved-projects" : input.relatedEntityType;
     return `${entityPath}/${input.relatedEntityId}/${fileId}/${randomUUID()}${extension}`;
   }
 

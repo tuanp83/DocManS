@@ -11,6 +11,7 @@ import { ScientificDocumentsModule } from "./scientific-documents/scientific-doc
 
 import { MailModule } from "./mail/mail.module.js";
 import { DashboardModule } from "./dashboard/dashboard.module.js";
+import { ApprovedProjectsModule } from "./approved-projects/approved-projects.module.js";
 
 import { PrismaService } from "./infrastructure/prisma/prisma.service.js";
 import { ScheduleModule } from "@nestjs/schedule";
@@ -55,6 +56,7 @@ class HealthController {
     ScientificDocumentsModule,
     MailModule,
     DashboardModule,
+    ApprovedProjectsModule,
     TasksModule
   ],
   controllers: [HealthController],

@@ -20,6 +20,9 @@ export class ProposalReviewAccessService {
    * expired assignment must stop granting access, but a persisted draft/submitted review remains
    * evidence of prior review activity and therefore remains a conflict. Any read failure is also
    * unresolved rather than silently becoming a no-conflict answer.
+   * Xung đột đánh giá (dùng cho module thực hiện đề tài, chuyển từ nhánh chính): người đã/đang được
+   * phân công phản biện, hoặc đã có bản đánh giá nháp/đã nộp, coi là có xung đột với đề tài đó. Lỗi
+   * đọc dữ liệu trả về `unresolved` để phía gọi từ chối thay vì coi là không xung đột.
    */
   async resolveConflictForProposal(userId: string | undefined, proposalId: string, asOf = new Date()) {
     if (!userId || !proposalId) {

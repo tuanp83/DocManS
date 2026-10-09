@@ -1923,3 +1923,15 @@ summary:focus-visible {
   }
 }
 
+
+/* Danh sách đề tài thực hiện (module chuyển từ nhánh chính) */
+.project-list {
+  display: grid;
+  gap: 12px;
+}
+
+.project-list .list-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
