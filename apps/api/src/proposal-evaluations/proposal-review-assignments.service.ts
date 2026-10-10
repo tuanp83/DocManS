@@ -695,10 +695,10 @@ export class ProposalReviewAssignmentsService {
       throw new BadRequestException({ message: "Chọn người đánh giá bằng hồ sơ nhà khoa học đã liên kết tài khoản." });
     }
 
-    const candidate = (await this.prisma.user.findFirst({
+    const candidate = await this.prisma.user.findFirst({
       where: { id: reviewerUserId },
       select: { id: true, username: true, displayName: true, status: true, systemRole: true, unit: true }
-    })) as ReviewerCandidate | null;
+    });
     
     if (!candidate) {
       console.error("Candidate not found for id:", reviewerUserId);
@@ -709,9 +709,20 @@ export class ProposalReviewAssignmentsService {
       throw new BadRequestException({ message: "Hồ sơ nhà khoa học không đủ điều kiện nhận phân công." });
     }
 
+    if (candidate.systemRole === "SYSTEM_ADMIN") {
+      throw new BadRequestException({ message: "Vai trò không hợp lệ để nhận phân công đánh giá." });
+    }
+
     await this.prisma.$queryRaw`SELECT id FROM users WHERE id = ${candidate.id} FOR SHARE`;
 
-    return { ...candidate, researcherProfileId: candidate.id };
+    return {
+      id: candidate.id,
+      username: candidate.username ?? "",
+      displayName: candidate.displayName,
+      status: candidate.status,
+      unit: candidate.unit ?? "",
+      researcherProfileId: candidate.id
+    };
   }
 
   private readOptionalDueDate(value: unknown) {

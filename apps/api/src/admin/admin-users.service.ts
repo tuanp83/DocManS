@@ -5,6 +5,7 @@ import { AuthService } from "../auth/auth.service.js";
 import { SYSTEM_ROLES, type SafeUserContext, type SystemRole } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { readCode, readText } from "./admin-access.js";
+import { validateNewPassword } from "../auth/password-request.pipe.js";
 
 type CreateUserInput = {
   username?: unknown;
@@ -169,7 +170,8 @@ export class AdminUsersService {
   async createUser(actor: SafeUserContext, input: CreateUserInput) {
     const username = readCode(input.username, "username").toLowerCase();
     const displayName = readText(input.displayName, "displayName");
-    const password = readText(input.password, "password", 256);
+    const passwordRaw = readText(input.password, "password", 256);
+    const password = validateNewPassword(passwordRaw) as string;
     const systemRole = this.readSystemRole(input.systemRole);
     const organizationUnitId = readText(input.organizationUnitId, "organizationUnitId");
 
@@ -190,6 +192,7 @@ export class AdminUsersService {
           passwordHash,
           status: "active",
           systemRole,
+          mustChangePassword: true,
           unit: organizationUnit.name
         }
       });

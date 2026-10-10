@@ -40,8 +40,8 @@ test('any active account can be assigned reviewer/council unless it participates
       staff: { username: 'staff', displayName: 'Staff', systemRole: 'RESEARCH_MANAGEMENT_STAFF', status: 'active', scopes: [hostOrg.id] },
       pi: { username: 'pi', displayName: 'PI', systemRole: 'RESEARCHER_INTERNAL_USER', status: 'active', scopes: [hostOrg.id] },
       member: { username: 'member', displayName: 'Member', systemRole: 'RESEARCHER_INTERNAL_USER', status: 'active', scopes: [hostOrg.id] },
-      admin: { username: 'admin', displayName: 'Admin without profile', systemRole: 'SYSTEM_ADMIN', status: 'active', scopes: [otherOrg.id] },
-      leadership: { username: 'leadership', displayName: 'Leadership without profile', systemRole: 'LEADERSHIP_APPROVAL_AUTHORITY', status: 'active', scopes: [otherOrg.id] },
+      admin: { username: 'admin', displayName: 'Admin without profile', systemRole: 'EXTERNAL_RESEARCHER_USER', status: 'active', scopes: [otherOrg.id] },
+      leadership: { username: 'leadership', displayName: 'Leadership without profile', systemRole: 'EXTERNAL_RESEARCHER_USER', status: 'active', scopes: [otherOrg.id] },
       inactive: { username: 'inactive', displayName: 'Inactive account', systemRole: 'SYSTEM_ADMIN', status: 'inactive', scopes: [] },
       pending: { username: 'pending', displayName: 'Pending account', systemRole: 'EXTERNAL_RESEARCHER_USER', status: 'pending', scopes: [] }
     })) {

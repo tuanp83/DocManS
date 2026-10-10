@@ -336,13 +336,13 @@ describe("admin foundation API behavior", () => {
       const result = await service.createUser(adminUser, {
         username: `new.user.${index}`,
         displayName: `New User ${index}`,
-        password: "ChangeMe123",
+        password: "ChangeMe1234",
         systemRole,
         organizationUnitId: "org-root"
       });
 
       assert.equal(result.username, `new.user.${index}`);
-      assert.equal(prisma.store.users[index].passwordHash, "hashed:ChangeMe123");
+      assert.equal(prisma.store.users[index].passwordHash, "hashed:ChangeMe1234");
       assert.equal(prisma.store.users[index].systemRole, systemRole);
     }
 
@@ -359,7 +359,7 @@ describe("admin foundation API behavior", () => {
       () => service.createUser(adminUser, {
         username: "scope.failure",
         displayName: "Scope Failure",
-        password: "ChangeMe123",
+        password: "ChangeMe1234",
         systemRole: "RESEARCHER_INTERNAL_USER",
         organizationUnitId: "org-root"
       }),

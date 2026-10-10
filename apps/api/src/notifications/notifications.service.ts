@@ -22,17 +22,35 @@ export class NotificationsService {
       }
     });
 
+function escapeHtml(unsafe: string) {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
     try {
       const user = await (this.prisma as any).user.findUnique({
         where: { id: data.userId }
       });
       if (user && user.credentialEmail) {
+        const safeTitle = escapeHtml(data.title);
+        const safeMessage = escapeHtml(data.message);
+        
+        let fullLink = data.link || "";
+        if (fullLink && !fullLink.startsWith("http")) {
+          const baseUrl = process.env.ACCOUNT_LOGIN_URL ? new URL(process.env.ACCOUNT_LOGIN_URL).origin : "http://localhost:3000";
+          fullLink = baseUrl + (fullLink.startsWith("/") ? "" : "/") + fullLink;
+        }
+
         const emailHtml = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #2c3e50;">Thông báo từ DocManS</h2>
-            <p><strong>${data.title}</strong></p>
-            <p>${data.message}</p>
-            ${data.link ? `<p><a href="${data.link}" style="display: inline-block; padding: 10px 15px; background-color: #3498db; color: white; text-decoration: none; border-radius: 4px;">Xem chi tiết</a></p>` : ""}
+            <p><strong>${safeTitle}</strong></p>
+            <p>${safeMessage}</p>
+            ${fullLink ? `<p><a href="${fullLink}" style="display: inline-block; padding: 10px 15px; background-color: #3498db; color: white; text-decoration: none; border-radius: 4px;">Xem chi tiết</a></p>` : ""}
             <hr style="border: none; border-top: 1px solid #eee; margin-top: 20px;" />
             <p style="font-size: 12px; color: #7f8c8d;">Hệ thống Quản lý Nghiên cứu Khoa học (DocManS)<br/>Học viện Quân Y</p>
           </div>

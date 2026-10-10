@@ -3,7 +3,7 @@ import * as nodemailer from "nodemailer";
 
 @Injectable()
 export class MailService {
-  private transporter: nodemailer.Transporter;
+  private transporter: nodemailer.Transporter | null = null;
   private readonly logger = new Logger(MailService.name);
   private initialized = false;
 
@@ -11,45 +11,53 @@ export class MailService {
     this.init();
   }
 
-  private async init() {
+  private init() {
     try {
-      // For development, we create an Ethereal test account dynamically.
-      // In production, you would use credentials from process.env
-      const testAccount = await nodemailer.createTestAccount();
+      const host = process.env.SMTP_HOST?.trim();
+      const port = Number(process.env.SMTP_PORT ?? "587");
+      const from = process.env.SMTP_FROM?.trim();
       
+      if (!host || !from) {
+        this.logger.warn("Cấu hình SMTP chưa đầy đủ (SMTP_HOST, SMTP_FROM). Dịch vụ gửi mail đã bị vô hiệu hóa.");
+        return;
+      }
+      
+      const localHost = /^(localhost|127\.0\.0\.1|::1)$/i.test(host);
+
       this.transporter = nodemailer.createTransport({
-        host: "smtp.ethereal.email",
-        port: 587,
-        secure: false, // true for 465, false for other ports
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass,
-        },
+        host,
+        port,
+        secure: process.env.SMTP_SECURE === "true" || port === 465,
+        requireTLS: !localHost,
+        auth: process.env.SMTP_USER ? {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASSWORD ?? "",
+        } : undefined,
       });
       this.initialized = true;
-      this.logger.log(`MailService initialized with Ethereal user: ${testAccount.user}`);
+      this.logger.log(`MailService initialized with SMTP host: ${host}`);
     } catch (err) {
-      this.logger.error("Failed to initialize Ethereal test account", err);
+      this.logger.error("Failed to initialize SMTP transporter", err);
     }
   }
 
   async sendMail(to: string, subject: string, html: string) {
-    if (!this.initialized) {
-      this.logger.warn("MailService not fully initialized yet, skipping email send.");
+    if (!this.initialized || !this.transporter) {
+      this.logger.warn("MailService not initialized (SMTP not configured), skipping email send.");
       return null;
     }
 
     try {
+      const from = process.env.SMTP_FROM?.trim() || '"DocManS System" <noreply@docmans.hvqy.edu.vn>';
+      
       const info = await this.transporter.sendMail({
-        from: '"DocManS System" <noreply@docmans.hvqy.edu.vn>',
+        from,
         to,
         subject,
         html,
       });
 
       this.logger.log(`Email sent: ${info.messageId}`);
-      this.logger.log(`Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
-      
       return info;
     } catch (err) {
       this.logger.error("Failed to send email", err);

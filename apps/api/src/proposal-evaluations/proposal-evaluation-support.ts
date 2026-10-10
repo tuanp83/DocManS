@@ -163,7 +163,7 @@ export function assertCanReadEvaluation(actor: SafeUserContext | undefined, prop
 
 type ConflictResolvers = {
   participation: { evaluateConflict(userId: string | undefined | null, proposalId: string): Promise<ProposalConflictDecision> };
-  reviewAccess: { resolveConflictForProposal(userId: string | undefined, proposalId: string): Promise<{ isAssignedReviewer: boolean; hasPersistedReview: boolean; hasScoringAssignment?: boolean }> };
+  reviewAccess: { resolveConflictForProposal(userId: string | undefined, proposalId: string): Promise<{ isAssignedReviewer: boolean; hasPersistedReview: boolean; hasScoringAssignment?: boolean; unresolved?: boolean }> };
 };
 
 const REVIEWER_CONFLICT: ProposalConflictDecision = {
@@ -191,6 +191,17 @@ export async function resolveActorConflict(
   }
 
   const access = await resolvers.reviewAccess.resolveConflictForProposal(actorId, proposalId);
+  
+  if (access.unresolved) {
+    return {
+      conflicted: true,
+      role: "unknown",
+      reasonCode: "unresolved",
+      reason: "Không thể xác định xung đột lợi ích đánh giá.",
+      viewerMessage: "Không thể xác minh thông tin phân công của bạn vào lúc này."
+    };
+  }
+
   // Người có phân công chấm phiếu (phản biện, thành viên) hoặc đã từng lưu phiếu — kể cả khi phân công sau đó
   // bị thu hồi hoặc hết hạn — không được tự tổng hợp hay quyết định. Thư ký hội đồng không chấm nên không bị chặn.
   const scoring = access.hasScoringAssignment ?? access.isAssignedReviewer;
