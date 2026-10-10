@@ -78,6 +78,8 @@ model User {
   supervisedStudentProjects StudentResearchProject[]  @relation("ProjectSupervisor")
   managedStudentProjects    StudentResearchProject[]  @relation("ProjectOfficer")
   uploadedStudentDocuments  StudentResearchDocument[] @relation("StudentDocumentUploader")
+  createdStudentProjects    StudentResearchProject[]  @relation("StudentProjectCreator")
+  studentResearchEvents     StudentResearchEvent[]    @relation("StudentResearchEventActor")
 
   @@map("users")
 }
@@ -1135,8 +1137,9 @@ model ProjectHealthAssessment {
 // ==========================================
 
 model StudentResearchProject {
-  id   String @id @default(uuid())
-  code String @unique
+  id   String  @id @default(uuid())
+  /// Mã đề tài: chuyên viên cấp khi duyệt; bản đăng ký của giảng viên có thể chưa có mã.
+  code String? @unique
   name String
 
   studentName    String
@@ -1150,8 +1153,13 @@ model StudentResearchProject {
   supervisorId String @map("supervisor_id")
   supervisor   User   @relation("ProjectSupervisor", fields: [supervisorId], references: [id])
 
-  officerId String @map("officer_id")
-  officer   User   @relation("ProjectOfficer", fields: [officerId], references: [id])
+  /// Chuyên viên quản lý: người tạo trực tiếp hoặc người duyệt bản đăng ký.
+  officerId String? @map("officer_id")
+  officer   User?   @relation("ProjectOfficer", fields: [officerId], references: [id])
+
+  /// Người tạo bản ghi (giảng viên đăng ký hoặc chuyên viên tạo trực tiếp).
+  createdById String? @map("created_by_id")
+  createdBy   User?   @relation("StudentProjectCreator", fields: [createdById], references: [id])
 
   /// Đơn vị quản lý đề tài: phạm vi để chuyên viên QLKH xem và xử lý (để trống ở dữ liệu cũ).
   organizationUnitId String?           @map("organization_unit_id")
@@ -1161,12 +1169,32 @@ model StudentResearchProject {
   endDate   DateTime? @map("end_date")
 
   documents StudentResearchDocument[]
+  events    StudentResearchEvent[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([organizationUnitId, status])
+  @@index([supervisorId])
   @@map("student_research_projects")
+}
+
+/// Lịch sử thao tác trên đề tài NCKH sinh viên (đăng ký, nộp, duyệt, trả lại, sửa, huỷ, tài liệu, hoàn thành).
+model StudentResearchEvent {
+  id         String                 @id @default(uuid())
+  projectId  String                 @map("project_id")
+  project    StudentResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorId    String                 @map("actor_id")
+  actor      User                   @relation("StudentResearchEventActor", fields: [actorId], references: [id])
+  action     String
+  fromStatus String?                @map("from_status")
+  toStatus   String?                @map("to_status")
+  reason     String?
+  facts      Json?
+  createdAt  DateTime               @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("student_research_events")
 }
 
 model StudentResearchDocument {
@@ -1189,6 +1217,7 @@ model StudentResearchDocument {
 
 enum StudentProjectStatus {
   DRAFT
+  SUBMITTED
   ACTIVE
   COMPLETED
   CANCELLED

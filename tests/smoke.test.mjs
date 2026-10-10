@@ -136,6 +136,7 @@ describe("workspace smoke checks", () => {
       "ProjectMilestoneProgressUpdate",
       "ProjectHealthAssessment",
       "StudentResearchProject",
+      "StudentResearchEvent",
       "StudentResearchDocument"
     ]);
     assert.match(schemaSource, /@@map\("users"\)/);

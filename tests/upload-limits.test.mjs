@@ -5,7 +5,8 @@ import { readMaxUploadBytes, uploadInterceptorOptions } from "../dist/apps/api/m
 
 const controllers = [
   new URL("../apps/api/src/modules/files/files.controller.ts", import.meta.url),
-  new URL("../apps/api/src/scientific-documents/scientific-documents.controller.ts", import.meta.url)
+  new URL("../apps/api/src/scientific-documents/scientific-documents.controller.ts", import.meta.url),
+  new URL("../apps/api/src/student-research/student-research.controller.ts", import.meta.url)
 ];
 
 describe("upload size limits are enforced while streaming, before the file is buffered", () => {
