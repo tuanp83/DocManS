@@ -7,6 +7,7 @@ import { PrismaService } from "../dist/apps/api/infrastructure/prisma/prisma.ser
 import { AuditLogService } from "../dist/apps/api/auth/audit-log.service.js";
 import { AuthStore } from "../dist/apps/api/auth/auth.store.js";
 import { ApprovedProjectsService } from "../dist/apps/api/approved-projects/approved-projects.service.js";
+import { WorkQueueService } from "../dist/apps/api/approved-projects/work-queue.service.js";
 
 // Module thực hiện đề tài (chuyển từ nhánh thanhdotien278/DocManS) chạy trên PostgreSQL thật với mô hình
 // 5 vai trò của nhánh này: chuyên viên QLKH tạo đề tài và xử lý hằng ngày khi được phân công, lãnh đạo
@@ -168,6 +169,108 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     for (const action of ["project.created", "project.setup.configure", "project.report.submit", "project.extension.approve", "project.adjustment.approve"]) {
       assert.ok(history.some((item) => item.action === action), action);
     }
+  });
+
+  it("tracks progress: weights, baseline versions, member updates, officer assessment and the work queue", async () => {
+    const proposal = await approvedProposal();
+    const { id } = await projects.createFromApprovedProposal(staff, proposal.id);
+    await projects.assignOfficer(leader, id, { contextVersion: await context(leader, id), officerUserId: staff.id, reason: "Phân công" });
+    const memberRow = (await projects.getProject(staff, id)).members.find((item) => item.userId === member.id);
+
+    // Mỗi mốc phải có kỳ báo cáo (mốc chỉ hoàn thành qua báo cáo được chấp nhận).
+    await assert.rejects(projects.configureSetup(staff, id, { contextVersion: await context(staff, id), milestones: [{ title: "A", dueDate: "2031-03-31" }], checkpoints: [] }), BadRequestException);
+    await assert.rejects(projects.configureSetup(staff, id, { contextVersion: await context(staff, id), milestones: [], checkpoints: [{ title: "K", dueDate: "2031-03-31" }] }), BadRequestException);
+    // Trọng số: hoặc để trống tất cả, hoặc đủ mọi mốc với tổng 100.
+    await assert.rejects(projects.configureSetup(staff, id, { contextVersion: await context(staff, id), milestones: [{ title: "A", dueDate: "2031-03-31", weightPercent: 30 }, { title: "B", dueDate: "2031-06-30", weightPercent: 30 }], checkpoints: [] }), BadRequestException);
+    await projects.configureSetup(staff, id, {
+      contextVersion: await context(staff, id),
+      milestones: [
+        { title: "Khảo sát", dueDate: "2031-03-31", weightPercent: 20, isImportant: true },
+        { title: "Thử nghiệm", dueDate: "2031-06-30", weightPercent: 30, isImportant: true, responsibleMemberId: memberRow.id },
+        { title: "Tổng kết", dueDate: "2031-12-31", weightPercent: 50, isImportant: true }
+      ],
+      checkpoints: [
+        { title: "Báo cáo khảo sát", dueDate: "2031-03-31", milestonePosition: 0 },
+        { title: "Báo cáo thử nghiệm", dueDate: "2031-06-30", milestonePosition: 1 },
+        { title: "Báo cáo tổng kết", dueDate: "2031-12-31", milestonePosition: 2 }
+      ]
+    });
+    await projects.confirmSetup(staff, id, { contextVersion: await context(staff, id) });
+    const firstBaselines = await db.projectPlanBaseline.findMany({ where: { projectId: id } });
+    assert.equal(firstBaselines.length, 1);
+    assert.equal(firstBaselines[0].version, 1);
+    assert.equal(firstBaselines[0].source, "setup");
+    assert.equal(firstBaselines[0].milestones.length, 3);
+
+    // Thành viên chỉ cập nhật mốc mình phụ trách; chuyên viên không cập nhật tiến độ thay chủ nhiệm.
+    const milestones = await db.projectMilestone.findMany({ where: { projectId: id }, orderBy: { dueDate: "asc" } });
+    await projects.updateMilestoneProgress(member, id, { contextVersion: await context(member, id), milestoneId: milestones[1].id, progressPercent: 50, note: "Đã làm một nửa" });
+    await assert.rejects(projects.updateMilestoneProgress(member, id, { contextVersion: await context(member, id), milestoneId: milestones[2].id, progressPercent: 10 }), ForbiddenException);
+    await assert.rejects(projects.updateMilestoneProgress(staff, id, { contextVersion: await context(staff, id), milestoneId: milestones[0].id, progressPercent: 10 }), ForbiddenException);
+
+    // Cập nhật tiến độ không làm mất hiệu lực ngữ cảnh mà chủ nhiệm đang giữ.
+    const piContext = await context(pi, id);
+    await projects.updateMilestoneProgress(pi, id, { contextVersion: piContext, milestoneId: milestones[2].id, progressPercent: 5 });
+
+    // Mốc 1 hoàn thành khi báo cáo của nó được chấp nhận.
+    const checkpoint = await db.projectCheckpoint.findFirst({ where: { projectId: id, milestoneId: milestones[0].id } });
+    const report = await projects.createReportDraft(pi, id, { contextVersion: await context(pi, id), checkpointId: checkpoint.id, reportingPeriodStart: day("2031-01-01"), reportingPeriodEnd: day("2031-03-31"), progressResults: "Hoàn thành khảo sát." });
+    await projects.submitReport(pi, id, { contextVersion: await context(pi, id), reportId: report.id });
+    await projects.reviewReport(staff, id, { contextVersion: await context(staff, id), reportId: report.id });
+    await projects.acceptReport(staff, id, { contextVersion: await context(staff, id), reportId: report.id, reason: "Đạt" });
+    const done = await db.projectMilestone.findUnique({ where: { id: milestones[0].id } });
+    assert.equal(done.status, "completed");
+    assert.equal(done.progressPercent, 100);
+    assert.equal(done.completedAt.toISOString(), (await db.projectReportRevision.findUnique({ where: { id: report.id } })).submittedAt.toISOString(), "completion = submission time");
+    // 100% chỉ đạt qua báo cáo được chấp nhận.
+    await assert.rejects(projects.updateMilestoneProgress(pi, id, { contextVersion: await context(pi, id), milestoneId: milestones[1].id, progressPercent: 100 }), BadRequestException);
+
+    // 20% (xong) + 30% × 50% + 50% × 5% = 37.5%.
+    const progress = await projects.getProgress(pi, id);
+    assert.equal(progress.actualPercent, 37.5);
+    assert.equal(progress.weightsConfigured, true);
+    assert.equal(progress.baselineVersion, 1);
+    assert.deepEqual(progress.updatableMilestoneIds.sort(), [milestones[1].id, milestones[2].id].sort());
+    assert.deepEqual((await projects.getProgress(member, id)).updatableMilestoneIds, [milestones[1].id]);
+    assert.equal((await projects.getProject(leader, id)).progressSummary.actualPercent, 37.5);
+
+    // Chỉ chuyên viên phụ trách đánh giá sức khoẻ.
+    await assert.rejects(projects.assessHealth(leader, id, { contextVersion: await context(leader, id), level: "red", reason: "Không" }), ForbiddenException);
+    await assert.rejects(projects.assessHealth(pi, id, { contextVersion: await context(pi, id), level: "green", reason: "Không" }), ForbiddenException);
+    const assessment = await projects.assessHealth(staff, id, { contextVersion: await context(staff, id), level: "amber", reason: "Theo dõi sát giai đoạn thử nghiệm" });
+    assert.equal(assessment.level, "amber");
+    assert.ok(["green", "amber", "red"].includes(assessment.computedLevel));
+
+    // Gia hạn được duyệt tạo kế hoạch gốc phiên bản 2; phiên bản 1 giữ nguyên.
+    const extension = await projects.createExtension(pi, id, { contextVersion: await context(pi, id), proposedValues: { requestedEndDate: "2032-03-31" }, reason: "Cần thêm thời gian" });
+    await projects.submitRequest(pi, id, "extension", { contextVersion: await context(pi, id), requestId: extension.id });
+    await projects.validateExtension(staff, id, { contextVersion: await context(staff, id), requestId: extension.id });
+    await projects.prepareExtension(staff, id, { contextVersion: await context(staff, id), requestId: extension.id, note: "Đủ hồ sơ" });
+    await projects.decideRequest(leader, id, "extension", "approve", { contextVersion: await context(leader, id), requestId: extension.id, reason: "Đồng ý" });
+    const baselines = await db.projectPlanBaseline.findMany({ where: { projectId: id }, orderBy: { version: "asc" } });
+    assert.deepEqual(baselines.map((item) => [item.version, item.source]), [[1, "setup"], [2, "extension"]]);
+    assert.equal(baselines[1].sourceRequestId, extension.id);
+    assert.equal(baselines[1].endDate.toISOString().slice(0, 10), "2032-03-31");
+    assert.equal(baselines[0].endDate.toISOString().slice(0, 10), "2031-12-31");
+
+    // Trọng số chỉ đổi được qua điều chỉnh, và tổng phải còn bằng 100.
+    await assert.rejects(projects.createAdjustment(pi, id, { contextVersion: await context(pi, id), proposedValues: { milestoneChanges: [{ id: milestones[2].id, weightPercent: 40 }] }, reason: "Đổi trọng số" }), BadRequestException);
+
+    // "Việc của tôi" (ngày giả định 20/6/2031): mốc 2 sắp đến hạn cho chủ nhiệm và thành viên; báo cáo chờ xét cho chuyên viên.
+    const general = await projects.createReportDraft(pi, id, { contextVersion: await context(pi, id), reportingPeriodStart: day("2031-04-01"), reportingPeriodEnd: day("2031-05-31"), progressResults: "Báo cáo chung." });
+    await projects.submitReport(pi, id, { contextVersion: await context(pi, id), reportId: general.id });
+    const workQueue = new WorkQueueService(db, projects);
+    const at = day("2031-06-20");
+    const piQueue = await workQueue.forUser(pi, at);
+    assert.ok(piQueue.items.some((item) => item.kind === "milestone_progress" && item.id.endsWith(milestones[1].id)));
+    const memberQueue = await workQueue.forUser(member, at);
+    assert.deepEqual(memberQueue.items.map((item) => item.kind), ["milestone_progress"]);
+    const staffQueue = await workQueue.forUser(staff, at);
+    assert.ok(staffQueue.items.some((item) => item.kind === "report_review"));
+    assert.equal((await workQueue.forUser(researcher, at)).items.length, 0);
+
+    const history = await db.projectHistory.findMany({ where: { projectId: id } });
+    for (const action of ["project.progress.update", "project.health.assess"]) assert.ok(history.some((item) => item.action === action), action);
   });
 
   it("a stale context version is rejected", async () => {

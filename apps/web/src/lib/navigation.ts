@@ -15,8 +15,8 @@ export function getNavigationItems(role: UserRole, account?: { unit?: string }) 
     items = items.filter((item) => item.href !== "/reviews");
   }
 
-  // FEATURE FLAG: Tạm ẩn các màn hình chưa sẵn sàng (Theo dõi đề tài / nhiệm vụ)
-  items = items.filter((item) => item.href !== "/tasks" && item.href !== "/my-tasks");
+  // FEATURE FLAG: "Giao việc" (/tasks) chờ Đợt 2 (docs/design/quan-ly-tien-do-nhiem-vu.md); "Việc của tôi" đã dùng dữ liệu thật.
+  items = items.filter((item) => item.href !== "/tasks");
 
   return items;
 }

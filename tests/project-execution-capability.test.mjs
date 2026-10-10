@@ -81,3 +81,24 @@ test("other researchers and admins see nothing", () => {
     assert.deepEqual(view.allowedActions, [], role);
   }
 });
+
+// Tiến độ (docs/design/quan-ly-tien-do-nhiem-vu.md, mục 5).
+test("progress updates: PI and responsible members while executing; never staff, leadership or others", () => {
+  assert(has(projectViewerAuthorizationV1({ actor: actor("pi", "RESEARCHER_INTERNAL_USER"), project }), "project.progress.update"));
+  assert(has(projectViewerAuthorizationV1({ actor: actor("member", "RESEARCHER_INTERNAL_USER"), project, participant: { isParticipant: true, role: "TOPIC_MEMBER" }, responsibleMember: true }), "project.progress.update"));
+  assert(!has(projectViewerAuthorizationV1({ actor: actor("member", "RESEARCHER_INTERNAL_USER"), project, participant: { isParticipant: true, role: "TOPIC_MEMBER" } }), "project.progress.update"));
+  assert(!has(projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project, projectOfficer: officer }), "project.progress.update"));
+  assert(!has(projectViewerAuthorizationV1({ actor: actor("leader", "LEADERSHIP_APPROVAL_AUTHORITY"), project }), "project.progress.update"));
+  const paused = projectViewerAuthorizationV1({ actor: actor("pi", "RESEARCHER_INTERNAL_USER"), project: { ...project, status: "paused" } });
+  assert(!has(paused, "project.progress.update"));
+  assert.equal(paused.blockedActions.find((item) => item.action === "project.progress.update").code, "WORKFLOW_STATE_DENIED");
+});
+
+test("health assessment: only the assigned officer, while executing or paused", () => {
+  assert(has(projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project, projectOfficer: officer }), "project.health.assess"));
+  assert(has(projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project: { ...project, status: "paused" }, projectOfficer: officer }), "project.health.assess"));
+  assert(!has(projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project: { ...project, status: "preparing" }, projectOfficer: officer }), "project.health.assess"));
+  assert(!has(projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project }), "project.health.assess"), "unassigned staff");
+  assert(!has(projectViewerAuthorizationV1({ actor: actor("leader", "LEADERSHIP_APPROVAL_AUTHORITY"), project }), "project.health.assess"));
+  assert(!has(projectViewerAuthorizationV1({ actor: actor("pi", "RESEARCHER_INTERNAL_USER"), project }), "project.health.assess"));
+});
