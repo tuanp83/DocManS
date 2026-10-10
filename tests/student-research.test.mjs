@@ -11,15 +11,15 @@ const project = { officerId: "creator", supervisorId: "teacher", organizationUni
 
 test("management needs research-management role and the project's unit (or being its creator)", () => {
   assert.equal(canManageStudentProject(actor("s1", "RESEARCH_MANAGEMENT_STAFF"), project), true);
-  assert.equal(canManageStudentProject(actor("h1", "RESEARCH_MANAGEMENT_HEAD"), project), true);
+  assert.equal(canManageStudentProject(actor("h1", "RESEARCH_MANAGEMENT_HEAD"), project), false);
   assert.equal(canManageStudentProject(actor("s2", "RESEARCH_MANAGEMENT_STAFF", ["unit-b"]), project), false);
   assert.equal(canManageStudentProject(actor("creator", "RESEARCH_MANAGEMENT_STAFF", ["unit-b"]), { ...project, organizationUnitId: null }), true);
   for (const role of ["RESEARCHER_INTERNAL_USER", "EXTERNAL_RESEARCHER_USER", "SYSTEM_ADMIN", "LEADERSHIP_APPROVAL_AUTHORITY"]) assert.equal(canManageStudentProject(actor("x", role), project), false, role);
 });
 
-test("reading: managers, leadership, oversight and the project's own supervisor only", () => {
-  assert.equal(canReadStudentProject(actor("l", "LEADERSHIP_APPROVAL_AUTHORITY", []), project), true);
-  assert.equal(canReadStudentProject(actor("o", "RESEARCH_OVERSIGHT_AUTHORITY", []), project), true);
+test("reading: managers and the project's own supervisor only", () => {
+  assert.equal(canReadStudentProject(actor("l", "LEADERSHIP_APPROVAL_AUTHORITY", []), project), false);
+  assert.equal(canReadStudentProject(actor("o", "RESEARCH_OVERSIGHT_AUTHORITY", []), project), false);
   assert.equal(canReadStudentProject(actor("teacher", "RESEARCHER_INTERNAL_USER"), project), true);
   assert.equal(canReadStudentProject(actor("other", "RESEARCHER_INTERNAL_USER"), project), false);
   assert.equal(canReadStudentProject(actor("ext", "EXTERNAL_RESEARCHER_USER"), project), false);
@@ -35,7 +35,7 @@ test("creation requires research management with the chosen unit in scope", () =
 });
 
 test("list filter mirrors read access", () => {
-  assert.deepEqual(studentProjectReadFilter(actor("l", "LEADERSHIP_APPROVAL_AUTHORITY", [])), {});
+  assert.deepEqual(studentProjectReadFilter(actor("l", "LEADERSHIP_APPROVAL_AUTHORITY", [])), { OR: [{ supervisorId: "l" }] });
   assert.deepEqual(studentProjectReadFilter(actor("r", "RESEARCHER_INTERNAL_USER")), { OR: [{ supervisorId: "r" }] });
   assert.deepEqual(studentProjectReadFilter(actor("s", "RESEARCH_MANAGEMENT_STAFF")), { OR: [{ supervisorId: "s" }, { officerId: "s" }, { organizationUnitId: { in: ["unit-a"] } }] });
 });

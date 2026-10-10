@@ -295,7 +295,6 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/proposals", label: "Giám sát hồ sơ đề xuất", icon: Files },
     { href: "/approvals", label: "Hồ sơ chờ phê duyệt", icon: FileClock },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
-    { href: "/student-research", label: "NCKH Sinh viên", icon: BookCopy },
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 }
   ],
@@ -309,8 +308,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
-    { href: "/reports", label: "Báo cáo", icon: BarChart3 },
-    { href: "/student-research", label: "NCKH Sinh viên", icon: BookCopy }
+    { href: "/reports", label: "Báo cáo", icon: BarChart3 }
   ],
   RESEARCH_MANAGEMENT_STAFF: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -351,7 +349,6 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/my-proposals", label: "Hồ sơ của tôi", icon: FileText },
     { href: "/proposals", label: "Giám sát hồ sơ đề xuất", icon: Files },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
-    { href: "/student-research", label: "NCKH Sinh viên", icon: BookCopy },
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
     { href: "/notifications", label: "Thông báo", icon: Bell }
