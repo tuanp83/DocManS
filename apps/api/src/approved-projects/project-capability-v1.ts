@@ -11,8 +11,25 @@ export const PROJECT_ACTIONS: PermissionActionV1[] = [
   "project.adjustment.create", "project.adjustment.edit-draft", "project.adjustment.submit", "project.adjustment.review", "project.adjustment.request-supplement", "project.adjustment.approve", "project.adjustment.reject",
   "project.extension.create", "project.extension.edit-draft", "project.extension.submit", "project.extension.validate", "project.extension.prepare", "project.extension.request-supplement", "project.extension.approve", "project.extension.reject",
   "project.history.read",
-  "project.progress.update", "project.health.assess"
+  "project.progress.update", "project.health.assess",
+  "project.acceptance.submit", "project.acceptance.return", "project.acceptance.council.propose", "project.acceptance.council.establish",
+  "project.acceptance.minutes.record", "project.acceptance.revision.submit", "project.acceptance.revision.confirm",
+  "project.finance.read", "project.finance.manage", "project.liquidation.prepare", "project.liquidation.approve", "project.close"
 ];
+
+/** Trạng thái một vòng nghiệm thu (project_acceptances.status). */
+export const ACCEPTANCE_ROUND_STATUSES = {
+  submitted: "SUBMITTED",
+  returned: "RETURNED",
+  councilProposed: "COUNCIL_PROPOSED",
+  councilEstablished: "COUNCIL_ESTABLISHED",
+  revisionRequired: "REVISION_REQUIRED",
+  revisionSubmitted: "REVISION_SUBMITTED",
+  passed: "PASSED",
+  failed: "FAILED"
+} as const;
+export const CLOSED_ACCEPTANCE_ROUND_STATUSES: string[] = [ACCEPTANCE_ROUND_STATUSES.returned, ACCEPTANCE_ROUND_STATUSES.passed, ACCEPTANCE_ROUND_STATUSES.failed];
+export const LIQUIDATION_STATUSES = { draft: "DRAFT", approved: "APPROVED" } as const;
 
 export const PROJECT_STATUSES = {
   preparing: "preparing",
@@ -49,6 +66,8 @@ export type ProjectCapabilityInput = {
   responsibleMember?: boolean;
   request?: { requestType: string; status: string; requesterId: string };
   report?: { status: string; authorId: string };
+  /** Vòng nghiệm thu gần nhất và biên bản thanh lý (nếu có). */
+  closure?: { acceptanceStatus: string | null; liquidationStatus: string | null };
 };
 
 // Ánh xạ vai trò của nhánh này: xem project-roles.ts.
@@ -132,6 +151,9 @@ function projectActionDenial(action: PermissionActionV1, input: ProjectCapabilit
   if (action === "project.report.review") return input.canOperate && (!input.report || ["submitted", "under_review"].includes(input.report.status)) ? null : blocked(input.report && !["submitted", "under_review"].includes(input.report.status) ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
   if (action === "project.report.request-supplement") return input.canOperate && (!input.report || ["submitted", "under_review"].includes(input.report.status)) ? null : blocked(input.report && !["submitted", "under_review"].includes(input.report.status) ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
   if (action === "project.report.accept") return input.canOperate && (!input.report || input.report.status === "under_review") ? null : blocked(input.report && input.report.status !== "under_review" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
+  if (action.startsWith("project.acceptance.") || action.startsWith("project.finance.") || action.startsWith("project.liquidation.") || action === "project.close") {
+    return closureActionDenial(action, input);
+  }
   if (action.startsWith("project.adjustment.")) {
     if (["project.adjustment.create", "project.adjustment.edit-draft", "project.adjustment.submit"].includes(action)) return input.canPi && input.isPi ? null : blocked(input.inExecution ? "ACTION_NOT_GRANTED" : "WORKFLOW_STATE_DENIED");
     if (action === "project.adjustment.review") return input.canOperate && (!input.request || (input.request.requestType === "adjustment" && input.request.status === "submitted")) ? null : blocked(input.request && input.request.requestType === "adjustment" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
@@ -146,6 +168,44 @@ function projectActionDenial(action: PermissionActionV1, input: ProjectCapabilit
     if (action === "project.extension.approve" || action === "project.extension.reject") return input.canHeadDecide && (!input.request || (input.request.requestType === "extension" && input.request.status === "ready_for_head_decision")) ? null : blocked(input.request && input.request.requestType === "extension" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
   }
   return blocked("ACTION_NOT_GRANTED");
+}
+
+type DenialInput = ProjectCapabilityInput & { scoped: boolean; participantActive: boolean; isPi: boolean; canRead: boolean; canOperate: boolean; canHeadDecide: boolean };
+
+/**
+ * Nghiệm thu → thanh lý → đóng (docs/design/nghiem-thu-thanh-ly-dong-de-tai.md):
+ *   - Chủ nhiệm nộp hồ sơ nghiệm thu khi đề tài đang thực hiện, nộp bản hoàn thiện khi hội đồng yêu cầu.
+ *   - Chuyên viên phụ trách: trả hồ sơ, đề xuất hội đồng, ghi biên bản, xác nhận hoàn thiện, lập thanh lý, đóng đề tài.
+ *   - Lãnh đạo: thành lập hội đồng, phê duyệt thanh lý.
+ *   - Kinh phí: lãnh đạo hoặc cán bộ QLKH có phạm vi đơn vị (như trước đây), không tham gia đề tài; khoá khi đã thanh lý.
+ */
+function closureActionDenial(action: PermissionActionV1, input: DenialInput): { code: AuthorizationDecisionCodeV1; reason: string } | null {
+  const status = input.project.status;
+  const acceptance = input.closure?.acceptanceStatus ?? null;
+  const liquidation = input.closure?.liquidationStatus ?? null;
+  const R = ACCEPTANCE_ROUND_STATUSES;
+  const pending = status === PROJECT_STATUSES.pendingAcceptance;
+  const concluded = status === PROJECT_STATUSES.accepted || status === PROJECT_STATUSES.failed;
+  const gate = (eligible: boolean, stateOk: boolean) => (!eligible ? blocked("ACTION_NOT_GRANTED") : stateOk ? null : blocked("WORKFLOW_STATE_DENIED"));
+  const pi = input.isPi && input.scoped;
+  switch (action) {
+    case "project.acceptance.submit": return gate(pi, status === PROJECT_STATUSES.executing);
+    case "project.acceptance.revision.submit": return gate(pi, pending && acceptance === R.revisionRequired);
+    case "project.acceptance.return": return gate(input.canOperate, pending && acceptance === R.submitted);
+    case "project.acceptance.council.propose": return gate(input.canOperate, pending && (acceptance === R.submitted || acceptance === R.councilProposed));
+    case "project.acceptance.council.establish": return gate(input.canHeadDecide, pending && acceptance === R.councilProposed);
+    case "project.acceptance.minutes.record": return gate(input.canOperate, pending && acceptance === R.councilEstablished);
+    case "project.acceptance.revision.confirm": return gate(input.canOperate, pending && acceptance === R.revisionSubmitted);
+    case "project.finance.read": return input.canRead ? null : blocked("ACTION_NOT_GRANTED");
+    case "project.finance.manage": {
+      const manager = input.scoped && (isStaff(input.actor) || isLeadership(input.actor)) && !input.participantActive && !input.isPi;
+      return gate(manager, status !== PROJECT_STATUSES.closed && liquidation !== LIQUIDATION_STATUSES.approved);
+    }
+    case "project.liquidation.prepare": return gate(input.canOperate, concluded && liquidation !== LIQUIDATION_STATUSES.approved);
+    case "project.liquidation.approve": return gate(input.canHeadDecide, concluded && liquidation === LIQUIDATION_STATUSES.draft);
+    case "project.close": return gate(input.canOperate, concluded && liquidation === LIQUIDATION_STATUSES.approved);
+    default: return blocked("ACTION_NOT_GRANTED");
+  }
 }
 
 export function projectContextVersion(project: Record<string, any>) {

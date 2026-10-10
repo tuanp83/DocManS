@@ -216,8 +216,11 @@ export type ResearchProposal = {
     note?: string;
   };
   councilMetadata?: CouncilMetadata | null;
+  /** Số liệu nghiệm thu / giải ngân lấy từ đề tài thực hiện (khi đã lập đề tài). */
   acceptanceCouncilMetadata?: any;
   disbursementMetadata?: any;
+  /** Đề tài thực hiện được lập từ hồ sơ này (nếu có). */
+  project?: { id: string; status: string } | null;
   irbMetadata?: any;
   status: ProposalWorkflowStatus;
   /** Vietnamese label for `status`, resolved by the backend so both apps read the same wording. */

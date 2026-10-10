@@ -102,3 +102,9 @@ export function readRequestType(value: unknown) {
 }
 
 export function readProjectDate(value: unknown, field: string) { return readDate(value, field); }
+
+/**
+ * Thân yêu cầu cho nghiệm thu / kinh phí / thanh lý / đóng đề tài: chỉ kiểm tra đúng dạng đối tượng và
+ * contextVersion; từng trường được kiểm tra chặt ở project-closure.service.ts (một nơi duy nhất).
+ */
+export const closureBodyPipe: PipeTransform<unknown, Record<string, unknown>> = { transform(value) { const input = record(value ?? {}); return { ...input, contextVersion: context(input) }; } };

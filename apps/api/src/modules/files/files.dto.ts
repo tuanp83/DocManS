@@ -2,8 +2,12 @@ import { BadRequestException, type PipeTransform } from "@nestjs/common";
 import { readCode, readText } from "../../proposals-shared/proposal-validation.js";
 
 export const APPROVED_PROJECT_ENTITY_TYPE = "approved_project";
-/** Chứng từ giải ngân gắn với đề xuất đã duyệt; nhiều tệp cùng mục đích, không thay thế nhau. */
+/** Chứng từ giải ngân gắn với đề tài; nhiều tệp cùng mục đích, không thay thế nhau. */
 export const DISBURSEMENT_VOUCHER_PURPOSE = "disbursement_voucher";
+/** Tệp hồ sơ nghiệm thu (báo cáo tổng kết, bản hoàn thiện) do chủ nhiệm tải lên. */
+export const ACCEPTANCE_DOSSIER_PURPOSE = "acceptance_dossier";
+/** Biên bản thanh lý và tài liệu kèm theo do chuyên viên phụ trách tải lên. */
+export const LIQUIDATION_RECORD_PURPOSE = "liquidation_record";
 export const RESEARCH_PROPOSAL_ENTITY_TYPE = "research_proposal";
 
 export class ListFilesDto {

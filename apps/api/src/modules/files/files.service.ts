@@ -1,7 +1,6 @@
 import { joinedTransaction, runProposalMutation } from "../../proposals-shared/proposal-mutation.js";
 import { ApprovedProjectsService } from "../../approved-projects/approved-projects.service.js";
 import { projectContextVersion } from "../../approved-projects/project-capability-v1.js";
-import { assertCanManageDisbursement } from "../../proposal-evaluations/proposal-evaluation-support.js";
 import { ResearchProposalsService } from "../../research-proposals/research-proposals.service.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
@@ -15,7 +14,16 @@ import { assertHasOrganizationScope, isInternalResearcherEligible } from "../../
 import { ProposalManagementOfficerService } from "../../proposals-shared/proposal-management-officer.service.js";
 import { ProposalReviewAccessService } from "../../proposals-shared/proposal-review-access.service.js";
 import { ProposalParticipationService } from "../../research-proposals/proposal-participation.service.js";
-import { APPROVED_PROJECT_ENTITY_TYPE, DISBURSEMENT_VOUCHER_PURPOSE, RESEARCH_PROPOSAL_ENTITY_TYPE } from "./files.dto.js";
+import { ACCEPTANCE_DOSSIER_PURPOSE, APPROVED_PROJECT_ENTITY_TYPE, DISBURSEMENT_VOUCHER_PURPOSE, LIQUIDATION_RECORD_PURPOSE, RESEARCH_PROPOSAL_ENTITY_TYPE } from "./files.dto.js";
+
+/** Quyền cần có để tải từng loại tệp của đề tài (mặc định: đóng góp minh chứng khi đang thực hiện). */
+const PROJECT_FILE_PURPOSE_ACTIONS: Record<string, string[]> = {
+  [DISBURSEMENT_VOUCHER_PURPOSE]: ["project.finance.manage"],
+  [ACCEPTANCE_DOSSIER_PURPOSE]: ["project.acceptance.submit", "project.acceptance.revision.submit"],
+  [LIQUIDATION_RECORD_PURPOSE]: ["project.liquidation.prepare"]
+};
+/** Tệp do cán bộ quản lý (không phải chủ nhiệm) tải lên đề tài. */
+const MANAGER_PROJECT_FILE_PURPOSES = [DISBURSEMENT_VOUCHER_PURPOSE, LIQUIDATION_RECORD_PURPOSE];
 import { assertValidUpload, defaultFileConfig, readUploadFileName, type FileModuleConfig } from "./file-validation.js";
 
 export type { FileModuleConfig } from "./file-validation.js";
@@ -132,7 +140,7 @@ export class FilesService {
       // Thành viên phụ trách mốc chỉ được tải tệp đóng góp; chủ nhiệm quyết định minh chứng chính thức.
       const project = await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, input.relatedEntityId);
       const isPi = project.viewerAuthorization.viewerRelationships.some((relationship: { type: string }) => relationship.type === "TOPIC_PI");
-      if (!isPi && input.filePurpose !== "PROJECT_CONTRIBUTION") throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
+      if (!isPi && input.filePurpose !== "PROJECT_CONTRIBUTION" && !MANAGER_PROJECT_FILE_PURPOSES.includes(input.filePurpose)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
     }
 
     const fileId = randomUUID();
@@ -267,6 +275,14 @@ export class FilesService {
         this.prisma.projectRequestEvidence.findFirst({ where: { fileRecordId: record.id } })
       ]);
       if (report || request) throw new BadRequestException({ code: "EVIDENCE_PINNED", message: "Tệp minh chứng đã nộp được giữ nguyên. Hãy tải lên phiên bản mới." });
+      // Cùng quy tắc với trigger protect_pinned_project_file: tệp trong hồ sơ nghiệm thu đã nộp hoặc biên bản thanh lý đã duyệt.
+      const client = this.prisma as unknown as { projectAcceptance?: { findMany: (args: unknown) => Promise<Array<{ dossier: unknown; revisionDossier: unknown }>> }; projectLiquidation?: { findUnique: (args: unknown) => Promise<{ status: string; evidenceFileIds: unknown } | null> } };
+      const listed = (value: unknown, key: string) => { const ids = (value as Record<string, unknown> | null)?.[key]; return Array.isArray(ids) && ids.includes(record.id); };
+      const acceptances = (await client.projectAcceptance?.findMany({ where: { projectId: record.relatedEntityId }, select: { dossier: true, revisionDossier: true } })) ?? [];
+      const liquidation = (await client.projectLiquidation?.findUnique({ where: { projectId: record.relatedEntityId }, select: { status: true, evidenceFileIds: true } })) ?? null;
+      const inAcceptance = acceptances.some((row) => listed(row.dossier, "evidenceFileIds") || listed(row.revisionDossier, "evidenceFileIds") || listed(row.revisionDossier, "allEvidenceFileIds"));
+      const inLiquidation = liquidation?.status === "APPROVED" && Array.isArray(liquidation.evidenceFileIds) && liquidation.evidenceFileIds.includes(record.id);
+      if (inAcceptance || inLiquidation) throw new BadRequestException({ code: "EVIDENCE_PINNED", message: "Tệp đã nộp trong hồ sơ nghiệm thu hoặc biên bản thanh lý đã duyệt được giữ nguyên." });
       return;
     }
     const events = await this.prisma.proposalSubmissionEvent.findMany({ where: { proposalId: record.relatedEntityId }, select: { snapshot: true } });
@@ -377,15 +393,14 @@ export class FilesService {
   private async assertCanUpload(actor: SafeUserContext, relatedEntityType: string, relatedEntityId: string, filePurpose?: string) {
     if (relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) {
       const project = await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, relatedEntityId);
-      if (!project.viewerAuthorization.allowedActions.includes("project.evidence.contribute")) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
+      const allowed: string[] = project.viewerAuthorization.allowedActions;
+      // Mỗi loại tệp đề tài đi theo đúng quyền nghiệp vụ của nó (project-capability-v1.ts).
+      const required = PROJECT_FILE_PURPOSE_ACTIONS[filePurpose ?? ""] ?? ["project.evidence.contribute"];
+      if (!required.some((action) => allowed.includes(action))) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Không có quyền tải loại tệp này cho đề tài." });
       return;
     }
     if (relatedEntityType === RESEARCH_PROPOSAL_ENTITY_TYPE && filePurpose === DISBURSEMENT_VOUCHER_PURPOSE) {
-      // Chứng từ giải ngân: cùng thẩm quyền với cập nhật giải ngân, chỉ khi đề tài đã được phê duyệt.
-      const proposal = await this.findRelatedProposal(relatedEntityType, relatedEntityId);
-      assertCanManageDisbursement(actor, proposal);
-      if (proposal.status !== "approved") throw new ForbiddenException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ đề tài đã được phê duyệt mới có chứng từ giải ngân." });
-      return;
+      throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chứng từ giải ngân được tải lên trong mục Kinh phí của đề tài, không gắn với hồ sơ đề xuất." });
     }
     if (relatedEntityType === RESEARCH_PROPOSAL_ENTITY_TYPE && !isInternalResearcherEligible(actor)) {
       throw new ForbiddenException({ message: "Chỉ PI hoặc thư ký nội bộ được tải tệp cho hồ sơ đề xuất." });

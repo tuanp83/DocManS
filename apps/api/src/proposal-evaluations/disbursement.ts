@@ -33,6 +33,8 @@ export type DisbursementMilestone = {
   settledDate?: string;
   evidenceNotes?: string;
   attachments: DisbursementAttachment[];
+  /** Mốc thực hiện của đề tài mà đợt giải ngân gắn với (tuỳ chọn). */
+  projectMilestoneId?: string;
 };
 
 export type DisbursementCostItem = {
@@ -153,6 +155,8 @@ function readMilestone(value: unknown, index: number): DisbursementMilestone {
   if (settledDate) milestone.settledDate = settledDate;
   const evidenceNotes = readString(value.evidenceNotes, `${label}: ghi chú minh chứng`, 2000, false);
   if (evidenceNotes) milestone.evidenceNotes = evidenceNotes;
+  const projectMilestoneId = readString(value.projectMilestoneId, `${label}: mốc thực hiện`, 64, false);
+  if (projectMilestoneId) milestone.projectMilestoneId = projectMilestoneId;
   return milestone;
 }
 
@@ -247,10 +251,17 @@ export function computeDisbursementTotals(milestones: DisbursementMilestone[], c
   };
 }
 
-/** Kinh phí được duyệt lấy từ dữ liệu thật của đề xuất; không có thì là 0 (không bịa con số mặc định). */
+/**
+ * Kinh phí được duyệt lấy từ dữ liệu thật; không có thì là 0 (không bịa con số mặc định). Số lãnh đạo
+ * điều chỉnh khi phê duyệt (`approvedAmount`) được ưu tiên hơn số đề xuất (`amount`).
+ */
 export function readApprovedBudget(budgetMetadata: unknown): number {
-  const amount = isRecord(budgetMetadata) ? Number(budgetMetadata.amount) : NaN;
-  return Number.isFinite(amount) && amount > 0 ? Math.round(amount) : 0;
+  if (!isRecord(budgetMetadata)) return 0;
+  for (const key of ["approvedAmount", "amount"]) {
+    const amount = Number(budgetMetadata[key]);
+    if (Number.isFinite(amount) && amount > 0) return Math.round(amount);
+  }
+  return 0;
 }
 
 export function emptyDisbursement(totalBudget: number): DisbursementRecord {

@@ -1136,7 +1136,9 @@ describe("EP-02 proposal intake and submission behavior", () => {
     const prisma = createEp02Prisma();
     const auditLog = createAuditLog();
     const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
-    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
+    const events = [];
+    const notifications = { dispatch: async (batch) => { events.push(...batch); return batch.length; } };
+    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma), notifications);
     const filesService = createFilesService({ prisma, auditLog });
     const draft = await createDraft({ prisma, intakeService, proposalService });
 
@@ -1174,6 +1176,10 @@ describe("EP-02 proposal intake and submission behavior", () => {
     });
 
     assert.equal(supplementRequested.status, "supplement_requested");
+    // Thông báo bổ sung tới chủ nhiệm, kèm nội dung yêu cầu.
+    const supplementNotice = events.find((event) => event.type === "SUPPLEMENT_REQUESTED");
+    assert.deepEqual(supplementNotice?.userIds, [piUser.id]);
+    assert.match(supplementNotice.message, /Thiếu bản giải trình/);
     assert.equal(supplementRequested.canEdit, false);
     assert.equal(supplementRequested.canSubmit, false);
     assert.equal(supplementRequested.supplementRequests.length, 1);
@@ -1224,6 +1230,7 @@ describe("EP-02 proposal intake and submission behavior", () => {
 
     const resubmitted = await proposalService.resubmitProposal(piUser, submitted.id);
     assert.equal(resubmitted.status, "resubmitted");
+    assert.ok(events.some((event) => event.type === "PROPOSAL_RESUBMITTED"));
     assert.equal(resubmitted.canEdit, false);
     assert.equal(resubmitted.canSubmit, false);
     assert.equal(resubmitted.supplementRequests[0].status, "resolved");

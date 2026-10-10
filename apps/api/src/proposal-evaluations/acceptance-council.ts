@@ -114,7 +114,8 @@ export function readResolution(value: unknown, classification: string) {
   const fallback = classification === "FAILED" ? "rejected" : "approved";
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value !== "string" || !(ACCEPTANCE_RESOLUTIONS as readonly string[]).includes(value)) invalid("Kết luận của hội đồng không hợp lệ.");
-  if (classification === "FAILED" && value === "approved") invalid("Tổng điểm dưới 70 thì không thể kết luận nghiệm thu đạt.");
+  // "Hoàn thiện" là đạt kèm điều kiện, nên cũng cần đủ 70 điểm (nếu không, xác nhận bản hoàn thiện sẽ biến đề tài dưới 70 điểm thành "đạt").
+  if (classification === "FAILED" && value !== "rejected") invalid("Tổng điểm dưới 70 thì chỉ được kết luận không đạt.");
   return value;
 }
 

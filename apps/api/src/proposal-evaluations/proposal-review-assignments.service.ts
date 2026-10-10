@@ -1,10 +1,12 @@
 import { assertCurrentCompletenessEvidence, currentRoundAssignments, currentRoundReviews, findCurrentSubmission } from "../proposals-shared/submission-evidence.js";
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
 import { assignmentLimitError, EVALUATION_COUNCIL_LIMITS } from "../proposals-shared/evaluation-council-rules.js";
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { Optional, BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
+import { NotificationsService } from "../notifications/notifications.service.js";
+import { reviewInvitationEvent } from "./evaluation-notifications.js";
 import { readTransactionClockV1 } from "../permissions/authorization-v1.service.js";
 import { ProposalParticipationService } from "../research-proposals/proposal-participation.service.js";
 import {
@@ -72,7 +74,8 @@ export class ProposalReviewAssignmentsService {
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
     private readonly participation: ProposalParticipationService,
-    private readonly reviewAccess: ProposalReviewAccessService
+    private readonly reviewAccess: ProposalReviewAccessService,
+    @Optional() private readonly notifications?: NotificationsService
   ) {}
 
   private transactional = false;
@@ -164,6 +167,15 @@ export class ProposalReviewAssignmentsService {
       const result = await this.mutate(actor, proposalId, input.contextVersion, (s, a) => s.assignReviewer(a, proposalId, input));
       // A conflict rejection commits only its failure audit; throw after that transaction commits.
       if (result instanceof BadRequestException) throw result;
+      // Lời mời (trong ứng dụng + email) chỉ gửi khi phân công đã commit.
+      if (this.notifications && result?.reviewerUserId) {
+        try {
+          const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { code: true, title: true } } as never)) as unknown as { code: string | null; title: string } | null;
+          await this.notifications.dispatch([{ ...reviewInvitationEvent(proposalId, proposal ?? { title: "" }, result.reviewerUserId, result.assignmentRole, result.dueDate ? new Date(result.dueDate) : null), metadata: { proposalId, assignmentId: result.id, assignmentRole: result.assignmentRole, dueDate: result.dueDate ?? null } }]);
+        } catch {
+          // Thông báo là phụ trợ.
+        }
+      }
       return result;
     }
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
@@ -283,26 +295,6 @@ export class ProposalReviewAssignmentsService {
               submittedAt: assignedAt,
               note: "Chuyên viên mở vòng đánh giá và phân công người đánh giá"
             } as never
-          });
-        }
-
-        const roleText = getAssignmentRoleLabel(assignmentRole);
-        const dueText = dueDate ? dueDate.toLocaleDateString("vi-VN") : "Không đặt hạn";
-        if (typeof (tx as any).userNotification?.create === "function") {
-          await (tx as any).userNotification.create({
-            data: {
-              userId: candidate.id,
-              title: `Mời phản biện đề tài KH&CN: ${proposal.title}`,
-              message: `Bạn được mời tham gia phản biện đề tài "${proposal.title}" (Mã: ${proposal.code || "Đang cập nhật"}). Vai trò: ${roleText}. Hạn đánh giá: ${dueText}.`,
-              type: "INVITATION_TO_REVIEW",
-              link: "/invitation-to-review",
-              metadata: {
-                proposalId,
-                assignmentId: assignment.id,
-                assignmentRole,
-                dueDate: dueDate?.toISOString() ?? null
-              }
-            }
           });
         }
 
