@@ -27,6 +27,8 @@ type ProposalCapabilityInput = {
   canEdit: boolean;
   canManageFiles: boolean;
   completenessCheckCompleted?: boolean;
+  /** Trạng thái bản tổng hợp đánh giá: null = chưa có; draft | finalized | ready_for_approval. */
+  evaluationSummaryStatus?: string | null;
 };
 
 const ACTIONS: PermissionActionV1[] = [
@@ -35,6 +37,8 @@ const ACTIONS: PermissionActionV1[] = [
   "proposal.submit",
   "proposal.review.assign",
   "proposal.review.consolidate",
+  "proposal.review.finalize",
+  "proposal.review.submit-package",
   "proposal.review.progress.read",
   "proposal.review.submit",
   "proposal.supplement.request",
@@ -144,21 +148,27 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
   }
 
   // Phân công và tổng hợp đánh giá (quy định 10/2026): chuyên viên hoặc Trưởng phòng QLKH có phạm vi đơn vị;
-  // tổng hợp còn cho thư ký hội đồng của chính hồ sơ. Không được tham gia đề tài; người đã chấm phiếu không tự
-  // tổng hợp. Người tự phân công mình chấm vẫn được tiếp tục phân công người khác.
-  if (action === "proposal.review.assign" || action === "proposal.review.consolidate") {
+  // tổng hợp (lưu nháp, chốt, trình) còn cho thư ký hội đồng của chính hồ sơ. Không được tham gia đề tài; người đã
+  // chấm phiếu không tự tổng hợp. Người tự phân công mình chấm vẫn được tiếp tục phân công người khác.
+  if (action === "proposal.review.assign" || SUMMARY_ACTIONS.includes(action)) {
     const coordinator = isResearchManagementStaff(input.actor) || isResearchManagementHead(input.actor);
-    const councilSecretary = action === "proposal.review.consolidate" && input.reviewAccess?.isAssignedReviewer === true && input.reviewAccess.assignmentRole === "committee_secretary";
+    const councilSecretary = SUMMARY_ACTIONS.includes(action) && input.reviewAccess?.isAssignedReviewer === true && input.reviewAccess.assignmentRole === "committee_secretary";
     if (!coordinator && !councilSecretary) return blocked("ACTION_NOT_GRANTED");
     if (!councilSecretary && !inScope(input)) return blocked("ORG_SCOPE_DENIED");
     if (!input.participation || input.participation.role === "unknown") return blocked("CONTEXT_UNRESOLVED");
     // Xung đột do tham gia đề tài đã biết thì báo trước, kể cả khi chưa có ngữ cảnh phân công.
     if (evaluateProposalConflict(input.participation).conflicted || input.participation.isParticipant) return blocked("CONFLICT_DENIED");
     if (!input.reviewAccess || input.reviewAccess.conflictUnresolved) return blocked("CONTEXT_UNRESOLVED");
-    if (action === "proposal.review.consolidate") {
+    if (SUMMARY_ACTIONS.includes(action)) {
       const scoredOrScoring = (input.reviewAccess.isAssignedReviewer && isScoringRole(input.reviewAccess.assignmentRole)) || input.reviewAccess.hasPersistedReview;
       if (scoredOrScoring) return blocked("CONFLICT_DENIED");
-      return ["under_review", "ready_for_approval"].includes(input.proposal.status) ? null : blocked("WORKFLOW_STATE_DENIED");
+      if (input.proposal.status !== "under_review") return blocked("WORKFLOW_STATE_DENIED");
+      // Vòng đời bản tổng hợp: lưu nháp → chốt → trình (proposal-evaluation-summary.service.ts).
+      const summaryStatus = input.evaluationSummaryStatus ?? null;
+      if (action === "proposal.review.consolidate" && summaryStatus && summaryStatus !== "draft") return { code: "WORKFLOW_STATE_DENIED", reason: "Bản tổng hợp đã chốt; mở lại bản đã chốt nếu cần sửa." };
+      if (action === "proposal.review.finalize" && summaryStatus !== "draft") return { code: "WORKFLOW_STATE_DENIED", reason: "Cần lưu bản nháp tổng hợp trước khi chốt." };
+      if (action === "proposal.review.submit-package" && summaryStatus !== "finalized") return { code: "WORKFLOW_STATE_DENIED", reason: "Cần chốt bản tổng hợp trước khi trình lãnh đạo." };
+      return null;
     }
     if (!input.completenessCheckCompleted) return { code: "WORKFLOW_STATE_DENIED", reason: "Cần xác nhận hồ sơ đầy đủ trước khi phân công đánh giá." };
     return ["submitted", "resubmitted", "under_review"].includes(input.proposal.status) ? null : blocked("WORKFLOW_STATE_DENIED");
@@ -183,10 +193,14 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
     if (action === "proposal.management-officer.revoke" && !input.managementOfficer.officer) return blocked("ACTION_NOT_GRANTED");
     return null;
   }
-  return input.proposal.status === "ready_for_approval" ? null : blocked("WORKFLOW_STATE_DENIED");
+  if (input.proposal.status !== "ready_for_approval") return blocked("WORKFLOW_STATE_DENIED");
+  // Quyết định chỉ trên gói đánh giá đã trình (khoá phiên bản gói ở proposal-decisions.service.ts).
+  if (input.evaluationSummaryStatus !== undefined && input.evaluationSummaryStatus !== "ready_for_approval") return { code: "WORKFLOW_STATE_DENIED", reason: "Chưa có gói đánh giá đã trình lãnh đạo." };
+  return null;
 }
 
 const STAFF_ACTIONS: PermissionActionV1[] = ["proposal.completeness.check", "proposal.supplement.request"];
+const SUMMARY_ACTIONS: PermissionActionV1[] = ["proposal.review.consolidate", "proposal.review.finalize", "proposal.review.submit-package"];
 const HEAD_ACTIONS: PermissionActionV1[] = ["proposal.management-officer.assign", "proposal.management-officer.revoke"];
 const DECISION_ACTIONS: PermissionActionV1[] = ["proposal.decision.approve", "proposal.decision.reject"];
 

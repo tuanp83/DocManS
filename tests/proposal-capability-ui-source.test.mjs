@@ -37,7 +37,11 @@ describe("Story 1.8 proposal capability UI source behavior", () => {
       assert.match(source, /disabled/);
     }
     const evaluationSource = await readFile(new URL("../apps/web/src/components/research-proposals/proposal-evaluation-panel.tsx", import.meta.url), "utf8");
-    assert.match(evaluationSource, /Gửi lãnh đạo phê duyệt/);
+    // Tổng hợp ba bước, mỗi bước theo đúng capability máy chủ trả về.
+    assert.match(evaluationSource, /Trình lãnh đạo phê duyệt/);
+    assert.match(evaluationSource, /Chốt bản tổng hợp/);
+    assert.match(evaluationSource, /canFinalize \?/);
+    assert.match(evaluationSource, /canSubmitPackage \?/);
   });
 
   it("fails closed with a reload/support message for an invalid capability contract", async () => {
@@ -63,7 +67,7 @@ describe("Story 1.8 proposal capability UI source behavior", () => {
     const evaluationSource = await readFile(new URL("../apps/web/src/components/research-proposals/proposal-evaluation-panel.tsx", import.meta.url), "utf8");
     assert.match(source, /showSubmitPanel = shouldRenderAction\("proposal\.submit"\)/);
     assert.match(source, /proposal\.viewerParticipation\?\.isOwner/);
-    assert.match(source, /showStaffProposalSummary = \(\["proposal\.completeness\.check", "proposal\.supplement\.request", "proposal\.review\.assign", "proposal\.review\.consolidate"\] as const\)\.some\(shouldRenderAction\)/);
+    assert.match(source, /showStaffProposalSummary = \(\["proposal\.completeness\.check", "proposal\.supplement\.request", "proposal\.review\.assign", "proposal\.review\.consolidate", "proposal\.review\.finalize", "proposal\.review\.submit-package"\] as const\)\.some\(shouldRenderAction\)/);
     assert.match(source, /type="date" lang="vi" value=\{supplementDueDate\}/);
     assert.match(source, /intakeDateToIso\(supplementDueDate, true\)/);
     assert.doesNotMatch(source, /type="datetime-local"/);
@@ -72,5 +76,12 @@ describe("Story 1.8 proposal capability UI source behavior", () => {
     assert.match(evaluationSource, /intakeDateToIso\(effectiveUntil, true\)/);
     assert.match(evaluationSource, /intakeDateToIso\(dueDate, true\)/);
     assert.doesNotMatch(evaluationSource, /type="datetime-local"/);
+  });
+
+  it("the /reviews workspace takes evaluation permissions from the proposal capability, not hard-coded true", async () => {
+    const source = await readFile(new URL("../apps/web/src/components/reviews/proposal-reviews-workspace.tsx", import.meta.url), "utf8");
+    assert.doesNotMatch(source, /canAssignReviewers=\{true\}/);
+    assert.doesNotMatch(source, /canConsolidate=\{true\}/);
+    assert.match(source, /canPerformProposalAction\(state, "proposal\.review\.submit-package"\)/);
   });
 });

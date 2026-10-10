@@ -1,3 +1,4 @@
+import { assertCurrentCompletenessEvidence, type SubmissionEvidence } from "../proposals-shared/submission-evidence.js";
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
 import { isScoringRole } from "../proposals-shared/evaluation-council-rules.js";
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
@@ -32,6 +33,9 @@ import {
  * `assignmentId`, never by a reviewer id taken from the request, so there is no endpoint shape that
  * could reach another reviewer's review (AC-ST-3.3-01, AC-ST-3.3-04).
  */
+/** Ghi chú của sự kiện gửi phiếu; lịch sử cho lãnh đạo dùng để ẩn danh tính người phản biện. */
+export const REVIEW_SUBMITTED_NOTE = "Người đánh giá gửi phiếu chấm điểm và nhận xét";
+
 @Injectable()
 export class ProposalReviewsService {
   constructor(
@@ -64,7 +68,7 @@ export class ProposalReviewsService {
 
   async getMyReview(actor: SafeUserContext, proposalId: string) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    const assignmentId = await this.assertAssigned(actor, proposalId);
+    const { assignmentId } = await this.assertAssigned(actor, proposalId);
     const review = await this.findReviewByAssignment(assignmentId);
 
     return {
@@ -82,7 +86,7 @@ export class ProposalReviewsService {
   async saveMyReview(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>): Promise<any> {
     if (!this.transactional) return this.mutate(actor, proposalId, input.contextVersion, (s, a) => s.saveMyReview(a, proposalId, input));
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    const assignmentId = await this.assertAssigned(actor, proposalId);
+    const { assignmentId, evidence } = await this.assertAssigned(actor, proposalId);
     assertProposalStatus(proposal, REVIEW_SUBMITTABLE_STATUSES, "Hồ sơ không ở trạng thái cho phép nhập kết quả đánh giá.");
 
     const existing = await this.findReviewByAssignment(assignmentId);
@@ -107,7 +111,10 @@ export class ProposalReviewsService {
       scoreData,
       totalScore,
       comment,
-      recommendation
+      recommendation,
+      submissionEventId: evidence.eventId,
+      contextVersion: input.contextVersion ?? null,
+      evidenceSnapshot: reviewEvidence(evidence, assignmentId, "draft")
     });
 
     return {
@@ -124,7 +131,7 @@ export class ProposalReviewsService {
   async submitMyReview(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>): Promise<any> {
     if (!this.transactional) return this.mutate(actor, proposalId, input.contextVersion, (s, a) => s.submitMyReview(a, proposalId, input));
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    const assignmentId = await this.assertAssigned(actor, proposalId);
+    const { assignmentId, evidence } = await this.assertAssigned(actor, proposalId);
     assertProposalStatus(proposal, REVIEW_SUBMITTABLE_STATUSES, "Hồ sơ không ở trạng thái cho phép gửi kết quả đánh giá.");
 
     const existing = await this.findReviewByAssignment(assignmentId);
@@ -154,6 +161,7 @@ export class ProposalReviewsService {
     }
 
     const submittedAt = new Date();
+    const evidenceFields = { submissionEventId: evidence.eventId, contextVersion: input.contextVersion ?? null, evidenceSnapshot: reviewEvidence(evidence, assignmentId, "submitted", submittedAt) };
     const submitted = (await this.prisma.$transaction(async (tx) => {
       const review = existing
         ? ((await tx.proposalReview.update({
@@ -164,7 +172,8 @@ export class ProposalReviewsService {
               totalScore,
               comment,
               recommendation,
-              submittedAt
+              submittedAt,
+              ...evidenceFields
             } as never
           })) as ProposalReviewRecord)
         : ((await tx.proposalReview.create({
@@ -177,7 +186,8 @@ export class ProposalReviewsService {
               totalScore,
               comment,
               recommendation,
-              submittedAt
+              submittedAt,
+              ...evidenceFields
             } as never
           })) as ProposalReviewRecord);
 
@@ -204,7 +214,7 @@ export class ProposalReviewsService {
           fromStatus: proposal.status,
           toStatus: proposal.status,
           submittedAt,
-          note: "Người đánh giá gửi phiếu chấm điểm và nhận xét"
+          note: REVIEW_SUBMITTED_NOTE
         } as never
       });
 
@@ -216,7 +226,7 @@ export class ProposalReviewsService {
           targetEntity: "proposal-review",
           targetEntityId: review.id,
           username: actor.username,
-          reason: JSON.stringify({ proposalId, assignmentId, totalScore, recommendation })
+          reason: JSON.stringify({ proposalId, assignmentId, totalScore, recommendation, submissionEventId: evidence.eventId })
         }
       });
 
@@ -264,7 +274,13 @@ export class ProposalReviewsService {
 
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
     if (!actor.organizationScopes.some((scope) => scope.id === proposal.hostOrganizationUnitId)) throw new ForbiddenException();
-    return access.assignmentId;
+    // Phiếu chỉ ghi cho phân công của lần nộp hiện tại: hồ sơ đã nộp lại thì phân công cũ hết giá trị.
+    const evidence = await assertCurrentCompletenessEvidence(this.prisma, proposal);
+    const assignment = (await this.prisma.proposalReviewAssignment.findUnique({ where: { id: access.assignmentId } })) as { id: string; proposalId: string; reviewedSubmissionEventId?: string | null } | null;
+    if (!assignment || assignment.proposalId !== proposalId || assignment.reviewedSubmissionEventId !== evidence.eventId) {
+      throw new ForbiddenException({ code: "STALE_ASSIGNMENT_CONTEXT", message: "Phân công không còn gắn với phiên bản nộp hiện tại của hồ sơ." });
+    }
+    return { assignmentId: access.assignmentId, evidence };
   }
 
   private assertReviewIsOpen(review: ProposalReviewRecord | null) {
@@ -295,6 +311,9 @@ export class ProposalReviewsService {
       totalScore: number;
       comment: string;
       recommendation: string | null;
+      submissionEventId: string;
+      contextVersion: unknown;
+      evidenceSnapshot: unknown;
     }
   ) {
     const existing = await this.findReviewByAssignment(assignmentId);
@@ -305,7 +324,10 @@ export class ProposalReviewsService {
           scoreData: data.scoreData,
           totalScore: data.totalScore,
           comment: data.comment,
-          recommendation: data.recommendation
+          recommendation: data.recommendation,
+          submissionEventId: data.submissionEventId,
+          contextVersion: data.contextVersion,
+          evidenceSnapshot: data.evidenceSnapshot
         } as never
       })) as ProposalReviewRecord;
     }
@@ -394,4 +416,9 @@ export class ProposalReviewsService {
       submittedAt: review.submittedAt?.toISOString() ?? ""
     };
   }
+}
+
+/** Bằng chứng tối thiểu của phiếu: lần nộp được đánh giá và thời điểm ghi. */
+function reviewEvidence(evidence: SubmissionEvidence, assignmentId: string, lifecycle: "draft" | "submitted", at = new Date()) {
+  return { kind: "proposal_review", schemaVersion: "proposal-review-evidence.v1", lifecycle, submissionEventId: evidence.eventId, assignmentId, capturedAt: at.toISOString() };
 }

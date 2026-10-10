@@ -11,7 +11,7 @@ import { ProposalParticipationService } from "../dist/apps/api/research-proposal
 import { ProposalManagementOfficerService } from "../dist/apps/api/proposals-shared/proposal-management-officer.service.js";
 import { ProposalReviewAccessService } from "../dist/apps/api/proposals-shared/proposal-review-access.service.js";
 import { ResearchProposalsService } from "../dist/apps/api/research-proposals/research-proposals.service.js";
-import { createEvaluationTables, createUserLookup } from "./helpers/evaluation-prisma.mjs";
+import { createEvaluationTables, createUserLookup, recordCompletenessCheck } from "./helpers/evaluation-prisma.mjs";
 
 const ORG_KHTI = "org-khti";
 
@@ -543,7 +543,22 @@ async function createSubmittedProposal(services, { members = TEAM } = {}) {
     content
   });
 
-  return services.proposalService.submitProposal(piUser, draft.id);
+  const submitted = await services.proposalService.submitProposal(piUser, draft.id);
+  // Chuyên viên phụ trách xác nhận hồ sơ đầy đủ cho đúng lần nộp này (submission-evidence.ts).
+  recordCompletenessCheck(services.prisma.store, submitted.id);
+  return submitted;
+}
+
+/** Tổng hợp ba bước: lưu nháp → chốt → trình lãnh đạo. */
+async function consolidateAndSubmit(services, actor, proposalId, payload) {
+  await services.summaries.saveEvaluationSummary(actor, proposalId, payload);
+  await services.summaries.finalizeEvaluationSummary(actor, proposalId, {});
+  return services.summaries.submitEvaluationPackage(actor, proposalId, {});
+}
+
+/** Phiên bản gói đánh giá lãnh đạo đang xem (gửi kèm khi quyết định). */
+function packageRevision(services, proposalId) {
+  return services.prisma.store.evaluationSummaries.find((item) => item.proposalId === proposalId)?.revision ?? 0;
 }
 
 /** Submitted -> under review with one assigned reviewer. */
@@ -587,10 +602,9 @@ async function createProposalReadyForApproval(services, options) {
   await services.reviews.submitMyReview(councilMemberUser2, proposal.id, reviewData);
   await services.reviews.submitMyReview(councilMemberUser3, proposal.id, reviewData);
 
-  await services.summaries.saveEvaluationSummary(staffUser, proposal.id, {
+  await consolidateAndSubmit(services, staffUser, proposal.id, {
     summary: "Hội đồng thống nhất đề nghị phê duyệt đề tài.",
-    recommendation: "approve",
-    markReady: true
+    recommendation: "approve"
   });
 
   return { proposal, assignment };
@@ -1155,7 +1169,7 @@ describe("EP-03 hardening found by adversarial review", () => {
       return originalUpdateMany.call(services.prisma.researchProposal, args);
     };
 
-    await assert.rejects(() => services.decisions.decide(leadershipUser, proposal.id, "rejected", { note: "Từ chối" }), BadRequestException);
+    await assert.rejects(() => services.decisions.decide(leadershipUser, proposal.id, "rejected", { note: "Từ chối", packageRevision: packageRevision(services, proposal.id) }), BadRequestException);
     assert.equal(services.prisma.store.decisions.length, 0);
     assert.equal(stored.status, "approved");
   });
@@ -1200,48 +1214,46 @@ describe("ST-3.4 evaluation progress and consolidation", () => {
     assert.equal(afterRevoke.allReviewsSubmitted, false); // Requires 2 reviewers and 3 committee members in EP03
   });
 
-  it("AC-ST-3.4-02/04: consolidation is explicit, gated on completion, and traceable", async () => {
+  it("AC-ST-3.4-02/04: consolidation is draft → finalize → submit, gated on completion, and traceable", async () => {
     const services = createServices();
     const { proposal } = await createFullyAssignedProposalUnderReview(services);
 
-    // AC-ST-3.4-02: cannot mark ready while a review is still outstanding.
+    // Lưu nháp, chốt và trình là ba thao tác riêng: không còn "markReady" trong một lần lưu.
     await assert.rejects(
-      () =>
-        services.summaries.saveEvaluationSummary(staffUser, proposal.id, {
-          summary: "Tổng hợp sớm",
-          recommendation: "approve",
-          markReady: true
-        }),
-      BadRequestException
+      () => services.summaries.saveEvaluationSummary(staffUser, proposal.id, { summary: "Tổng hợp sớm", recommendation: "approve", markReady: true }),
+      /thao tác riêng/
     );
     assert.equal(services.prisma.store.proposals.find((item) => item.id === proposal.id).status, "under_review");
 
     // A draft consolidation is allowed at any point in the round and does not move the proposal.
-    const draft = await services.summaries.saveEvaluationSummary(staffUser, proposal.id, {
-      summary: "Bản nháp tổng hợp trong khi chờ phiếu.",
-      recommendation: "revise"
-    });
+    const draft = await services.summaries.saveEvaluationSummary(staffUser, proposal.id, { summary: "Bản nháp tổng hợp trong khi chờ phiếu.", recommendation: "revise" });
     assert.equal(draft.evaluationSummary.status, "draft");
+    assert.equal(draft.evaluationSummary.revision, 1);
     assert.equal(draft.proposalStatus, "under_review");
-    assert.equal(services.auditLog.find("consolidate-evaluation").length, 0);
-    assert.equal(services.prisma.store.auditLogs.filter((r) => r.action === "consolidate-evaluation").length, 1);
+    // Không chốt được khi còn phiếu chưa gửi; chưa chốt thì không trình được.
+    await assert.rejects(() => services.summaries.finalizeEvaluationSummary(staffUser, proposal.id, {}), /phiếu đánh giá chưa gửi/);
+    await assert.rejects(() => services.summaries.submitEvaluationPackage(staffUser, proposal.id, {}), /phải được chốt/);
 
-    const reviewData = {
-      scoreData: FULL_SCORES,
-      comment: "Đề nghị phê duyệt.",
-      recommendation: "approve"
-    };
-    await services.reviews.submitMyReview(reviewerUser, proposal.id, reviewData);
-    await services.reviews.submitMyReview(secondReviewerUser, proposal.id, reviewData);
-    await services.reviews.submitMyReview(councilMemberUser, proposal.id, reviewData);
-    await services.reviews.submitMyReview(councilMemberUser2, proposal.id, reviewData);
-    await services.reviews.submitMyReview(councilMemberUser3, proposal.id, reviewData);
+    const reviewData = { scoreData: FULL_SCORES, comment: "Đề nghị phê duyệt.", recommendation: "approve" };
+    for (const user of [reviewerUser, secondReviewerUser, councilMemberUser, councilMemberUser2, councilMemberUser3]) await services.reviews.submitMyReview(user, proposal.id, reviewData);
 
-    const ready = await services.summaries.saveEvaluationSummary(staffUser, proposal.id, {
-      summary: "Hội đồng thống nhất đề nghị phê duyệt đề tài.",
-      recommendation: "approve",
-      markReady: true
-    });
+    // Phiếu đổi sau lần lưu nháp: phải lưu lại (đọc lại phiếu) rồi mới chốt.
+    await assert.rejects(() => services.summaries.finalizeEvaluationSummary(staffUser, proposal.id, {}), /lưu lại bản nháp/);
+    await services.summaries.saveEvaluationSummary(staffUser, proposal.id, { summary: "Hội đồng thống nhất đề nghị phê duyệt đề tài.", recommendation: "approve" });
+    const finalized = await services.summaries.finalizeEvaluationSummary(staffUser, proposal.id, {});
+    assert.equal(finalized.evaluationSummary.status, "finalized");
+    assert.equal(finalized.proposalStatus, "under_review");
+    // Bản đã chốt không sửa được; mở lại cần lý do và đưa về nháp.
+    await assert.rejects(() => services.summaries.saveEvaluationSummary(staffUser, proposal.id, { summary: "Sửa sau chốt", recommendation: "reject" }), /đã chốt/);
+    await assert.rejects(() => services.summaries.reopenEvaluationSummary(staffUser, proposal.id, {}), /lý do/);
+    const reopened = await services.summaries.reopenEvaluationSummary(staffUser, proposal.id, { reason: "Bổ sung ý kiến thư ký" });
+    assert.equal(reopened.evaluationSummary.status, "draft");
+    assert.equal(reopened.evaluationSummary.reopenReason, "Bổ sung ý kiến thư ký");
+    await services.summaries.saveEvaluationSummary(staffUser, proposal.id, { summary: "Hội đồng thống nhất đề nghị phê duyệt đề tài (đã bổ sung).", recommendation: "approve" });
+    const refinalized = await services.summaries.finalizeEvaluationSummary(staffUser, proposal.id, { revision: packageRevision(services, proposal.id) });
+    // Revision cũ (đang xem bản trước) bị từ chối.
+    await assert.rejects(() => services.summaries.submitEvaluationPackage(staffUser, proposal.id, { revision: 1 }), /vừa được người khác thay đổi/);
+    const ready = await services.summaries.submitEvaluationPackage(staffUser, proposal.id, { revision: refinalized.evaluationSummary.revision });
 
     assert.equal(ready.evaluationSummary.status, "ready_for_approval");
     assert.equal(ready.evaluationSummary.recommendationLabel, "Đề nghị phê duyệt");
@@ -1250,12 +1262,17 @@ describe("ST-3.4 evaluation progress and consolidation", () => {
     assert.equal(services.prisma.store.proposals.find((item) => item.id === proposal.id).status, "ready_for_approval");
     // One summary row per proposal — the draft was updated, not duplicated.
     assert.equal(services.prisma.store.evaluationSummaries.length, 1);
+    const evidence = services.prisma.store.evaluationSummaries[0].evidenceSnapshot;
+    assert.equal(evidence.lifecycle, "finalized");
+    assert.equal(evidence.reviewIds.length, 5);
+    assert.equal(evidence.assignmentIds.length, 6);
+    await assert.rejects(() => services.summaries.saveEvaluationSummary(staffUser, proposal.id, { summary: "Sửa sau khi trình", recommendation: "reject" }), /đang đánh giá/);
 
     // AC-ST-3.4-04: the transition is in the timeline and the audit trail.
     const transition = services.prisma.store.submissionEvents.at(-1);
     assert.equal(transition.fromStatus, "under_review");
     assert.equal(transition.toStatus, "ready_for_approval");
-
+    for (const action of ["finalize-evaluation-summary", "reopen-evaluation-summary"]) assert.ok(services.prisma.store.auditLogs.some((record) => record.action === action), action);
     const audit = services.prisma.store.auditLogs.filter((record) => record.action === "mark-ready-for-approval");
     assert.equal(audit.length, 1);
     assert.equal(JSON.parse(audit[0].reason).submittedReviews, 5);
@@ -1283,6 +1300,14 @@ describe("ST-3.4 evaluation progress and consolidation", () => {
     // Leadership reads the progress view but does not consolidate.
     const leadershipView = await services.summaries.getReviewProgress(leadershipUser, proposal.id);
     assert.equal(leadershipView.proposalStatus, "ready_for_approval");
+    // Lãnh đạo chỉ thấy số liệu chung và bản tổng hợp đã trình, không thấy danh tính, điểm, nhận xét từng phiếu.
+    assert.equal(leadershipView.reviews.length, 0);
+    assert.equal(leadershipView.assignments.length, 0);
+    assert.equal(leadershipView.pendingReviewers.length, 0);
+    assert.equal(leadershipView.submittedCount, 5);
+    assert.equal(leadershipView.disclosure.protectedReviewData, "REDACTED");
+    assert.equal(leadershipView.evaluationSummary.status, "ready_for_approval");
+    assert.equal((await services.summaries.getReviewProgress(staffUser, proposal.id)).reviews.length, 5);
 
     assert.equal(services.prisma.store.evaluationSummaries.length, 1);
     assert.equal(services.prisma.store.evaluationSummaries[0].summary, summaryBefore.summary);
@@ -1301,17 +1326,22 @@ describe("ST-3.5 approval decision", () => {
     assert.equal(decisionPackage.proposalStatusLabel, "Chờ phê duyệt");
     assert.equal(decisionPackage.canDecide, true);
     assert.equal(decisionPackage.conflict.conflicted, false);
-    assert.equal(decisionPackage.reviews.length, 5);
-    assert.equal(decisionPackage.reviews[0].totalScore, 83);
+    // Phiếu từng người được bảo mật; lãnh đạo thấy bản tổng hợp và số liệu chung của vòng.
+    assert.equal(decisionPackage.reviews.length, 0);
+    assert.equal(decisionPackage.disclosure.protectedReviewData, "REDACTED");
+    assert.equal("pendingReviewers" in decisionPackage.progress, false);
+    assert.equal(decisionPackage.progress.averageTotalScore, 83);
+    assert.equal(decisionPackage.packageRevision, 2);
     assert.equal(decisionPackage.evaluationSummary.status, "ready_for_approval");
     assert.equal(decisionPackage.progress.allReviewsSubmitted, true);
     assert.equal(decisionPackage.attachmentCount, 1);
     assert.equal(decisionPackage.decisions.length, 0);
-    // The submitted -> under_review -> ready_for_approval trail is all there.
-    assert.deepEqual(
-      decisionPackage.history.map((event) => event.toStatus),
-      ["submitted", "under_review", "under_review", "under_review", "under_review", "under_review", "under_review", "ready_for_approval"]
-    );
+    // The submitted -> under_review -> ready_for_approval trail is all there, without reviewer names.
+    assert.equal(decisionPackage.history[0].toStatus, "submitted");
+    assert.equal(decisionPackage.history.at(-1).toStatus, "ready_for_approval");
+    const reviewEvents = decisionPackage.history.filter((event) => event.note === "Người đánh giá gửi phiếu chấm điểm và nhận xét");
+    assert.equal(reviewEvents.length, 5);
+    assert.ok(reviewEvents.every((event) => event.actorDisplayName === "Người đánh giá"));
 
     // Leadership also reads the proposal record itself once it is in the formal workflow.
     const detail = await services.proposalService.getProposal(leadershipUser, proposal.id);
@@ -1328,7 +1358,7 @@ describe("ST-3.5 approval decision", () => {
     const approving = createServices();
     const { proposal: approvedProposal } = await createProposalReadyForApproval(approving);
 
-    const approval = await approving.decisions.decide(leadershipUser, approvedProposal.id, "approved", { note: "Đồng ý triển khai." });
+    const approval = await approving.decisions.decide(leadershipUser, approvedProposal.id, "approved", { note: "Đồng ý triển khai.", packageRevision: packageRevision(approving, approvedProposal.id) });
     assert.equal(approval.proposalStatus, "approved");
     assert.equal(approval.decision.decision, "approved");
     assert.equal(approval.decision.decisionLabel, "Phê duyệt");
@@ -1347,11 +1377,12 @@ describe("ST-3.5 approval decision", () => {
     const { proposal: rejectedProposal } = await createProposalReadyForApproval(rejecting);
 
     // A rejection has to say why.
-    await assert.rejects(() => rejecting.decisions.decide(leadershipUser, rejectedProposal.id, "rejected", {}), BadRequestException);
+    await assert.rejects(() => rejecting.decisions.decide(leadershipUser, rejectedProposal.id, "rejected", { packageRevision: packageRevision(rejecting, rejectedProposal.id) }), BadRequestException);
     assert.equal(rejecting.prisma.store.proposals.find((item) => item.id === rejectedProposal.id).status, "ready_for_approval");
 
     const rejection = await rejecting.decisions.decide(leadershipUser, rejectedProposal.id, "rejected", {
-      note: "Kinh phí chưa phù hợp với quy mô đề tài."
+      note: "Kinh phí chưa phù hợp với quy mô đề tài.",
+      packageRevision: packageRevision(rejecting, rejectedProposal.id)
     });
     assert.equal(rejection.proposalStatus, "rejected");
     assert.equal(rejection.decision.decisionLabel, "Không phê duyệt");
@@ -1377,8 +1408,8 @@ describe("ST-3.5 approval decision", () => {
     // A decided proposal cannot be decided a second time.
     const decided = createServices();
     const { proposal: target } = await createProposalReadyForApproval(decided);
-    await decided.decisions.decide(leadershipUser, target.id, "approved", {});
-    await assert.rejects(() => decided.decisions.decide(leadershipUser, target.id, "rejected", { note: "Đổi ý" }), BadRequestException);
+    await decided.decisions.decide(leadershipUser, target.id, "approved", { packageRevision: packageRevision(decided, target.id) });
+    await assert.rejects(() => decided.decisions.decide(leadershipUser, target.id, "rejected", { note: "Đổi ý", packageRevision: packageRevision(decided, target.id) }), BadRequestException);
     assert.equal(decided.prisma.store.decisions.length, 1);
   });
 
@@ -1438,10 +1469,9 @@ describe("ST-3.5 approval decision", () => {
     await reviewing.reviews.submitMyReview(councilMemberUser2, reviewedProposal.id, reviewData);
     await reviewing.reviews.submitMyReview(councilMemberUser3, reviewedProposal.id, reviewData);
 
-    await reviewing.summaries.saveEvaluationSummary(staffUser, reviewedProposal.id, {
+    await consolidateAndSubmit(reviewing, staffUser, reviewedProposal.id, {
       summary: "Tổng hợp kết quả đánh giá.",
-      recommendation: "approve",
-      markReady: true
+      recommendation: "approve"
     });
 
     await assert.rejects(
@@ -1451,7 +1481,109 @@ describe("ST-3.5 approval decision", () => {
     assert.equal(reviewing.prisma.store.decisions.length, 0);
 
     // An authority with no relationship to the record still decides normally.
-    const clean = await reviewing.decisions.decide(leadershipUser, reviewedProposal.id, "approved", {});
+    const clean = await reviewing.decisions.decide(leadershipUser, reviewedProposal.id, "approved", { packageRevision: packageRevision(reviewing, reviewedProposal.id) });
     assert.equal(clean.proposalStatus, "approved");
+  });
+});
+
+describe("Evidence binding (mang từ thanhdotien278/DocManS): submission round and package revision", () => {
+  /** Mô phỏng PI nộp lại sau bổ sung: một sự kiện nộp mới với bản chụp, hồ sơ chuyển "resubmitted". */
+  function simulateResubmission(services, proposalId) {
+    const store = services.prisma.store;
+    const proposal = store.proposals.find((item) => item.id === proposalId);
+    const previous = store.submissionEvents.filter((event) => event.proposalId === proposalId && event.snapshot && !event.snapshot.kind && Array.isArray(event.snapshot.members)).at(-1);
+    const at = new Date(Date.now() + 60_000);
+    store.submissionEvents.push({ id: `event-resubmit-${store.submissionEvents.length + 1}`, proposalId, actorId: piUser.id, fromStatus: "supplement_requested", toStatus: "resubmitted", submittedAt: at, note: "Nộp lại", snapshot: { ...previous.snapshot } });
+    Object.assign(proposal, { status: "resubmitted", submittedAt: at });
+  }
+
+  it("assignments, reviews and completeness checks belong to one submission; a resubmission opens a fresh round", async () => {
+    const services = createServices();
+    const { proposal } = await createProposalUnderReview(services);
+    const firstRound = services.prisma.store.submissionEvents.find((event) => event.snapshot?.kind === "completeness_check").snapshot.submissionEventId;
+    assert.equal(services.prisma.store.reviewAssignments[0].reviewedSubmissionEventId, firstRound);
+    await services.reviews.saveMyReview(reviewerUser, proposal.id, { comment: "Nháp" });
+    assert.equal(services.prisma.store.reviews[0].submissionEventId, firstRound);
+
+    simulateResubmission(services, proposal.id);
+    // Kết quả kiểm tra đầy đủ của lần nộp cũ không còn giá trị: chưa phân công được.
+    await assert.rejects(() => services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: secondReviewerUser.id }), /đúng phiên bản nộp hiện tại/);
+    recordCompletenessCheck(services.prisma.store, proposal.id);
+
+    // Phân công cũ không ghi được phiếu cho lần nộp mới.
+    services.prisma.store.proposals.find((item) => item.id === proposal.id).status = "under_review";
+    await assert.rejects(() => services.reviews.submitMyReview(reviewerUser, proposal.id, { scoreData: FULL_SCORES, comment: "Phiếu cũ", recommendation: "approve" }), /phiên bản nộp hiện tại/);
+    // Tiến độ chỉ tính vòng mới (rỗng), không tính phân công của lần nộp cũ.
+    const progress = await services.summaries.getReviewProgress(staffUser, proposal.id);
+    assert.equal(progress.activeAssignmentCount, 0);
+    // Cùng người được phân công lại ở vòng mới; phân công mở của vòng cũ được thu hồi.
+    const again = await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: reviewerUser.id });
+    const old = services.prisma.store.reviewAssignments.find((item) => item.id !== again.id && item.reviewerUserId === reviewerUser.id);
+    assert.equal(old.status, "revoked");
+    assert.notEqual(services.prisma.store.reviewAssignments.find((item) => item.id === again.id).reviewedSubmissionEventId, firstRound);
+    await services.reviews.submitMyReview(reviewerUser, proposal.id, { scoreData: FULL_SCORES, comment: "Phiếu vòng mới", recommendation: "approve" });
+    assert.equal((await services.summaries.getReviewProgress(staffUser, proposal.id)).submittedCount, 1);
+  });
+
+  it("leadership decides only on the package revision they saw; a reopened and resubmitted package invalidates it", async () => {
+    const services = createServices();
+    const { proposal } = await createProposalReadyForApproval(services);
+    const seen = (await services.decisions.getDecisionPackage(leadershipUser, proposal.id)).packageRevision;
+    await assert.rejects(() => services.decisions.decide(leadershipUser, proposal.id, "approved", {}), /phiên bản gói/);
+    await assert.rejects(() => services.decisions.decide(leadershipUser, proposal.id, "approved", { packageRevision: seen + 1 }), /đã thay đổi/);
+
+    // Gói bị đổi ngầm sau khi trình (ví dụ một phiếu mới xuất hiện): bằng chứng không còn khớp, từ chối quyết định.
+    const summary = services.prisma.store.evaluationSummaries[0];
+    const original = summary.evidenceSnapshot;
+    summary.evidenceSnapshot = { ...original, reviewIds: original.reviewIds.slice(1) };
+    await assert.rejects(() => services.decisions.decide(leadershipUser, proposal.id, "approved", { packageRevision: seen }), /đã thay đổi/);
+    summary.evidenceSnapshot = original;
+
+    const decision = await services.decisions.decide(leadershipUser, proposal.id, "approved", { packageRevision: seen, note: "Đồng ý" });
+    assert.equal(decision.proposalStatus, "approved");
+    const stored = services.prisma.store.decisions[0];
+    assert.equal(stored.packageRevision, seen);
+    assert.equal(stored.packageSnapshot.lifecycle, "finalized");
+    assert.equal(stored.packageSnapshot.reviewIds.length, 5);
+    assert.equal(services.prisma.store.submissionEvents.at(-1).snapshot.kind, "proposal_decision");
+  });
+
+  it("a council secretary can run the whole draft → finalize → submit flow; a scorer cannot", async () => {
+    const services = createServices();
+    const { proposal } = await createFullyAssignedProposalUnderReview(services);
+    const reviewData = { scoreData: FULL_SCORES, comment: "Nhận xét", recommendation: "approve" };
+    for (const user of [reviewerUser, secondReviewerUser, councilMemberUser, councilMemberUser2, councilMemberUser3]) await services.reviews.submitMyReview(user, proposal.id, reviewData);
+    await assert.rejects(() => consolidateAndSubmit(services, councilMemberUser, proposal.id, { summary: "Tự tổng hợp", recommendation: "approve" }), ForbiddenException);
+    const result = await consolidateAndSubmit(services, councilSecretaryUser, proposal.id, { summary: "Biên bản và tổng hợp của thư ký.", recommendation: "approve" });
+    assert.equal(result.proposalStatus, "ready_for_approval");
+  });
+
+  it("council approval needs a submitted council proposal, binds generated assignments to the current round, and is refused once the package is finalized", async () => {
+    const services = createServices();
+    const store = services.prisma.store;
+    const proposal = await createSubmittedProposal(services);
+    const members = [
+      { role: "reviewer_1", userId: reviewerUser.id, displayName: reviewerUser.displayName },
+      { role: "reviewer_2", userId: secondReviewerUser.id, displayName: secondReviewerUser.displayName },
+      { role: "chair", userId: councilMemberUser.id, displayName: councilMemberUser.displayName },
+      { role: "member", userId: councilMemberUser2.id, displayName: councilMemberUser2.displayName },
+      { role: "member", userId: councilMemberUser3.id, displayName: councilMemberUser3.displayName },
+      { role: "secretary", userId: councilSecretaryUser.id, displayName: councilSecretaryUser.displayName }
+    ];
+    await assert.rejects(() => services.decisions.approveCouncil(leadershipUser, proposal.id, { members }), /tờ trình hội đồng đã gửi/);
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, submitToLeadership: true });
+    await services.decisions.approveCouncil(leadershipUser, proposal.id, {});
+    const round = store.submissionEvents.find((event) => event.snapshot?.kind === "completeness_check").snapshot.submissionEventId;
+    assert.equal(store.reviewAssignments.length, 6);
+    assert.ok(store.reviewAssignments.every((assignment) => assignment.reviewedSubmissionEventId === round));
+
+    const reviewData = { scoreData: FULL_SCORES, comment: "Nhận xét", recommendation: "approve" };
+    for (const user of [reviewerUser, secondReviewerUser, councilMemberUser, councilMemberUser2, councilMemberUser3]) await services.reviews.submitMyReview(user, proposal.id, reviewData);
+    await services.summaries.saveEvaluationSummary(councilSecretaryUser, proposal.id, { summary: "Tổng hợp", recommendation: "approve" });
+    await services.summaries.finalizeEvaluationSummary(councilSecretaryUser, proposal.id, {});
+    // Tờ trình được gửi lại sau khi gói đã chốt: không thêm phân công làm gói lệch vòng đánh giá.
+    store.proposals.find((item) => item.id === proposal.id).councilMetadata.status = "submitted";
+    await assert.rejects(() => services.decisions.approveCouncil(leadershipUser, proposal.id, {}), /đã chốt hoặc đã trình/);
+    assert.equal(store.reviewAssignments.length, 6);
   });
 });

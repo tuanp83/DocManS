@@ -46,7 +46,7 @@ export function createEvaluationTables(store, accounts = []) {
     return {
       ...record,
       ...(include.reviewer
-        ? { reviewer: reviewer ? { displayName: reviewer.displayName, username: reviewer.username, unit: reviewer.unit ?? "" } : null }
+        ? { reviewer: reviewer ? { displayName: reviewer.displayName, username: reviewer.username, unit: reviewer.unit ?? "", status: reviewer.status ?? "active" } : null }
         : {}),
       ...(include.assignedBy ? { assignedBy: assignedBy ? { displayName: assignedBy.displayName } : null } : {}),
       ...(include.proposal ? { proposal } : {})
@@ -165,6 +165,12 @@ export function createEvaluationTables(store, accounts = []) {
         }
         const updatedBy = findAccount(record.updatedById);
         return { ...record, updatedBy: updatedBy ? { displayName: updatedBy.displayName } : null };
+      },
+      async findUnique({ where }) {
+        return store.evaluationSummaries.find((item) => item.id === where.id) ?? null;
+      },
+      async findMany({ where } = {}) {
+        return store.evaluationSummaries.filter((item) => matchesWhere(item, where));
       }
     },
     proposalDecision: {
@@ -218,4 +224,28 @@ export function createUserLookup(accounts) {
       };
     }
   };
+}
+
+/**
+ * Kiểm tra đầy đủ cho đúng lần nộp hiện tại (submission-evidence.ts), như chuyên viên phụ trách đã xác nhận.
+ * Dùng trong các bộ test không đi qua luồng gán chuyên viên phụ trách.
+ */
+export function recordCompletenessCheck(store, proposalId, actorId = "user-staff") {
+  const proposal = store.proposals.find((item) => item.id === proposalId);
+  const submission = store.submissionEvents
+    .filter((event) => event.proposalId === proposalId && ["submitted", "resubmitted"].includes(event.toStatus) && event.snapshot && !event.snapshot.kind && Array.isArray(event.snapshot.members))
+    .sort((left, right) => right.submittedAt.getTime() - left.submittedAt.getTime())[0];
+  if (!proposal || !submission) throw new Error(`no submission to check for ${proposalId}`);
+  const record = {
+    id: `event-check-${store.submissionEvents.length + 1}`,
+    proposalId,
+    actorId,
+    fromStatus: proposal.status,
+    toStatus: proposal.status,
+    submittedAt: new Date(Math.max(Date.now(), submission.submittedAt.getTime())),
+    note: "Đã kiểm tra hồ sơ đầy đủ",
+    snapshot: { kind: "completeness_check", submissionEventId: submission.id, readiness: { ready: true }, note: "" }
+  };
+  store.submissionEvents.push(record);
+  return record;
 }

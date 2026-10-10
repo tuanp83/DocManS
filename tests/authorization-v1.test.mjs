@@ -194,6 +194,23 @@ describe("Story 1.8 viewer capability V1", () => {
     assert.equal(outOfScope.blockedActions.find((item) => item.action === "proposal.review.assign")?.code, "ORG_SCOPE_DENIED");
   });
 
+  it("summary lifecycle: consolidate on draft, finalize a draft, submit a finalized package; decisions need a routed package", () => {
+    const none = { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} };
+    const staff = (evaluationSummaryStatus, status = "under_review") => projectProposalViewerAuthorizationV1({ actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" }, proposal: { ...proposal, status }, participation: none, reviewAccess: { isAssignedReviewer: false }, canRead: true, canEdit: false, canManageFiles: false, completenessCheckCompleted: true, evaluationSummaryStatus });
+    const allowed = (capability) => ["proposal.review.consolidate", "proposal.review.finalize", "proposal.review.submit-package"].filter((action) => capability.allowedActions.includes(action));
+    assert.deepEqual(allowed(staff(null)), ["proposal.review.consolidate"]);
+    assert.deepEqual(allowed(staff("draft")), ["proposal.review.consolidate", "proposal.review.finalize"]);
+    assert.deepEqual(allowed(staff("finalized")), ["proposal.review.submit-package"]);
+    assert.deepEqual(allowed(staff("ready_for_approval", "ready_for_approval")), []);
+    assert.equal(staff("finalized").blockedActions.find((item) => item.action === "proposal.review.consolidate").code, "WORKFLOW_STATE_DENIED");
+    // Thư ký hội đồng của hồ sơ (không phải cán bộ QLKH) được làm cả ba bước.
+    const secretary = projectProposalViewerAuthorizationV1({ actor: { ...actor, systemRole: "RESEARCHER_INTERNAL_USER", organizationScopes: [] }, proposal: { ...proposal, status: "under_review" }, participation: none, reviewAccess: { isAssignedReviewer: true, assignmentId: "a", assignmentRole: "committee_secretary", effectiveFrom: "2026-07-01T00:00:00.000Z" }, canRead: true, canEdit: false, canManageFiles: false, evaluationSummaryStatus: "draft" });
+    assert.deepEqual(allowed(secretary), ["proposal.review.consolidate", "proposal.review.finalize"]);
+    const leader = (evaluationSummaryStatus) => projectProposalViewerAuthorizationV1({ actor: { ...actor, systemRole: "LEADERSHIP_APPROVAL_AUTHORITY" }, proposal: { ...proposal, status: "ready_for_approval" }, participation: none, reviewAccess: { isAssignedReviewer: false }, managementOfficer: { resolved: true, officer: null }, canRead: true, canEdit: false, canManageFiles: false, evaluationSummaryStatus });
+    assert.ok(leader("ready_for_approval").allowedActions.includes("proposal.decision.approve"));
+    assert.equal(leader("finalized").blockedActions.find((item) => item.action === "proposal.decision.approve").code, "WORKFLOW_STATE_DENIED");
+  });
+
   it("keeps PI submission record-scoped and blocks a repeated completeness check", () => {
     const staffCapability = projectProposalViewerAuthorizationV1({
       actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" },

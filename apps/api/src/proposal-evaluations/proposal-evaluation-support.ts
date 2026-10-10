@@ -41,6 +41,7 @@ export type ReviewAssignmentRecord = {
   dueDate: Date | null;
   revokedAt: Date | null;
   completedAt: Date | null;
+  reviewedSubmissionEventId?: string | null;
   reviewer?: { displayName: string; username: string; unit: string } | null;
   assignedBy?: { displayName: string } | null;
 };
@@ -58,6 +59,9 @@ export type ProposalReviewRecord = {
   submittedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  submissionEventId?: string | null;
+  contextVersion?: unknown;
+  evidenceSnapshot?: unknown;
   reviewer?: { displayName: string } | null;
 };
 
@@ -72,6 +76,9 @@ export type EvaluationSummaryRecord = {
   markedReadyAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  revision?: number;
+  contextVersion?: unknown;
+  evidenceSnapshot?: unknown;
   createdBy?: { displayName: string } | null;
   updatedBy?: { displayName: string } | null;
 };
@@ -85,6 +92,9 @@ export type ProposalDecisionRecord = {
   decidedAt: Date;
   fromStatus: string;
   toStatus: string;
+  packageRevision?: number | null;
+  contextVersion?: unknown;
+  packageSnapshot?: unknown;
   decidedBy?: { displayName: string } | null;
 };
 
