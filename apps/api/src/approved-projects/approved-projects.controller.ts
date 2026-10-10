@@ -1,12 +1,12 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
-import { assignProjectOfficerPipe, createProjectPipe, projectDecisionPipe, projectMutationPipe, projectReportPipe, projectReportReviewPipe, projectReportSubmissionPipe, projectRequestPipe, readRequestType, revokeProjectOfficerPipe } from "./approved-projects.dto.js";
+import { assignProjectOfficerPipe, createProjectPipe, healthAssessmentPipe, milestoneProgressPipe, readHealthFilter, projectDecisionPipe, projectMutationPipe, projectReportPipe, projectReportReviewPipe, projectReportSubmissionPipe, projectRequestPipe, readRequestType, revokeProjectOfficerPipe } from "./approved-projects.dto.js";
 import { ApprovedProjectsService } from "./approved-projects.service.js";
 
 function filters(value: Record<string, string>) {
   const parse = (input?: string) => input === undefined ? undefined : input === "true" ? true : input === "false" ? false : (() => { throw new BadRequestException({ message: "Bộ lọc không hợp lệ." }); })();
-  return { overdue: parse(value.overdue), approaching: parse(value.approaching) };
+  return { overdue: parse(value.overdue), approaching: parse(value.approaching), health: readHealthFilter(value.health) };
 }
 
 @Controller("api/v1/projects")
@@ -25,6 +25,15 @@ export class ApprovedProjectsController {
 
   @Get(":id")
   async detail(@Req() req: RequestWithCurrentUser, @Param("id") id: string) { return { project: await this.projects.getProject(req.currentUser!, id) }; }
+
+  @Get(":id/progress")
+  async progress(@Req() req: RequestWithCurrentUser, @Param("id") id: string) { return { progress: await this.projects.getProgress(req.currentUser!, id) }; }
+
+  @Post(":id/milestones/:milestoneId/progress")
+  async updateProgress(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("milestoneId") milestoneId: string, @Body(milestoneProgressPipe) body: any) { return await this.projects.updateMilestoneProgress(req.currentUser!, id, { ...body, milestoneId }); }
+
+  @Post(":id/health-assessments")
+  async assessHealth(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(healthAssessmentPipe) body: any) { return { assessment: await this.projects.assessHealth(req.currentUser!, id, body) }; }
 
   @Get(":id/officer-candidates")
   async candidates(@Req() req: RequestWithCurrentUser, @Param("id") id: string) { return { users: await this.projects.listOfficerCandidates(req.currentUser!, id) }; }

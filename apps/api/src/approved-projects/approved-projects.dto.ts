@@ -73,6 +73,28 @@ export const projectRequestPipe: PipeTransform<unknown, ProjectRequestDto> = { t
 
 export const projectDecisionPipe: PipeTransform<unknown, ProjectDecisionDto> = { transform(value) { const input = record(value ?? {}); return { reason: readOptionalText(input.reason, "reason", 2000), note: readOptionalText(input.note, "note", 2000), responseDeadline: readOptionalDate(input.responseDeadline, "responseDeadline"), contextVersion: context(input) }; } };
 
+export class MilestoneProgressDto extends ProjectMutationDto { progressPercent!: number; note?: string; }
+export class HealthAssessmentDto extends ProjectMutationDto { level!: "green" | "amber" | "red"; reason!: string; }
+
+export const milestoneProgressPipe: PipeTransform<unknown, MilestoneProgressDto> = { transform(value) {
+  const input = record(value);
+  const raw = typeof input.progressPercent === "string" && input.progressPercent.trim() !== "" ? Number(input.progressPercent) : input.progressPercent;
+  if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0 || raw > 99) throw new BadRequestException({ message: "Nhập từ 0 đến 99%. Mốc chỉ đạt 100% khi báo cáo của mốc được chấp nhận." });
+  return { progressPercent: raw, note: readOptionalText(input.note, "note", 2000), contextVersion: context(input) };
+} };
+
+export const healthAssessmentPipe: PipeTransform<unknown, HealthAssessmentDto> = { transform(value) {
+  const input = record(value);
+  if (input.level !== "green" && input.level !== "amber" && input.level !== "red") throw new BadRequestException({ message: "Mức sức khoẻ chỉ được là green, amber hoặc red." });
+  return { level: input.level, reason: readText(input.reason, "reason", 2000), contextVersion: context(input) };
+} };
+
+export function readHealthFilter(value: unknown) {
+  if (value === undefined) return undefined;
+  if (value !== "green" && value !== "amber" && value !== "red") throw new BadRequestException({ message: "Bộ lọc sức khoẻ không hợp lệ." });
+  return value as "green" | "amber" | "red";
+}
+
 export function readRequestType(value: unknown) {
   const type = readCode(value, "requestType").toLowerCase();
   if (type !== "adjustment" && type !== "extension") throw new BadRequestException({ message: "requestType chỉ được là adjustment hoặc extension." });

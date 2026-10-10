@@ -66,6 +66,8 @@ export const PERMISSION_ACTION_IDS_V1 = [
   "project.extension.approve",
   "project.extension.reject",
   "project.history.read",
+  "project.progress.update",
+  "project.health.assess",
   "proposal.decision.approve",
   "proposal.decision.reject",
   "file.read",

@@ -6,13 +6,42 @@ export type ProjectRecord = {
   scope: Record<string, unknown>; plan: Record<string, unknown> | null;
   hostOrganizationUnit?: { name: string }; officer?: { officerUserId: string; officerName?: string | null } | null;
   members: Array<{ id: string; name: string; participationRole: string; status: string; userId?: string }>;
-  milestones: Array<{ id: string; title: string; dueDate: string; isImportant: boolean; status: string; responsibleMemberId?: string | null }>;
+  milestones: Array<{ id: string; title: string; dueDate: string; isImportant: boolean; status: string; responsibleMemberId?: string | null; weightPercent?: number | null; progressPercent?: number; plannedStartDate?: string | null; completedAt?: string | null }>;
   checkpoints: Array<{ id: string; title: string; dueDate: string; status: string }>;
   reports: Array<{ id: string; revision: number; status: string; checkpointId?: string; reportingPeriodStart?: string; reportingPeriodEnd?: string; progressResults?: string; issuesRecommendations?: string; reviewReason?: string; responseDeadline?: string; evidence?: Array<{ id: string; fileRecordId: string; file?: { originalFileName: string } }> }>;
   requests: Array<{ id: string; requestType: "adjustment" | "extension"; status: string; revision?: number; reason?: string; proposedValues?: Record<string, unknown>; decisionNote?: string; responseDeadline?: string; evidence?: Array<{ id: string; fileRecordId: string; file?: { originalFileName: string } }> }>;
   history: Array<{ id: string; action: string; reason?: string; createdAt: string }>;
   overdue: boolean; approaching: boolean; nearestDeadline: string | null; viewerAuthorization: ViewerAuthorizationV1;
+  progressSummary?: ProjectProgressSummary;
 };
+
+export type HealthLevel = "green" | "amber" | "red";
+
+export type ProjectProgressSummary = {
+  plannedPercent: number; actualPercent: number; spi: number | null; maxDaysOverdue: number; overdueMilestones: number; lateReports: number;
+  computedLevel: HealthLevel | null; level: HealthLevel | null; levelSource: "computed" | "assessment" | "not_applicable"; needsReassessment: boolean; reasons: string[];
+};
+
+export type MilestoneProgressRow = {
+  id: string; title: string; status: string; weightPercent: number; progressPercent: number; currentDueDate: string;
+  baselineDueDate: string | null; originalDueDate: string | null; completedAt: string | null; slipDays: number | null; overdueDays: number;
+};
+
+export type ProjectProgress = {
+  projectId: string; status: string; asOf: string; applicable: boolean; weightsConfigured: boolean; baselineVersion: number | null; baselineMissing: boolean;
+  plannedPercent: number; actualPercent: number; spi: number | null; maxDaysOverdue: number; overdueMilestones: number; lateReports: number; endDatePassed: boolean;
+  level: HealthLevel | null; reasons: string[]; milestones: MilestoneProgressRow[];
+  effectiveLevel: HealthLevel | null; levelSource: "computed" | "assessment" | "not_applicable"; needsReassessment: boolean;
+  baselines: Array<{ id: string; version: number; source: string; startDate: string | null; endDate: string | null; milestoneCount: number; createdAt: string | null }>;
+  assessments: Array<{ id: string; level: HealthLevel; computedLevel: HealthLevel | null; reason: string | null; assessedBy: string | null; createdAt: string | null }>;
+  updates: Array<{ id: string; milestoneId: string; milestoneTitle: string | null; previousPercent: number; progressPercent: number; note: string | null; author: string | null; createdAt: string | null }>;
+  updatableMilestoneIds: string[];
+  viewerAuthorization: ViewerAuthorizationV1;
+};
+
+export const HEALTH_LABELS: Record<HealthLevel, string> = { green: "Đúng tiến độ", amber: "Cần chú ý", red: "Chậm tiến độ" };
+export const HEALTH_TONES: Record<HealthLevel, "success" | "warning" | "danger"> = { green: "success", amber: "warning", red: "danger" };
+export const BASELINE_SOURCE_LABELS: Record<string, string> = { setup: "Thiết lập ban đầu", adjustment: "Điều chỉnh", extension: "Gia hạn", backfill: "Ghi nhận từ dữ liệu cũ" };
 
 /** Nhãn tiếng Việt cho trạng thái đề tài, báo cáo và yêu cầu (giá trị nội bộ giữ như nhánh chính). */
 export const PROJECT_STATUS_LABELS: Record<string, string> = {
@@ -55,8 +84,9 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export async function listProjects(filters?: { overdue?: boolean; approaching?: boolean }) {
+export async function listProjects(filters?: { overdue?: boolean; approaching?: boolean; health?: HealthLevel }) {
   const query = new URLSearchParams();
+  if (filters?.health) query.set("health", filters.health);
   if (filters?.overdue !== undefined) query.set("overdue", String(filters.overdue));
   if (filters?.approaching !== undefined) query.set("approaching", String(filters.approaching));
   const result = await json<{ projects: ProjectRecord[] }>(`/projects${query.size ? `?${query}` : ""}`);
@@ -64,6 +94,7 @@ export async function listProjects(filters?: { overdue?: boolean; approaching?: 
 }
 
 export async function getProject(id: string) { return (await json<{ project: ProjectRecord }>(`/projects/${id}`)).project; }
+export async function getProjectProgress(id: string) { return (await json<{ progress: ProjectProgress }>(`/projects/${id}/progress`)).progress; }
 export async function createProject(proposalId: string, contextVersion: unknown) { return json<{ project: { id: string } }>("/projects", { method: "POST", body: JSON.stringify({ proposalId, contextVersion }) }); }
 export async function projectOfficerCandidates(id: string) { return (await json<{ users: Array<{ id: string; displayName: string; username: string }> }>(`/projects/${id}/officer-candidates`)).users; }
 export async function projectAction(id: string, path: string, body: Record<string, unknown>, method = "POST") { return json<Record<string, unknown>>(`/projects/${id}/${path}`, { method, body: JSON.stringify(body) }); }

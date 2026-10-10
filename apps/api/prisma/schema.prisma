@@ -71,6 +71,9 @@ model User {
   projectRequestHistory               ProjectRequestHistory[]    @relation("ProjectRequestHistoryActor")
   createdProjectRequestRevisions      ProjectRequestRevision[]   @relation("ProjectRequestRevisionCreator")
   createdProjectMilestones            ProjectMilestone[]         @relation("ProjectMilestoneCreator")
+  createdProjectPlanBaselines         ProjectPlanBaseline[]      @relation("ProjectPlanBaselineCreator")
+  milestoneProgressUpdates            ProjectMilestoneProgressUpdate[] @relation("ProjectMilestoneProgressAuthor")
+  projectHealthAssessments            ProjectHealthAssessment[]  @relation("ProjectHealthAssessor")
 
   supervisedStudentProjects StudentResearchProject[]  @relation("ProjectSupervisor")
   managedStudentProjects    StudentResearchProject[]  @relation("ProjectOfficer")
@@ -822,6 +825,9 @@ model ApprovedProject {
   reports                       ProjectReportRevision[]
   requests                      ProjectRequest[]
   history                       ProjectHistory[]
+  baselines                     ProjectPlanBaseline[]
+  progressUpdates               ProjectMilestoneProgressUpdate[]
+  healthAssessments             ProjectHealthAssessment[]
 
   @@index([hostOrganizationUnitId, status])
   @@index([status, endDate])
@@ -882,6 +888,11 @@ model ProjectMilestone {
   status              String                 @default("open")
   isImportant         Boolean                @default(false) @map("is_important")
   position            Int                    @default(0)
+  weightPercent       Int?                   @map("weight_percent")
+  progressPercent     Int                    @default(0) @map("progress_percent")
+  plannedStartDate    DateTime?              @map("planned_start_date") @db.Date
+  completedAt         DateTime?              @map("completed_at")
+  progressUpdatedAt   DateTime?              @map("progress_updated_at")
   createdById         String                 @map("created_by_id")
   createdBy           User                   @relation("ProjectMilestoneCreator", fields: [createdById], references: [id], onDelete: Restrict)
   responsibleMemberId String?                @map("responsible_member_id")
@@ -889,6 +900,7 @@ model ProjectMilestone {
   createdAt           DateTime               @default(now()) @map("created_at")
   updatedAt           DateTime               @updatedAt @map("updated_at")
   checkpoints         ProjectCheckpoint[]
+  progressUpdates     ProjectMilestoneProgressUpdate[]
 
   @@index([projectId, dueDate])
   @@index([responsibleMemberId])
@@ -983,6 +995,7 @@ model ProjectRequest {
   revisions               ProjectRequestRevision[]
   evidence                ProjectRequestEvidence[]
   history                 ProjectRequestHistory[]
+  baselines               ProjectPlanBaseline[]
 
   @@index([projectId, requestType, status])
   @@index([requesterId, status])
@@ -1059,6 +1072,61 @@ model ProjectHistory {
 
   @@index([projectId, createdAt])
   @@map("project_history")
+}
+
+/// Phiên bản kế hoạch đã được phê duyệt (docs/design/quan-ly-tien-do-nhiem-vu.md, mục 3). Không sửa phiên bản cũ.
+model ProjectPlanBaseline {
+  id              String          @id @default(uuid())
+  projectId       String          @map("project_id")
+  project         ApprovedProject @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  version         Int
+  source          String
+  sourceRequestId String?         @map("source_request_id")
+  sourceRequest   ProjectRequest? @relation(fields: [sourceRequestId], references: [id], onDelete: Restrict)
+  startDate       DateTime?       @map("start_date") @db.Date
+  endDate         DateTime?       @map("end_date") @db.Date
+  milestones      Json
+  createdById     String          @map("created_by_id")
+  createdBy       User            @relation("ProjectPlanBaselineCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@unique([projectId, version])
+  @@map("project_plan_baselines")
+}
+
+/// Nhật ký cập nhật phần trăm hoàn thành của mốc.
+model ProjectMilestoneProgressUpdate {
+  id              String           @id @default(uuid())
+  projectId       String           @map("project_id")
+  project         ApprovedProject  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  milestoneId     String           @map("milestone_id")
+  milestone       ProjectMilestone @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  previousPercent Int              @map("previous_percent")
+  progressPercent Int              @map("progress_percent")
+  note            String?
+  authorId        String           @map("author_id")
+  author          User             @relation("ProjectMilestoneProgressAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("project_milestone_progress_updates")
+}
+
+/// Đánh giá sức khoẻ đề tài của chuyên viên phụ trách (ghi đè mức hệ thống, có lý do).
+model ProjectHealthAssessment {
+  id            String          @id @default(uuid())
+  projectId     String          @map("project_id")
+  project       ApprovedProject @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  level         String
+  computedLevel String?         @map("computed_level")
+  reason        String
+  computedFacts Json?           @map("computed_facts")
+  assessedById  String          @map("assessed_by_id")
+  assessedBy    User            @relation("ProjectHealthAssessor", fields: [assessedById], references: [id], onDelete: Restrict)
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("project_health_assessments")
 }
 
 // ==========================================

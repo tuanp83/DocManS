@@ -10,7 +10,8 @@ export const PROJECT_ACTIONS: PermissionActionV1[] = [
   "project.evidence.contribute",
   "project.adjustment.create", "project.adjustment.edit-draft", "project.adjustment.submit", "project.adjustment.review", "project.adjustment.request-supplement", "project.adjustment.approve", "project.adjustment.reject",
   "project.extension.create", "project.extension.edit-draft", "project.extension.submit", "project.extension.validate", "project.extension.prepare", "project.extension.request-supplement", "project.extension.approve", "project.extension.reject",
-  "project.history.read"
+  "project.history.read",
+  "project.progress.update", "project.health.assess"
 ];
 
 export const PROJECT_STATUSES = {
@@ -120,6 +121,14 @@ function projectActionDenial(action: PermissionActionV1, input: ProjectCapabilit
   if (action === "project.officer.assign" || action === "project.officer.revoke") return input.canAssignOfficer ? null : blocked("ACTION_NOT_GRANTED");
   if (action === "project.report.draft" || action === "project.report.submit") return input.canPi && input.isPi ? null : blocked(input.inExecution ? "ACTION_NOT_GRANTED" : "WORKFLOW_STATE_DENIED");
   if (action === "project.evidence.contribute") return input.project.status === PROJECT_STATUSES.executing && input.scoped && (input.isPi || (input.participantActive && input.responsibleMember)) ? null : blocked(input.inExecution ? "ACTION_NOT_GRANTED" : "WORKFLOW_STATE_DENIED");
+  // Tiến độ (docs/design/quan-ly-tien-do-nhiem-vu.md, mục 5): chủ nhiệm cập nhật mọi mốc, thành viên chỉ mốc mình
+  // phụ trách (kiểm tra theo từng mốc ở service); chỉ khi đề tài đang thực hiện.
+  if (action === "project.progress.update") {
+    const eligible = input.scoped && (input.isPi || (input.participantActive && input.responsibleMember === true));
+    return eligible && input.project.status === PROJECT_STATUSES.executing ? null : blocked(eligible ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
+  }
+  // Đánh giá sức khoẻ: chuyên viên đang được phân công phụ trách, khi đề tài đang thực hiện hoặc tạm dừng.
+  if (action === "project.health.assess") return input.canOperate && input.inExecution ? null : blocked(input.canOperate ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
   if (action === "project.report.review") return input.canOperate && (!input.report || ["submitted", "under_review"].includes(input.report.status)) ? null : blocked(input.report && !["submitted", "under_review"].includes(input.report.status) ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
   if (action === "project.report.request-supplement") return input.canOperate && (!input.report || ["submitted", "under_review"].includes(input.report.status)) ? null : blocked(input.report && !["submitted", "under_review"].includes(input.report.status) ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
   if (action === "project.report.accept") return input.canOperate && (!input.report || input.report.status === "under_review") ? null : blocked(input.report && input.report.status !== "under_review" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");

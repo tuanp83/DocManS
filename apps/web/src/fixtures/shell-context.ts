@@ -190,10 +190,10 @@ export const routeDefinitions: Record<string, RouteDefinition> = {
   },
   "/my-tasks": {
     eyebrow: "Nhiệm vụ",
-    title: "Nhiệm vụ",
-    description: "Tổng hợp các nhiệm vụ KH&CN, công việc được giao và các hạn cần hoàn tất.",
-    summaryTitle: "Theo dõi nhiệm vụ",
-    summaryBody: "Nhiệm vụ được sắp xếp theo thời hạn, mức ưu tiên và tiến độ thực hiện."
+    title: "Việc của tôi",
+    description: "Báo cáo đến hạn, mốc cần cập nhật tiến độ, hồ sơ cần xét và phiếu phản biện đang chờ bạn.",
+    summaryTitle: "Việc đang chờ",
+    summaryBody: "Việc quá hạn xếp trước, sau đó theo hạn gần nhất."
   },
   "/invitation-to-review": {
     eyebrow: "Phản biện",
@@ -291,6 +291,7 @@ export const routeDefinitions: Record<string, RouteDefinition> = {
 export const navigationByRole: Record<UserRole, NavigationItem[]> = {
   LEADERSHIP_APPROVAL_AUTHORITY: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
     { href: "/proposals", label: "Giám sát hồ sơ đề xuất", icon: Files },
     { href: "/approvals", label: "Hồ sơ chờ phê duyệt", icon: FileClock },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
@@ -299,6 +300,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
   ],
   RESEARCH_MANAGEMENT_HEAD: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
     { href: "/proposals", label: "Quản lý đề tài", icon: Files },
     { href: "/researcher-profiles", label: "Hồ sơ nhà khoa học", icon: UserRoundSearch },
     { href: "/intakes", label: "Đợt tiếp nhận", icon: CalendarRange },
@@ -311,6 +313,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
   ],
   RESEARCH_MANAGEMENT_STAFF: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
     { href: "/proposals", label: "Quản lý đề tài", icon: Files },
     { href: "/researcher-profiles", label: "Hồ sơ nhà khoa học", icon: UserRoundSearch },
     { href: "/intakes", label: "Đợt tiếp nhận", icon: CalendarRange },
@@ -323,7 +326,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
   ],
   RESEARCHER_INTERNAL_USER: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/my-tasks", label: "Nhiệm vụ", icon: ListTodo },
+    { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
     { href: "/invitation-to-review", label: "Được mời phản biện", icon: FileCheck2 },
     { href: "/my-proposals", label: "Hồ sơ của tôi", icon: FileText },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
@@ -352,7 +355,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
   ],
   EXTERNAL_RESEARCHER_USER: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/my-tasks", label: "Nhiệm vụ", icon: ListTodo },
+    { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
     { href: "/invitation-to-review", label: "Được mời phản biện", icon: FileCheck2 },
     { href: "/my-proposals", label: "Hồ sơ của tôi", icon: FileText },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },

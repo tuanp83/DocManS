@@ -80,7 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <>
                     <a className="button" href="/my-profile">Lý lịch khoa học</a>
                     <a className="button" href="/invitation-to-review">Được mời phản biện</a>
-                    <a className="button" href="/my-tasks">Nhiệm vụ</a>
+                    <a className="button" href="/my-tasks">Việc của tôi</a>
                   </>
                 ) : null}
                 <a className="button" href="/change-password">Đổi mật khẩu</a>
