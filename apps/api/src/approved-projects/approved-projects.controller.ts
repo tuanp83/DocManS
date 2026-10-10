@@ -1,8 +1,9 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
-import { assignProjectOfficerPipe, createProjectPipe, healthAssessmentPipe, milestoneProgressPipe, readHealthFilter, projectDecisionPipe, projectMutationPipe, projectReportPipe, projectReportReviewPipe, projectReportSubmissionPipe, projectRequestPipe, readRequestType, revokeProjectOfficerPipe } from "./approved-projects.dto.js";
+import { assignProjectOfficerPipe, closureBodyPipe, createProjectPipe, healthAssessmentPipe, milestoneProgressPipe, readHealthFilter, projectDecisionPipe, projectMutationPipe, projectReportPipe, projectReportReviewPipe, projectReportSubmissionPipe, projectRequestPipe, readRequestType, revokeProjectOfficerPipe } from "./approved-projects.dto.js";
 import { ApprovedProjectsService } from "./approved-projects.service.js";
+import { ProjectClosureService } from "./project-closure.service.js";
 
 function filters(value: Record<string, string>) {
   const parse = (input?: string) => input === undefined ? undefined : input === "true" ? true : input === "false" ? false : (() => { throw new BadRequestException({ message: "Bộ lọc không hợp lệ." }); })();
@@ -12,7 +13,7 @@ function filters(value: Record<string, string>) {
 @Controller("api/v1/projects")
 @UseGuards(SessionAuthGuard)
 export class ApprovedProjectsController {
-  constructor(private readonly projects: ApprovedProjectsService) {}
+  constructor(private readonly projects: ApprovedProjectsService, private readonly closure: ProjectClosureService) {}
 
   @Get()
   async list(@Req() req: RequestWithCurrentUser, @Query() query: Record<string, string>) { return { projects: await this.projects.listProjects(req.currentUser!, filters(query)) }; }
@@ -94,4 +95,66 @@ export class ApprovedProjectsController {
 
   @Post(":id/requests/:type/:requestId/reject")
   async reject(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: any) { return { request: await this.projects.decideRequest(req.currentUser!, id, readRequestType(type), "reject", { ...body, requestId }) }; }
+
+  // ---- Kinh phí, nghiệm thu, thanh lý, đóng đề tài (project-closure.service.ts) ----
+  @Get(":id/finance")
+  async finance(@Req() req: RequestWithCurrentUser, @Param("id") id: string) { return await this.closure.getFinance(req.currentUser!, id); }
+
+  @Put(":id/finance")
+  async updateFinance(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return await this.closure.updateFinance(req.currentUser!, id, body); }
+
+  @Get(":id/acceptance/candidates")
+  async acceptanceCandidates(@Req() req: RequestWithCurrentUser, @Param("id") id: string) { return { candidates: await this.closure.councilCandidates(req.currentUser!, id) }; }
+
+  @Post(":id/acceptance/submit")
+  async submitAcceptance(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.submitAcceptance(req.currentUser!, id, body) }; }
+
+  @Post(":id/acceptance/return")
+  async returnAcceptance(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.returnAcceptance(req.currentUser!, id, body) }; }
+
+  @Post(":id/acceptance/council")
+  async proposeCouncil(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.proposeCouncil(req.currentUser!, id, body) }; }
+
+  @Post(":id/acceptance/council/establish")
+  async establishCouncil(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.establishCouncil(req.currentUser!, id, body) }; }
+
+  @Post(":id/acceptance/minutes")
+  async recordMinutes(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.recordMinutes(req.currentUser!, id, body) }; }
+
+  @Post(":id/acceptance/revision")
+  async submitRevision(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.submitRevision(req.currentUser!, id, body) }; }
+
+  @Post(":id/acceptance/revision/confirm")
+  async confirmRevision(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.confirmRevision(req.currentUser!, id, body) }; }
+
+  @Post(":id/liquidation")
+  async prepareLiquidation(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.prepareLiquidation(req.currentUser!, id, body) }; }
+
+  @Post(":id/liquidation/approve")
+  async approveLiquidation(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.approveLiquidation(req.currentUser!, id, body) }; }
+
+  @Post(":id/close")
+  async close(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.closeProject(req.currentUser!, id, body) }; }
+
+  // ---- Sản phẩm (tổ chuyên gia) và đề nghị cấp trên nghiệm thu ----
+  @Put(":id/products")
+  async saveProducts(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.saveProducts(req.currentUser!, id, body) }; }
+
+  @Post(":id/products/:productId/submit")
+  async submitProduct(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("productId") productId: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.submitProduct(req.currentUser!, id, { ...body, productId }) }; }
+
+  @Post(":id/products/:productId/panel")
+  async formProductPanel(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("productId") productId: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.formProductPanel(req.currentUser!, id, { ...body, productId }) }; }
+
+  @Post(":id/products/:productId/review")
+  async recordProductReview(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("productId") productId: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.recordProductReview(req.currentUser!, id, { ...body, productId }) }; }
+
+  @Put(":id/superior")
+  async saveSuperior(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.saveSuperiorDossier(req.currentUser!, id, body) }; }
+
+  @Post(":id/superior/send")
+  async sendSuperior(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.sendSuperiorRequest(req.currentUser!, id, body) }; }
+
+  @Post(":id/superior/result")
+  async superiorResult(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.recordSuperiorResult(req.currentUser!, id, body) }; }
 }

@@ -17,28 +17,23 @@ import {
   Plus
 } from "lucide-react";
 import {
-  DisbursementMetadata,
   DisbursementMilestone,
   DisbursementCostItem,
   MilestoneAttachment,
-  fetchDisbursement,
-  updateDisbursement
-} from "@/lib/proposal-evaluations-api";
+  getProjectFinance,
+  updateProjectFinance,
+  uploadProjectFile,
+  type ProjectFinanceResponse,
+  type ProjectRecord
+} from "@/lib/projects-api";
 import { getApiBaseUrl } from "@/lib/session";
 import "@/styles/council-modals.css";
 
 interface MilestoneDisbursementModalProps {
   isOpen: boolean;
   onClose: () => void;
-  proposal: {
-    id: string;
-    code?: string;
-    title: string;
-    ownerDisplayName?: string;
-    totalBudget?: number;
-    disbursementMetadata?: DisbursementMetadata | null;
-  };
-  currentUserRole?: string;
+  /** Giải ngân gắn với đề tài thực hiện (không còn gắn với hồ sơ đề xuất). */
+  project: ProjectRecord;
   currentUserUsername?: string;
   onSuccess?: () => void;
 }
@@ -55,14 +50,14 @@ const DEFAULT_COST_ITEMS: DisbursementCostItem[] = [
 export function MilestoneDisbursementModal({
   isOpen,
   onClose,
-  proposal,
-  currentUserRole,
+  project,
   currentUserUsername,
   onSuccess
 }: MilestoneDisbursementModalProps) {
-  // Display hint only — the backend (assertCanManageDisbursement) checks role and the proposal's organization scope.
-  const canManage =
-    currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY" || currentUserRole === "RESEARCH_MANAGEMENT_STAFF" || currentUserRole === "RESEARCH_MANAGEMENT_HEAD";
+  const proposal = { code: project.code ?? "", title: project.title };
+  const [finance, setFinance] = useState<ProjectFinanceResponse | null>(null);
+  // Quyền do máy chủ trả về (capability project.finance.manage), không suy đoán theo vai trò ở trình duyệt.
+  const canManage = finance?.canManage === true;
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -77,35 +72,26 @@ export function MilestoneDisbursementModal({
     if (isOpen) {
       loadDisbursementData();
     }
-  }, [isOpen, proposal.id]);
+  }, [isOpen, project.id]);
 
   const loadDisbursementData = async () => {
     try {
       setLoading(true);
-      const res = await fetchDisbursement(proposal.id);
+      const res = await getProjectFinance(project.id);
+      setFinance(res);
       // Mẫu 3 đợt để cán bộ điền; KHÔNG giả định đợt nào đã giải ngân và không bịa số chứng từ.
-      const budget = Number(res?.disbursement?.totalBudget) || Number(proposal.totalBudget) || 0;
+      const budget = Number(res.disbursement.totalBudget) || 0;
       const defaultMilestones: DisbursementMilestone[] = [
         { id: "M1", name: "Đợt 1: Tạm ứng kinh phí ban đầu", percentage: 40, expectedAmount: Math.round(budget * 0.4), disbursedAmount: 0, status: "PENDING" },
         { id: "M2", name: "Đợt 2: Giải ngân sau đánh giá giữa kỳ", percentage: 40, expectedAmount: Math.round(budget * 0.4), disbursedAmount: 0, status: "PENDING" },
         { id: "M3", name: "Đợt 3: Quyết toán kinh phí sau nghiệm thu", percentage: 20, expectedAmount: budget - 2 * Math.round(budget * 0.4), disbursedAmount: 0, status: "PENDING" }
       ];
-
-      if (res && res.disbursement) {
-        if (res.disbursement.milestones && res.disbursement.milestones.length > 0) {
-          setMilestones(res.disbursement.milestones);
-        } else {
-          setMilestones(defaultMilestones);
-        }
-        if (res.disbursement.costItems && res.disbursement.costItems.length > 0) {
-          setCostItems(res.disbursement.costItems);
-        }
-        setSettlementStatus(res.disbursement.settlementStatus || "PENDING");
-      } else {
-        setMilestones(defaultMilestones);
-      }
+      setMilestones(res.disbursement.milestones.length > 0 ? res.disbursement.milestones : res.canManage ? defaultMilestones : []);
+      if (res.disbursement.costItems.length > 0) setCostItems(res.disbursement.costItems);
+      setSettlementStatus(res.disbursement.settlementStatus || "PENDING");
+      setNotes(res.disbursement.notes ?? "");
     } catch (err) {
-      console.error("Failed to load disbursement", err);
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "Không tải được dữ liệu kinh phí." });
     } finally {
       setLoading(false);
     }
@@ -132,29 +118,12 @@ export function MilestoneDisbursementModal({
     setUploadingMilestoneIndex(index);
     setMessage(null);
     try {
-      const formData = new FormData();
-      formData.set("relatedEntityType", "research_proposal");
-      formData.set("relatedEntityId", proposal.id);
-      formData.set("filePurpose", "disbursement_voucher");
-      formData.set("originalFileName", file.name);
-      formData.set("description", `Chứng từ giải ngân ${milestones[index]?.name || ""}`);
-      formData.set("file", file);
-
-      const response = await fetch(`${getApiBaseUrl()}/files`, {
-        method: "POST",
-        credentials: "include",
-        body: formData
-      });
-
-      const body = (await response.json().catch(() => ({}))) as { message?: string; file?: { id: string; fileName: string; sizeBytes?: number } };
-      if (!response.ok || !body.file) {
-        throw new Error(body.message ?? "Không thể tải tệp lên.");
-      }
-
+      // Chứng từ là tệp của đề tài, mục đích "disbursement_voucher" (máy chủ kiểm tra quyền project.finance.manage).
+      const saved = await uploadProjectFile(project, file, "disbursement_voucher");
       const newAtt: MilestoneAttachment = {
-        id: body.file.id,
-        fileName: body.file.fileName || file.name,
-        fileSize: body.file.sizeBytes || file.size,
+        id: saved.id,
+        fileName: saved.fileName || file.name,
+        fileSize: file.size,
         uploadedAt: new Date().toISOString(),
         uploadedByName: currentUserUsername || "Cán bộ quản lý"
       };
@@ -187,23 +156,26 @@ export function MilestoneDisbursementModal({
   };
 
   const handleSave = async () => {
-    if (!canManage) {
-      setMessage({ type: "error", text: "Chỉ lãnh đạo Học viện hoặc cán bộ quản lý khoa học phụ trách đơn vị của hồ sơ mới có quyền cập nhật kinh phí." });
+    if (!canManage || !finance) {
+      setMessage({ type: "error", text: finance?.manageDeniedReason || "Bạn không có quyền cập nhật kinh phí đề tài này." });
       return;
     }
     setSaving(true);
     setMessage(null);
     try {
-      const res = await updateDisbursement(proposal.id, {
+      const res = await updateProjectFinance(project.id, {
         milestones,
         costItems,
         settlementStatus,
-        notes
+        notes,
+        financeVersion: finance.disbursement.version,
+        contextVersion: finance.contextVersion
       });
-      if (res.success) {
-        setMessage({ type: "success", text: "Đã cập nhật dữ liệu giải ngân & quyết toán theo mốc thành công!" });
-        onSuccess?.();
-      }
+      setFinance({ ...finance, disbursement: res.disbursement });
+      setMilestones(res.disbursement.milestones);
+      setCostItems(res.disbursement.costItems.length ? res.disbursement.costItems : DEFAULT_COST_ITEMS);
+      setMessage({ type: "success", text: "Đã cập nhật dữ liệu giải ngân & quyết toán theo mốc thành công!" });
+      onSuccess?.();
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || "Lỗi cập nhật giải ngân" });
     } finally {
@@ -211,7 +183,8 @@ export function MilestoneDisbursementModal({
     }
   };
 
-  const totalBudget = milestones.reduce((sum, m) => sum + (Number(m.expectedAmount) || 0), 0) || Number(proposal.totalBudget) || 0;
+  // Kinh phí được duyệt do máy chủ xác định (số lãnh đạo phê duyệt); không suy ra từ các đợt.
+  const totalBudget = Number(finance?.disbursement.totalBudget) || milestones.reduce((sum, m) => sum + (Number(m.expectedAmount) || 0), 0);
   const totalDisbursed = milestones.reduce((sum, m) => sum + (Number(m.disbursedAmount) || 0), 0);
   const totalSettled = costItems.reduce((sum, c) => sum + (Number(c.settledAmount) || 0), 0);
   const disbursementPercent = totalBudget > 0 ? Math.round((totalDisbursed / totalBudget) * 100) : 0;
@@ -260,7 +233,7 @@ export function MilestoneDisbursementModal({
           <div className="cmd-alert warning" style={{ borderRadius: 0, borderLeft: "none", borderRight: "none" }}>
             <AlertCircle size={16} />
             <span>
-              <b>Lưu ý:</b> Quyền điều chỉnh kinh phí, duyệt mốc giải ngân và quyết toán dành cho <b>lãnh đạo Học viện</b> và <b>cán bộ quản lý khoa học phụ trách đơn vị của hồ sơ</b>. Các tài khoản khác chỉ có quyền theo dõi.
+              <b>Lưu ý:</b> {finance?.manageDeniedReason ? `${finance.manageDeniedReason} ` : ""}Quyền cập nhật kinh phí dành cho <b>lãnh đạo Học viện</b> và <b>cán bộ quản lý khoa học có phạm vi đơn vị chủ trì</b> (không tham gia đề tài); kinh phí bị khoá sau khi thanh lý được phê duyệt. Các tài khoản khác chỉ theo dõi.
             </span>
           </div>
         )}
@@ -424,6 +397,20 @@ export function MilestoneDisbursementModal({
                           ) : (
                             <span style={{ fontSize: "12px", color: "#94a3b8" }}>{m.evidenceNotes || "—"}</span>
                           )}
+                          {canManage ? (
+                            <select
+                              className="cmd-input"
+                              style={{ fontSize: "12px", padding: "4px 8px" }}
+                              value={m.projectMilestoneId || ""}
+                              onChange={e => handleMilestoneChange(idx, "projectMilestoneId", e.target.value || undefined)}
+                              aria-label="Gắn với mốc thực hiện"
+                            >
+                              <option value="">Không gắn mốc thực hiện</option>
+                              {(finance?.projectMilestones ?? []).map((item) => <option key={item.id} value={item.id}>{item.title}{item.status === "completed" ? " (đã hoàn thành)" : ""}</option>)}
+                            </select>
+                          ) : m.projectMilestoneId ? (
+                            <span style={{ fontSize: "12px", color: "#64748b" }}>Mốc: {finance?.projectMilestones.find((item) => item.id === m.projectMilestoneId)?.title ?? "—"}</span>
+                          ) : null}
 
                           {/* Danh sách chứng từ đính kèm */}
                           {m.attachments && m.attachments.length > 0 && (

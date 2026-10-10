@@ -4,11 +4,12 @@ import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { NotificationsController } from "./notifications.controller.js";
 import { NotificationsService } from "./notifications.service.js";
 import { MailModule } from "../mail/mail.module.js";
+import { DeadlineReminderService } from "./deadline-reminder.service.js";
 
 @Module({
   imports: [AuthModule, MailModule],
   controllers: [NotificationsController],
-  providers: [NotificationsService, PrismaService],
+  providers: [NotificationsService, DeadlineReminderService, PrismaService],
   exports: [NotificationsService]
 })
 export class NotificationsModule {}

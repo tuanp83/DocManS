@@ -1,6 +1,8 @@
 import { currentSubmissionFromEvents, findCurrentSubmission, hasCompletenessCheckForEvent, readCompletenessState, type SubmissionEventLike } from "../proposals-shared/submission-evidence.js";
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { NotificationsService } from "../notifications/notifications.service.js";
+import { label, NOTIFICATION_TYPES, proposalLink, researchManagersInScope, vnDate, type WorkflowEvent } from "../notifications/workflow-events.js";
 // @ts-ignore The runtime package is JavaScript; its TypeScript source entry supplies this contract.
 import { isContextVersionTokenV1, type ContextVersionTokenV1 } from "@rtms/permissions";
 import { readTransactionClockV1 } from "../permissions/authorization-v1.service.js";
@@ -163,8 +165,47 @@ export class ResearchProposalsService {
     private readonly auditLog: AuditLogService,
     private readonly participation: ProposalParticipationService,
     private readonly reviewAccess: ProposalReviewAccessService,
-    private readonly managementOfficers: ProposalManagementOfficerService
+    private readonly managementOfficers: ProposalManagementOfficerService,
+    @Optional() private readonly notifications?: NotificationsService
   ) {}
+
+  /** Thông báo sau khi thao tác đã commit; lỗi thông báo không ảnh hưởng kết quả trả về. */
+  private async notifyAfterCommit(build: () => Promise<WorkflowEvent[]>) {
+    if (!this.notifications) return;
+    try {
+      await this.notifications.dispatch(await build());
+    } catch {
+      // Thông báo là phụ trợ: không làm hỏng thao tác nghiệp vụ đã thành công.
+    }
+  }
+
+  private async submissionEvents(proposalId: string, resubmitted: boolean): Promise<WorkflowEvent[]> {
+    const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { id: true, code: true, title: true, ownerId: true, hostOrganizationUnitId: true, submittedById: true } } as never)) as unknown as { id: string; code: string | null; title: string; ownerId: string; hostOrganizationUnitId: string; submittedById: string | null } | null;
+    if (!proposal) return [];
+    const managers = await researchManagersInScope(this.prisma as never, proposal.hostOrganizationUnitId);
+    const name = label(proposal);
+    return [
+      {
+        type: resubmitted ? NOTIFICATION_TYPES.proposalResubmitted : NOTIFICATION_TYPES.proposalSubmitted,
+        userIds: managers,
+        excludeUserIds: [proposal.ownerId],
+        title: resubmitted ? `Hồ sơ đã được bổ sung: ${proposal.title}` : `Hồ sơ đề xuất mới: ${proposal.title}`,
+        message: resubmitted
+          ? `Chủ nhiệm đã bổ sung và nộp lại hồ sơ ${name}. Vui lòng kiểm tra tính đầy đủ.`
+          : `Hồ sơ ${name} vừa được nộp chính thức. Vui lòng kiểm tra tính đầy đủ của hồ sơ.`,
+        link: proposalLink(proposal.id),
+        metadata: { proposalId: proposal.id }
+      },
+      {
+        type: NOTIFICATION_TYPES.proposalSubmissionReceipt,
+        userIds: [proposal.ownerId],
+        title: resubmitted ? "Đã nộp lại hồ sơ" : "Đã nộp hồ sơ đề xuất",
+        message: `Hồ sơ ${name} đã được ghi nhận ${resubmitted ? "nộp lại" : "nộp chính thức"}. Bạn sẽ nhận thông báo khi có kết quả kiểm tra.`,
+        link: proposalLink(proposal.id),
+        metadata: { proposalId: proposal.id }
+      }
+    ];
+  }
 
   private transactional = false;
 
@@ -216,6 +257,7 @@ export class ResearchProposalsService {
       .map((proposal) =>
         this.toProposalResponse(proposal, actor, participationByProposal.get(proposal.id), reviewAccessByProposal.get(proposal.id), completenessChecked.has(proposal.id), managementOfficerByProposal.get(proposal.id), summaryStatusByProposal.get(proposal.id) ?? null)
       );
+    results = await this.attachProjectClosure(results);
 
     if (query) {
       const kw = query.keyword?.trim().toLowerCase();
@@ -236,7 +278,7 @@ export class ResearchProposalsService {
         }
 
         const disbursementData: any = p.disbursementMetadata || {};
-        const budgetTotal = (p.budgetMetadata as any)?.amount || disbursementData.totalBudget || 500000000;
+        const budgetTotal = Number(disbursementData.totalBudget) || Number((p.budgetMetadata as any)?.approvedAmount) || Number((p.budgetMetadata as any)?.amount) || 0;
         const disbursedTotal = disbursementData.totalDisbursed ?? 0;
         const disbursedPercent = budgetTotal > 0 ? Math.min(100, Math.round((disbursedTotal / budgetTotal) * 100)) : 0;
         
@@ -249,9 +291,9 @@ export class ResearchProposalsService {
         if (query.irb === "pending" && irbStatus === "APPROVED") return false;
 
         const acceptanceData: any = p.acceptanceCouncilMetadata;
-        const acceptanceResult = acceptanceData?.acceptanceMinutes?.resultClassification;
-        const isAcceptanceCompleted = acceptanceResult === "EXCELLENT" || acceptanceResult === "PASSED";
-        const isAcceptanceInProgress = acceptanceData?.status === "approved" && !acceptanceResult;
+        const acceptanceResult = acceptanceData?.evaluationResult?.classification;
+        const isAcceptanceCompleted = acceptanceData?.roundStatus ? acceptanceData.roundStatus === "PASSED" : acceptanceResult === "EXCELLENT" || acceptanceResult === "PASSED";
+        const isAcceptanceInProgress = !!acceptanceData && !isAcceptanceCompleted && !["FAILED", "RETURNED"].includes(acceptanceData?.roundStatus ?? "") && !acceptanceResult;
         
         if (query.acceptance === "completed" && !isAcceptanceCompleted) return false;
         if (query.acceptance === "in_progress" && !isAcceptanceInProgress) return false;
@@ -278,6 +320,34 @@ export class ResearchProposalsService {
     }
 
     return results;
+  }
+
+  /**
+   * Giải ngân và nghiệm thu nay gắn với đề tài. Danh sách đề xuất (trang báo cáo) vẫn đọc các trường
+   * `disbursementMetadata` / `acceptanceCouncilMetadata`, nên lấy số liệu từ đề tài khi đã có đề tài;
+   * đề xuất chưa lập đề tài giữ dữ liệu cũ (sẽ được chuyển sang khi tạo đề tài).
+   */
+  private async attachProjectClosure<T extends { id: string }>(results: T[]): Promise<T[]> {
+    const client = this.prisma as unknown as { approvedProject?: { findMany: (args: unknown) => Promise<any[]> } };
+    if (!results.length || typeof client.approvedProject?.findMany !== "function") return results;
+    const projects = await client.approvedProject.findMany({
+      where: { proposalId: { in: results.map((item) => item.id) } },
+      select: { id: true, proposalId: true, status: true, finance: true, acceptances: { orderBy: { round: "desc" }, take: 1 } }
+    });
+    const byProposal = new Map(projects.map((project) => [project.proposalId, project]));
+    const legacyStatus: Record<string, string> = { SUBMITTED: "PROPOSED", COUNCIL_PROPOSED: "PROPOSED", COUNCIL_ESTABLISHED: "ESTABLISHED", REVISION_REQUIRED: "EVALUATED", REVISION_SUBMITTED: "EVALUATED", PASSED: "EVALUATED", FAILED: "EVALUATED" };
+    return results.map((item) => {
+      const project = byProposal.get(item.id);
+      if (!project) return item;
+      const finance = project.finance;
+      const round = project.acceptances?.[0];
+      return {
+        ...item,
+        project: { id: project.id, status: project.status },
+        disbursementMetadata: finance ? { totalBudget: Number(finance.totalBudget), totalDisbursed: Number(finance.totalDisbursed), totalSettled: Number(finance.totalSettled), settlementStatus: finance.settlementStatus } : null,
+        acceptanceCouncilMetadata: round && round.status !== "RETURNED" ? { status: legacyStatus[round.status] ?? round.status, roundStatus: project.status === "pending_superior_acceptance" ? "PENDING_SUPERIOR" : project.status === "failed" ? "FAILED" : project.status === "accepted" || project.status === "closed" ? (round.status === "FAILED" ? "FAILED" : "PASSED") : round.status, round: round.round, decisionNumber: round.decisionNumber ?? undefined, evaluationResult: round.evaluationResult ?? undefined, resolution: round.resolution ?? undefined } : null
+      };
+    });
   }
 
   async getProposal(actor: SafeUserContext, proposalId: string) {
@@ -427,7 +497,11 @@ export class ResearchProposalsService {
   }
 
   async submitProposal(actor: SafeUserContext, proposalId: string, input: { contextVersion?: unknown } = {}): Promise<any> {
-    if (!this.transactional) return this.mutate(actor, proposalId, input.contextVersion, (service, a) => service.submitProposal(a, proposalId, input));
+    if (!this.transactional) {
+      const result = await this.mutate(actor, proposalId, input.contextVersion, (service, a) => service.submitProposal(a, proposalId, input));
+      await this.notifyAfterCommit(() => this.submissionEvents(proposalId, false));
+      return result;
+    }
     const proposal = await this.findProposal(proposalId);
     this.assertEditableDraft(proposal);
     const pi = this.assertCanMutateProposalDraft(actor, proposal);
@@ -493,7 +567,23 @@ export class ResearchProposalsService {
 
 
   async requestSupplement(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>): Promise<any> {
-    if (!this.transactional) return this.mutate(actor, proposalId, input.contextVersion, (service, a) => service.requestSupplement(a, proposalId, input));
+    if (!this.transactional) {
+      const result = await this.mutate(actor, proposalId, input.contextVersion, (service, a) => service.requestSupplement(a, proposalId, input));
+      await this.notifyAfterCommit(async () => {
+        const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { id: true, code: true, title: true, ownerId: true } } as never)) as unknown as { id: string; code: string | null; title: string; ownerId: string } | null;
+        const request = (await this.prisma.proposalSupplementRequest.findFirst({ where: { proposalId, status: "open" }, orderBy: { requestedAt: "desc" } } as never)) as unknown as { id: string; reason: string; dueDate: Date } | null;
+        if (!proposal) return [];
+        return [{
+          type: NOTIFICATION_TYPES.supplementRequested,
+          userIds: [proposal.ownerId],
+          title: `Yêu cầu bổ sung hồ sơ: ${proposal.title}`,
+          message: `Hồ sơ ${label(proposal)} cần được bổ sung trước ${vnDate(request?.dueDate)}.${request?.reason ? ` Nội dung: ${request.reason}` : ""}`,
+          link: proposalLink(proposal.id),
+          metadata: { proposalId: proposal.id, supplementRequestId: request?.id ?? null }
+        }];
+      });
+      return result;
+    }
     const proposal = await this.findProposal(proposalId);
     await this.assertCanRequestSupplement(actor, proposal);
     if (!["submitted", "resubmitted"].includes(proposal.status)) {
@@ -559,7 +649,11 @@ export class ResearchProposalsService {
   }
 
   async resubmitProposal(actor: SafeUserContext, proposalId: string, input: { contextVersion?: unknown } = {}): Promise<any> {
-    if (!this.transactional) return this.mutate(actor, proposalId, input.contextVersion, (service, a) => service.resubmitProposal(a, proposalId, input));
+    if (!this.transactional) {
+      const result = await this.mutate(actor, proposalId, input.contextVersion, (service, a) => service.resubmitProposal(a, proposalId, input));
+      await this.notifyAfterCommit(() => this.submissionEvents(proposalId, true));
+      return result;
+    }
     const proposal = await this.findProposal(proposalId);
     if (proposal.status !== "supplement_requested") throw new BadRequestException({ message: "Hồ sơ không đang chờ bổ sung." });
     const pi = this.assertCanResubmitSupplement(actor, proposal);

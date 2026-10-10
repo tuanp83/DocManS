@@ -34,6 +34,7 @@ describe("acceptance council rules", () => {
 
   it("a failing total cannot be concluded as approved", () => {
     assert.throws(() => readResolution("approved", "FAILED"), BadRequestException);
+    assert.throws(() => readResolution("revise", "FAILED"), BadRequestException, "dưới 70 điểm không được kết luận hoàn thiện");
     assert.equal(readResolution(undefined, "FAILED"), "rejected");
     assert.equal(readResolution(undefined, "PASSED"), "approved");
   });

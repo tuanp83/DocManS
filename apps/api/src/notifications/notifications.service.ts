@@ -1,67 +1,88 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, Optional } from "@nestjs/common";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { MailService } from "../mail/mail.service.js";
+import { recipientsOf, renderNotificationEmail, type WorkflowEvent } from "./workflow-events.js";
+
+type NotificationInput = { userId: string; title: string; message: string; type: string; link?: string; metadata?: any; dedupKey?: string };
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mailService: MailService
+    @Optional() private readonly mailService?: MailService
   ) {}
 
-  async createNotification(data: { userId: string; title: string; message: string; type: string; link?: string; metadata?: any }) {
-    const notification = await (this.prisma as any).userNotification.create({
-      data: {
-        userId: data.userId,
-        title: data.title,
-        message: data.message,
-        type: data.type,
-        link: data.link,
-        metadata: data.metadata || {}
-      }
-    });
-
-function escapeHtml(unsafe: string) {
-  return unsafe
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
+  /** Một thông báo cho một người; email gửi nền, không chặn và không làm hỏng thao tác gọi tới. */
+  async createNotification(data: NotificationInput) {
     try {
-      const user = await (this.prisma as any).user.findUnique({
-        where: { id: data.userId }
-      });
-      if (user && user.credentialEmail) {
-        const safeTitle = escapeHtml(data.title);
-        const safeMessage = escapeHtml(data.message);
-        
-        let fullLink = data.link || "";
-        if (fullLink && !fullLink.startsWith("http")) {
-          const baseUrl = process.env.ACCOUNT_LOGIN_URL ? new URL(process.env.ACCOUNT_LOGIN_URL).origin : "http://localhost:3000";
-          fullLink = baseUrl + (fullLink.startsWith("/") ? "" : "/") + fullLink;
-        }
-
-        const emailHtml = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #2c3e50;">Thông báo từ DocManS</h2>
-            <p><strong>${safeTitle}</strong></p>
-            <p>${safeMessage}</p>
-            ${fullLink ? `<p><a href="${fullLink}" style="display: inline-block; padding: 10px 15px; background-color: #3498db; color: white; text-decoration: none; border-radius: 4px;">Xem chi tiết</a></p>` : ""}
-            <hr style="border: none; border-top: 1px solid #eee; margin-top: 20px;" />
-            <p style="font-size: 12px; color: #7f8c8d;">Hệ thống Quản lý Nghiên cứu Khoa học (DocManS)<br/>Học viện Quân Y</p>
-          </div>
-        `;
-        await this.mailService.sendMail(user.credentialEmail, data.title, emailHtml);
-      }
-    } catch (e) {
-      console.error("Failed to send email notification", e);
+      const [created] = await this.persist([data]);
+      return created ?? null;
+    } catch (error) {
+      this.logger.error(`Không ghi được thông báo: ${(error as Error)?.message ?? error}`);
+      return null;
     }
+  }
 
-    return notification;
+  /**
+   * Phát các sự kiện nghiệp vụ đã commit. Người nhận không hoạt động bị bỏ qua; trùng `dedupKey` với thông
+   * báo đã có của cùng người nhận thì không tạo lại (dùng cho nhắc hạn chạy định kỳ). Không ném lỗi.
+   */
+  async dispatch(events: WorkflowEvent[]): Promise<number> {
+    const inputs: NotificationInput[] = [];
+    for (const event of events) {
+      for (const userId of recipientsOf(event)) {
+        inputs.push({ userId, title: event.title, message: event.message, type: event.type, link: event.link, metadata: event.metadata ?? {}, dedupKey: event.dedupKey });
+      }
+    }
+    if (!inputs.length) return 0;
+    try {
+      return (await this.persist(inputs)).length;
+    } catch (error) {
+      this.logger.error(`Không thể ghi thông báo: ${(error as Error)?.message ?? error}`);
+      return 0;
+    }
+  }
+
+  private async persist(inputs: NotificationInput[]) {
+    const prisma = this.prisma as any;
+    const userIds = [...new Set(inputs.map((input) => input.userId))];
+    const users = typeof prisma.user?.findMany === "function"
+      ? ((await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, status: true, credentialEmail: true } })) as Array<{ id: string; status: string; credentialEmail: string | null }>)
+      : userIds.map((id) => ({ id, status: "active", credentialEmail: null }));
+    const byId = new Map(users.map((user) => [user.id, user]));
+    const created: any[] = [];
+    for (const input of inputs) {
+      const user = byId.get(input.userId);
+      if (!user || user.status !== "active") continue;
+      if (input.dedupKey && typeof prisma.userNotification.findFirst === "function") {
+        const existing = await prisma.userNotification.findFirst({ where: { userId: input.userId, dedupKey: input.dedupKey }, select: { id: true } });
+        if (existing) continue;
+      }
+      try {
+        const notification = await prisma.userNotification.create({
+          data: { userId: input.userId, title: input.title, message: input.message, type: input.type, link: input.link, metadata: input.metadata || {}, ...(input.dedupKey ? { dedupKey: input.dedupKey } : {}) }
+        });
+        created.push(notification);
+        if (user.credentialEmail) this.sendEmail(user.credentialEmail, input);
+      } catch (error) {
+        // Hai tiến trình nhắc hạn chạy cùng lúc: chỉ một bản ghi thắng nhờ chỉ mục duy nhất (user_id, dedup_key).
+        if ((error as { code?: string })?.code === "P2002") continue;
+        // Lỗi với một người nhận không chặn những người còn lại.
+        this.logger.error(`Không ghi được thông báo cho ${input.userId}: ${(error as Error)?.message ?? error}`);
+      }
+    }
+    return created;
+  }
+
+  private sendEmail(to: string, input: NotificationInput) {
+    if (!this.mailService) return;
+    const html = renderNotificationEmail(input);
+    void Promise.resolve()
+      .then(() => this.mailService!.sendMail(to, input.title, html))
+      .catch((error) => this.logger.error(`Không gửi được email thông báo: ${(error as Error)?.message ?? error}`));
   }
 
   async listMyNotifications(actor: SafeUserContext, query?: { limit?: string; unreadOnly?: string }) {

@@ -47,12 +47,10 @@ import {
 import { ProposalEvaluationPanel } from "@/components/research-proposals/proposal-evaluation-panel";
 import { exportCouncilDecisionWord, exportCouncilMinutesWord } from "@/lib/word-export";
 import { OfficialCouncilDecisionModal } from "@/components/research-proposals/official-council-decision-modal";
-import { AcceptanceCouncilModal } from "@/components/research-proposals/acceptance-council-modal";
-import { MilestoneDisbursementModal } from "@/components/projects/milestone-disbursement-modal";
 import { IRBApprovalModal } from "@/components/research-proposals/irb-approval-modal";
 import { ProposalAuditTimeline } from "@/components/research-proposals/proposal-audit-timeline";
 import { useSession } from "@/components/auth/session-provider";
-import { HeartPulse, DollarSign } from "lucide-react";
+import { HeartPulse } from "lucide-react";
 
 type ActiveTab = "progress" | "council" | "minutes" | "irb" | "audit";
 
@@ -90,8 +88,6 @@ export function ProposalReviewsWorkspace() {
   const [isDecisionModalOpen, setIsDecisionModalOpen] = useState(false);
 
   // New Modals for Acceptance Council, Disbursement, and IRB
-  const [isAcceptanceModalOpen, setIsAcceptanceModalOpen] = useState(false);
-  const [isDisbursementModalOpen, setIsDisbursementModalOpen] = useState(false);
   const [isIRBModalOpen, setIsIRBModalOpen] = useState(false);
   const [modalTargetProposal, setModalTargetProposal] = useState<ResearchProposal | null>(null);
 
@@ -564,33 +560,17 @@ export function ProposalReviewsWorkspace() {
                   </span>
                 </div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    className="button"
-                    onClick={() => {
-                      setModalTargetProposal(selectedProposal);
-                      setIsAcceptanceModalOpen(true);
-                    }}
-                    style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px", background: "#059669", color: "#ffffff" }}
-                    title="Quản lý Hội đồng Nghiệm thu & Chấm điểm 4 tiêu chí chuẩn Quân đội"
-                  >
-                    <Award size={14} /> Nghiệm thu kết quả (HĐNT)
-                  </button>
-
-                  {/* IRB button moved to IRB tab */}
-
-                  <button
-                    type="button"
-                    className="button secondary"
-                    onClick={() => {
-                      setModalTargetProposal(selectedProposal);
-                      setIsDisbursementModalOpen(true);
-                    }}
-                    style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                    title="Giám sát Giải ngân & Quyết toán theo 3 đợt mốc tài chính"
-                  >
-                    <DollarSign size={14} /> Giải ngân & Quyết toán
-                  </button>
+                  {/* Nghiệm thu, giải ngân, thanh lý gắn với đề tài thực hiện (trang đề tài). */}
+                  {selectedProposal.project?.id ? (
+                    <Link
+                      className="button"
+                      href={`/projects/${selectedProposal.project.id}`}
+                      style={{ fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px", background: "#059669", color: "#ffffff" }}
+                      title="Nghiệm thu, giải ngân, thanh lý và đóng đề tài được quản lý trên trang đề tài"
+                    >
+                      <Award size={14} /> Đề tài: nghiệm thu &amp; kinh phí
+                    </Link>
+                  ) : null}
 
                   <button
                     type="button"
@@ -883,36 +863,6 @@ export function ProposalReviewsWorkspace() {
           proposal={selectedProposal}
           isOpen={isDecisionModalOpen}
           onClose={() => setIsDecisionModalOpen(false)}
-        />
-      )}
-
-      {/* Modal Hội đồng Nghiệm thu & Đánh giá kết quả */}
-      {modalTargetProposal && isAcceptanceModalOpen && (
-        <AcceptanceCouncilModal
-          isOpen={isAcceptanceModalOpen}
-          onClose={() => {
-            setIsAcceptanceModalOpen(false);
-            setModalTargetProposal(null);
-          }}
-          proposal={modalTargetProposal}
-          currentUserRole={account?.systemRole}
-          currentUserUsername={account?.username}
-          onSuccess={() => void loadData()}
-        />
-      )}
-
-      {/* Modal Giám sát Giải ngân & Quyết toán theo mốc */}
-      {modalTargetProposal && isDisbursementModalOpen && (
-        <MilestoneDisbursementModal
-          isOpen={isDisbursementModalOpen}
-          onClose={() => {
-            setIsDisbursementModalOpen(false);
-            setModalTargetProposal(null);
-          }}
-          proposal={modalTargetProposal}
-          currentUserRole={account?.systemRole}
-          currentUserUsername={account?.username}
-          onSuccess={() => void loadData()}
         />
       )}
 

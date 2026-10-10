@@ -215,51 +215,7 @@ export class ProposalEvaluationsController {
     return this.decisions.recordCouncilMinutes(request.currentUser!, id, body);
   }
 
-  // Acceptance Council Workflow (Nghiệm thu & Đánh giá kết quả) ----------------
-  @Post(":id/acceptance-council/propose")
-  async proposeAcceptanceCouncil(
-    @Req() request: RequestWithCurrentUser,
-    @Param("id") id: string,
-    @Body() body: Record<string, unknown>
-  ) {
-    return this.decisions.proposeAcceptanceCouncil(request.currentUser!, id, body);
-  }
-
-  @Post(":id/acceptance-council/approve")
-  async approveAcceptanceCouncil(
-    @Req() request: RequestWithCurrentUser,
-    @Param("id") id: string,
-    @Body() body: Record<string, unknown>
-  ) {
-    return this.decisions.approveAcceptanceCouncil(request.currentUser!, id, body);
-  }
-
-  @Post(":id/acceptance-council/minutes")
-  async recordAcceptanceMinutes(
-    @Req() request: RequestWithCurrentUser,
-    @Param("id") id: string,
-    @Body() body: Record<string, unknown>
-  ) {
-    return this.decisions.recordAcceptanceMinutes(request.currentUser!, id, body);
-  }
-
-  // Milestone Disbursement & Settlement (Giám sát giải ngân & quyết toán theo mốc)
-  @Get(":id/disbursement")
-  async getDisbursement(
-    @Req() request: RequestWithCurrentUser,
-    @Param("id") id: string
-  ) {
-    return this.decisions.getDisbursement(request.currentUser!, id);
-  }
-
-  @Post(":id/disbursement")
-  async updateDisbursement(
-    @Req() request: RequestWithCurrentUser,
-    @Param("id") id: string,
-    @Body() body: Record<string, unknown>
-  ) {
-    return this.decisions.updateDisbursement(request.currentUser!, id, body);
-  }
+  // Nghiệm thu và giải ngân gắn với đề tài: /api/v1/projects/:id/acceptance, /finance (approved-projects).
 
   // Biomedical Research Ethics Council / IRB (Hội đồng Đạo đức Y sinh) -----------
   @Get(":id/irb")

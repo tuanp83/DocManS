@@ -2,7 +2,7 @@ import { getApiBaseUrl } from "@/lib/session";
 import { isViewerAuthorizationV1, type PermissionActionV1, type ViewerAuthorizationV1 } from "@rtms/permissions";
 
 export type ProjectRecord = {
-  id: string; proposalId: string; title: string; status: string; startDate: string | null; endDate: string | null;
+  id: string; code?: string | null; proposalId: string; title: string; status: string; startDate: string | null; endDate: string | null;
   scope: Record<string, unknown>; plan: Record<string, unknown> | null;
   hostOrganizationUnit?: { name: string }; officer?: { officerUserId: string; officerName?: string | null } | null;
   members: Array<{ id: string; name: string; participationRole: string; status: string; userId?: string }>;
@@ -13,6 +13,67 @@ export type ProjectRecord = {
   history: Array<{ id: string; action: string; reason?: string; createdAt: string }>;
   overdue: boolean; approaching: boolean; nearestDeadline: string | null; viewerAuthorization: ViewerAuthorizationV1;
   progressSummary?: ProjectProgressSummary;
+  closedAt?: string | null;
+  closureNote?: string | null;
+  acceptances?: ProjectAcceptance[];
+  finance?: { totalBudget: number; totalDisbursed: number; totalSettled: number; settlementStatus: string; version: number; updatedAt: string | null } | null;
+  liquidation?: ProjectLiquidation | null;
+  /** Cấp đề tài (academy-level / ministry-level / national-level). */
+  level?: string | null;
+  products?: ProjectProduct[];
+  superiorAcceptance?: ProjectSuperiorAcceptance | null;
+};
+
+export type ProductPanelMember = { profileId: string; fullName: string; academicTitle?: string; unit?: string; userId?: string; role: "LEADER" | "MEMBER" };
+export type ProjectProduct = {
+  id: string; position: number; title: string; productForm: number; requirements: string | null; milestoneId: string | null; status: string; statusLabel: string;
+  submission: { note?: string; evidenceFileIds?: string[]; submittedAt?: string } | null;
+  reviews: Array<{ id: string; round: number; status: string; panelMembers: ProductPanelMember[]; reviewDate: string | null; location: string | null; result: "PASSED" | "FAILED" | null; conclusion: string | null; minutesFileIds: string[]; formedBy: string | null; recordedBy: string | null; formedAt: string | null; concludedAt: string | null }>;
+};
+export type SuperiorChecklistItem = { id?: string; title: string; done: boolean; fileIds: string[]; note?: string | null };
+export type ProjectSuperiorAcceptance = {
+  level: string; status: "PREPARING" | "SENT" | "PASSED" | "FAILED"; facilityAcceptedOn: string | null; dueDate: string | null; daysLeft: number | null;
+  checklist: SuperiorChecklistItem[]; letterNumber: string | null; letterDate: string | null; recipient: string | null; letterFileIds: string[];
+  sentAt: string | null; sentBy: string | null; sentLate: boolean; result: "PASSED" | "FAILED" | null; resultDecisionNumber: string | null; resultDate: string | null;
+  resultNote: string | null; resultFileIds: string[]; resultRecordedBy: string | null;
+};
+export const PROJECT_LEVEL_LABELS: Record<string, string> = { "academy-level": "Cấp Học viện", "ministry-level": "Cấp Bộ Quốc phòng", "national-level": "Cấp Nhà nước" };
+
+export type AcceptanceMemberRole = "CHAIRMAN" | "SECRETARY" | "REVIEWER_1" | "REVIEWER_2" | "MEMBER";
+export type AcceptanceCouncilMember = { profileId: string; fullName: string; academicTitle?: string; unit?: string; userId?: string; role: AcceptanceMemberRole };
+export type AcceptanceEvaluationResult = {
+  reportScore: number; scientificProductsScore: number; trainingProductsScore: number; militaryMedicalPracticalScore: number;
+  totalScore: number; classification: "EXCELLENT" | "PASSED" | "FAILED"; assessmentComments: string;
+};
+export type AcceptanceDossier = { finalReportSummary?: string; products?: string; selfAssessment?: string; evidenceFileIds?: string[]; submittedAt?: string; legacy?: boolean };
+export type ProjectAcceptance = {
+  id: string; round: number; status: string; statusLabel: string; dossier: AcceptanceDossier; revisionDossier: AcceptanceDossier | null; returnReason: string | null;
+  councilType: "FACILITY" | "OFFICIAL" | null; councilMembers: AcceptanceCouncilMember[]; meetingDate: string | null; meetingLocation: string | null; tentativeAgenda: string | null;
+  decisionNumber: string | null; decisionDate: string | null; evaluationResult: AcceptanceEvaluationResult | null; resolution: "approved" | "revise" | "rejected" | null;
+  minutesNotes: string | null; revisionNote: string | null; legacy: boolean; submittedBy: string | null; establishedBy: string | null; minutesRecordedBy: string | null;
+  submittedAt: string | null; councilProposedAt: string | null; establishedAt: string | null; evaluatedAt: string | null; completedAt: string | null;
+};
+export type ProjectLiquidation = {
+  status: "DRAFT" | "APPROVED"; outcome: "accepted" | "failed"; liquidationNumber: string | null; liquidationDate: string | null;
+  approvedBudget: number; totalDisbursed: number; totalSettled: number; recoveredAmount: number; outstanding: number;
+  productsHandedOver: string | null; notes: string | null; evidenceFileIds: string[]; preparedBy: string | null; preparedAt: string | null; approvedBy: string | null; approvedAt: string | null;
+};
+export type CouncilCandidate = { profileId: string; fullName: string; academicTitle: string; unit: string; userId: string | null; isConflicted: boolean; conflictReason: string | null };
+
+// Kinh phí, giải ngân theo đợt (gắn với đề tài) --------------------------------------------------
+export type MilestoneAttachment = { id: string; fileName: string; fileSize?: number; uploadedAt: string; uploadedByName?: string };
+export type DisbursementMilestone = {
+  id: string; name: string; percentage: number; expectedAmount: number; disbursedAmount: number; status: "PENDING" | "DISBURSED" | "SETTLED";
+  disbursedDate?: string; settledDate?: string; evidenceNotes?: string; attachments?: MilestoneAttachment[]; projectMilestoneId?: string;
+};
+export type DisbursementCostItem = { code: string; name: string; allocatedAmount: number; spentAmount: number; settledAmount: number };
+export type DisbursementMetadata = {
+  totalBudget: number; totalDisbursed: number; totalSettled: number; settlementStatus: "PENDING" | "PARTIALLY_SETTLED" | "COMPLETED";
+  milestones: DisbursementMilestone[]; costItems: DisbursementCostItem[]; notes?: string; lastUpdatedBy?: string; lastUpdatedAt?: string; version: number;
+};
+export type ProjectFinanceResponse = {
+  projectId: string; disbursement: DisbursementMetadata; projectMilestones: Array<{ id: string; title: string; dueDate: string | null; status: string }>;
+  canManage: boolean; manageDeniedReason: string | null; contextVersion: unknown;
 };
 
 export type HealthLevel = "green" | "amber" | "red";
@@ -48,7 +109,8 @@ export const PROJECT_STATUS_LABELS: Record<string, string> = {
   preparing: "Chuẩn bị triển khai",
   executing: "Đang thực hiện",
   paused: "Tạm dừng",
-  pending_acceptance: "Chờ nghiệm thu",
+  pending_acceptance: "Chờ nghiệm thu cơ sở",
+  pending_superior_acceptance: "Đã nghiệm thu cơ sở, chờ cấp trên nghiệm thu",
   accepted: "Đã nghiệm thu",
   failed: "Không đạt",
   closed: "Đã đóng",
@@ -61,6 +123,8 @@ export const PROJECT_STATUS_LABELS: Record<string, string> = {
   ready_for_head_decision: "Chờ lãnh đạo quyết định",
   approved: "Đã phê duyệt",
   rejected: "Từ chối",
+  DRAFT: "Dự thảo",
+  APPROVED: "Đã phê duyệt",
   open: "Đang mở",
   completed: "Hoàn thành"
 };
@@ -114,5 +178,11 @@ export async function uploadProjectFile(project: ProjectRecord, file: File, purp
   return body.file as { id: string; fileName: string };
 }
 
+export async function getProjectFinance(id: string) { return json<ProjectFinanceResponse>(`/projects/${id}/finance`); }
+export async function updateProjectFinance(id: string, body: { milestones: DisbursementMilestone[]; costItems: DisbursementCostItem[]; settlementStatus: DisbursementMetadata["settlementStatus"]; notes: string; financeVersion: number; contextVersion: unknown }) {
+  return json<{ projectId: string; disbursement: DisbursementMetadata }>(`/projects/${id}/finance`, { method: "PUT", body: JSON.stringify(body) });
+}
+export async function acceptanceCandidates(id: string) { return (await json<{ candidates: CouncilCandidate[] }>(`/projects/${id}/acceptance/candidates`)).candidates; }
+
 export function projectFileUrl(fileId: string) { return `${getApiBaseUrl()}/files/${fileId}/download`; }
-export async function listProjectFiles(id: string) { return (await json<{ files: Array<{ id: string; fileName: string; uploadedById: string }> }>(`/files?relatedEntityType=approved_project&relatedEntityId=${encodeURIComponent(id)}`)).files; }
+export async function listProjectFiles(id: string) { return (await json<{ files: Array<{ id: string; fileName: string; uploadedById: string; filePurpose?: string }> }>(`/files?relatedEntityType=approved_project&relatedEntityId=${encodeURIComponent(id)}`)).files; }

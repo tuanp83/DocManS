@@ -152,7 +152,8 @@ export function ProgressReportPanel() {
       }
 
       // Dữ liệu Tài chính & Giải ngân
-      const budgetTotal = proposal.budgetMetadata?.amount || proposal.disbursementMetadata?.totalBudget || 500000000;
+      // Kinh phí do máy chủ xác định (theo đề tài khi đã lập đề tài); không dùng số mặc định giả.
+      const budgetTotal = Number(proposal.disbursementMetadata?.totalBudget) || Number((proposal.budgetMetadata as { approvedAmount?: number } | undefined)?.approvedAmount) || Number(proposal.budgetMetadata?.amount) || 0;
       const disbursedTotal = proposal.disbursementMetadata?.totalDisbursed ?? 0;
       const disbursedPercent = budgetTotal > 0 ? Math.min(100, Math.round((disbursedTotal / budgetTotal) * 100)) : 0;
 
@@ -166,8 +167,10 @@ export function ProgressReportPanel() {
       const acceptanceEvaluation = acceptanceData?.evaluationResult;
       const acceptanceScore = acceptanceEvaluation?.totalScore;
       const acceptanceResult = acceptanceEvaluation?.classification;
-      const isAcceptanceCompleted = acceptanceResult === "EXCELLENT" || acceptanceResult === "PASSED";
-      const isAcceptanceInProgress = (acceptanceData?.status === "ESTABLISHED" || acceptanceData?.status === "approved") && !acceptanceResult;
+      // Đề tài đã lập: dùng trạng thái vòng nghiệm thu (roundStatus) — "hoàn thiện" chưa phải đã nghiệm thu.
+      const roundStatus: string | undefined = acceptanceData?.roundStatus;
+      const isAcceptanceCompleted = roundStatus ? roundStatus === "PASSED" : acceptanceResult === "EXCELLENT" || acceptanceResult === "PASSED";
+      const isAcceptanceInProgress = roundStatus ? !["PASSED", "FAILED", "RETURNED"].includes(roundStatus) : (acceptanceData?.status === "ESTABLISHED" || acceptanceData?.status === "approved") && !acceptanceResult;
 
       return {
         ...proposal,

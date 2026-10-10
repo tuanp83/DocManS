@@ -474,17 +474,18 @@ function createObjectStorage() {
   };
 }
 
-function createServices() {
+function createServices(options = {}) {
   const prisma = createPrisma();
+  const notifications = options.notifications;
   const auditLog = createAuditLog();
   const participation = new ProposalParticipationService(prisma);
   const reviewAccess = new ProposalReviewAccessService(prisma);
   const objectStorage = createObjectStorage();
 
-  const assignments = new ProposalReviewAssignmentsService(prisma, auditLog, participation, reviewAccess);
+  const assignments = new ProposalReviewAssignmentsService(prisma, auditLog, participation, reviewAccess, notifications);
   const reviews = new ProposalReviewsService(prisma, auditLog, reviewAccess, participation);
   const summaries = new ProposalEvaluationSummaryService(prisma, auditLog, assignments, reviews, participation, reviewAccess);
-  const decisions = new ProposalDecisionsService(prisma, auditLog, participation, reviewAccess, assignments, reviews, summaries);
+  const decisions = new ProposalDecisionsService(prisma, auditLog, participation, reviewAccess, assignments, reviews, summaries, notifications);
   const officerService = new ProposalManagementOfficerService(prisma);
 
   return {
@@ -492,7 +493,7 @@ function createServices() {
     auditLog,
     objectStorage,
     intakeService: new ProposalIntakePeriodsService(prisma, auditLog),
-    proposalService: new ResearchProposalsService(prisma, auditLog, participation, reviewAccess, officerService),
+    proposalService: new ResearchProposalsService(prisma, auditLog, participation, reviewAccess, officerService, notifications),
     filesService: new FilesService(prisma, objectStorage, auditLog, participation, reviewAccess, {
       maxFileSizeBytes: 1024 * 1024,
       allowedExtensions: [".doc", ".docx", ".pdf", ".xls", ".xlsx"]
@@ -1585,5 +1586,53 @@ describe("Evidence binding (mang từ thanhdotien278/DocManS): submission round 
     store.proposals.find((item) => item.id === proposal.id).councilMetadata.status = "submitted";
     await assert.rejects(() => services.decisions.approveCouncil(leadershipUser, proposal.id, {}), /đã chốt hoặc đã trình/);
     assert.equal(store.reviewAssignments.length, 6);
+  });
+});
+
+describe("Thông báo các sự kiện chính của hồ sơ đề xuất", () => {
+  function spy() {
+    const events = [];
+    return { events, dispatch: async (batch) => { events.push(...batch); return batch.length; } };
+  }
+
+  it("nộp hồ sơ: chủ nhiệm nhận biên nhận; mời phản biện: người được phân công nhận lời mời sau khi phân công đã ghi", async () => {
+    const notifications = spy();
+    const services = createServices({ notifications });
+    const proposal = await createSubmittedProposal(services);
+    const receipt = notifications.events.find((event) => event.type === "PROPOSAL_SUBMISSION_RECEIPT");
+    assert.deepEqual(receipt.userIds, [piUser.id]);
+    assert.ok(notifications.events.some((event) => event.type === "PROPOSAL_SUBMITTED" && event.excludeUserIds.includes(piUser.id)));
+
+    const assignment = await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: reviewerUser.id });
+    const invitation = notifications.events.find((event) => event.type === "INVITATION_TO_REVIEW");
+    assert.deepEqual(invitation.userIds, [reviewerUser.id]);
+    assert.equal(invitation.metadata.assignmentId, assignment.id);
+    assert.equal(invitation.link, "/invitation-to-review");
+  });
+
+  it("phân công bị từ chối thì không có lời mời", async () => {
+    const notifications = spy();
+    const services = createServices({ notifications });
+    const proposal = await createSubmittedProposal(services);
+    notifications.events.length = 0;
+    await assert.rejects(() => services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: piUser.id }));
+    assert.equal(notifications.events.filter((event) => event.type === "INVITATION_TO_REVIEW").length, 0);
+  });
+
+  it("lãnh đạo quyết định: chủ nhiệm và thành viên nhận kết quả; lỗi gửi thông báo không làm hỏng quyết định", async () => {
+    const notifications = spy();
+    const services = createServices({ notifications });
+    const { proposal } = await createProposalReadyForApproval(services);
+    notifications.events.length = 0;
+    const result = await services.decisions.decide(leadershipUser, proposal.id, "rejected", { note: "Chưa đủ cơ sở khoa học.", packageRevision: packageRevision(services, proposal.id) });
+    assert.equal(result.proposalStatus, "rejected");
+    const decision = notifications.events.find((event) => event.type === "PROPOSAL_DECISION");
+    assert.ok(decision.userIds.includes(piUser.id));
+    assert.match(decision.message, /Chưa đủ cơ sở khoa học/);
+
+    const failing = createServices({ notifications: { dispatch: async () => { throw new Error("SMTP down"); } } });
+    const ready = await createProposalReadyForApproval(failing);
+    const approved = await failing.decisions.decide(leadershipUser, ready.proposal.id, "approved", { packageRevision: packageRevision(failing, ready.proposal.id) });
+    assert.equal(approved.proposalStatus, "approved");
   });
 });

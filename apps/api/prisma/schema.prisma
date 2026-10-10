@@ -74,6 +74,18 @@ model User {
   createdProjectPlanBaselines         ProjectPlanBaseline[]      @relation("ProjectPlanBaselineCreator")
   milestoneProgressUpdates            ProjectMilestoneProgressUpdate[] @relation("ProjectMilestoneProgressAuthor")
   projectHealthAssessments            ProjectHealthAssessment[]  @relation("ProjectHealthAssessor")
+  submittedProjectAcceptances         ProjectAcceptance[]        @relation("ProjectAcceptanceSubmitter")
+  establishedProjectAcceptances       ProjectAcceptance[]        @relation("ProjectAcceptanceEstablisher")
+  recordedProjectAcceptances          ProjectAcceptance[]        @relation("ProjectAcceptanceRecorder")
+  updatedProjectFinances              ProjectFinance[]           @relation("ProjectFinanceUpdater")
+  preparedProjectLiquidations         ProjectLiquidation[]       @relation("ProjectLiquidationPreparer")
+  approvedProjectLiquidations         ProjectLiquidation[]       @relation("ProjectLiquidationApprover")
+  closedApprovedProjects              ApprovedProject[]          @relation("ApprovedProjectCloser")
+  createdProjectProducts              ProjectProduct[]           @relation("ProjectProductCreator")
+  formedProductReviews                ProjectProductReview[]     @relation("ProductReviewFormer")
+  recordedProductReviews              ProjectProductReview[]     @relation("ProductReviewRecorder")
+  sentSuperiorAcceptances             ProjectSuperiorAcceptance[] @relation("SuperiorAcceptanceSender")
+  recordedSuperiorAcceptances         ProjectSuperiorAcceptance[] @relation("SuperiorAcceptanceRecorder")
 
   supervisedStudentProjects StudentResearchProject[]  @relation("ProjectSupervisor")
   managedStudentProjects    StudentResearchProject[]  @relation("ProjectOfficer")
@@ -777,9 +789,12 @@ model UserNotification {
   link      String?
   isRead    Boolean  @default(false) @map("is_read")
   metadata  Json?
+  /// Khoá chống gửi trùng (ví dụ nhắc hạn báo cáo theo từng mốc thời gian); NULL = không chống trùng.
+  dedupKey  String?  @map("dedup_key")
   createdAt DateTime @default(now()) @map("created_at")
   user      User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, dedupKey])
   @@index([userId, isRead, createdAt])
   @@map("user_notifications")
 }
@@ -839,6 +854,10 @@ model ApprovedProject {
   confirmedById                 String?                    @map("confirmed_by_id")
   confirmedBy                   User?                      @relation("ApprovedProjectConfirmer", fields: [confirmedById], references: [id], onDelete: Restrict)
   confirmedAt                   DateTime?                  @map("confirmed_at")
+  closedById                    String?                    @map("closed_by_id")
+  closedBy                      User?                      @relation("ApprovedProjectCloser", fields: [closedById], references: [id], onDelete: Restrict)
+  closedAt                      DateTime?                  @map("closed_at")
+  closureNote                   String?                    @map("closure_note")
   createdAt                     DateTime                   @default(now()) @map("created_at")
   updatedAt                     DateTime                   @updatedAt @map("updated_at")
   members                       ApprovedProjectMember[]
@@ -851,6 +870,14 @@ model ApprovedProject {
   baselines                     ProjectPlanBaseline[]
   progressUpdates               ProjectMilestoneProgressUpdate[]
   healthAssessments             ProjectHealthAssessment[]
+  acceptances                   ProjectAcceptance[]
+  finance                       ProjectFinance?
+  disbursements                 ProjectDisbursement[]
+  costItems                     ProjectCostItem[]
+  liquidation                   ProjectLiquidation?
+  products                      ProjectProduct[]
+  productReviews                ProjectProductReview[]
+  superiorAcceptance            ProjectSuperiorAcceptance?
 
   @@index([hostOrganizationUnitId, status])
   @@index([status, endDate])
@@ -924,6 +951,8 @@ model ProjectMilestone {
   updatedAt           DateTime               @updatedAt @map("updated_at")
   checkpoints         ProjectCheckpoint[]
   progressUpdates     ProjectMilestoneProgressUpdate[]
+  disbursements      ProjectDisbursement[]
+  products           ProjectProduct[]
 
   @@index([projectId, dueDate])
   @@index([responsibleMemberId])
@@ -1150,6 +1179,223 @@ model ProjectHealthAssessment {
 
   @@index([projectId, createdAt])
   @@map("project_health_assessments")
+}
+
+/// Một vòng nghiệm thu của đề tài: hồ sơ của chủ nhiệm → hội đồng → biên bản → kết luận.
+/// Mỗi đề tài chỉ có tối đa một vòng đang mở (chỉ mục duy nhất có điều kiện trong migration).
+model ProjectAcceptance {
+  id                   String          @id @default(uuid())
+  projectId            String          @map("project_id")
+  project              ApprovedProject @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  round                Int
+  status               String
+  dossier              Json
+  revisionDossier      Json?           @map("revision_dossier")
+  returnReason         String?         @map("return_reason")
+  councilType          String?         @map("council_type")
+  councilMembers       Json?           @map("council_members")
+  meetingDate          DateTime?       @map("meeting_date") @db.Date
+  meetingLocation      String?         @map("meeting_location")
+  tentativeAgenda      String?         @map("tentative_agenda")
+  decisionNumber       String?         @unique @map("decision_number")
+  decisionDate         DateTime?       @map("decision_date") @db.Date
+  evaluationResult     Json?           @map("evaluation_result")
+  resolution           String?
+  minutesNotes         String?         @map("minutes_notes")
+  revisionNote         String?         @map("revision_note")
+  legacySource         Json?           @map("legacy_source")
+  submittedById        String          @map("submitted_by_id")
+  submittedBy          User            @relation("ProjectAcceptanceSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+  establishedById      String?         @map("established_by_id")
+  establishedBy        User?           @relation("ProjectAcceptanceEstablisher", fields: [establishedById], references: [id], onDelete: Restrict)
+  minutesRecordedById  String?         @map("minutes_recorded_by_id")
+  minutesRecordedBy    User?           @relation("ProjectAcceptanceRecorder", fields: [minutesRecordedById], references: [id], onDelete: Restrict)
+  submittedAt          DateTime        @map("submitted_at")
+  councilProposedAt    DateTime?       @map("council_proposed_at")
+  establishedAt        DateTime?       @map("established_at")
+  evaluatedAt          DateTime?       @map("evaluated_at")
+  completedAt          DateTime?       @map("completed_at")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  superiorAcceptances  ProjectSuperiorAcceptance[]
+
+  @@unique([projectId, round])
+  @@map("project_acceptances")
+}
+
+/// Kinh phí của đề tài (thay cho research_proposals.disbursement_metadata). Tổng do máy chủ tính.
+model ProjectFinance {
+  projectId        String          @id @map("project_id")
+  project          ApprovedProject @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  totalBudget      BigInt          @map("total_budget")
+  totalDisbursed   BigInt          @default(0) @map("total_disbursed")
+  totalSettled     BigInt          @default(0) @map("total_settled")
+  settlementStatus String          @default("PENDING") @map("settlement_status")
+  notes            String          @default("")
+  version          Int             @default(0)
+  legacySource     Json?           @map("legacy_source")
+  updatedById      String?         @map("updated_by_id")
+  updatedBy        User?           @relation("ProjectFinanceUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  @@map("project_finances")
+}
+
+/// Đợt giải ngân theo mốc; có thể gắn với một mốc thực hiện của đề tài.
+model ProjectDisbursement {
+  id                 String            @id @default(uuid())
+  projectId          String            @map("project_id")
+  project            ApprovedProject   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  trancheKey         String            @map("tranche_key")
+  position           Int
+  name               String
+  percentage         Float             @default(0)
+  expectedAmount     BigInt            @map("expected_amount")
+  disbursedAmount    BigInt            @default(0) @map("disbursed_amount")
+  status             String            @default("PENDING")
+  disbursedDate      DateTime?         @map("disbursed_date") @db.Date
+  settledDate        DateTime?         @map("settled_date") @db.Date
+  evidenceNotes      String?           @map("evidence_notes")
+  attachments        Json              @default("[]")
+  projectMilestoneId String?           @map("project_milestone_id")
+  projectMilestone   ProjectMilestone? @relation(fields: [projectMilestoneId], references: [id], onDelete: Restrict)
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  @@unique([projectId, trancheKey])
+  @@index([projectId, position])
+  @@map("project_disbursements")
+}
+
+model ProjectCostItem {
+  id              String          @id @default(uuid())
+  projectId       String          @map("project_id")
+  project         ApprovedProject @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  position        Int
+  code            String
+  name            String
+  allocatedAmount BigInt          @map("allocated_amount")
+  spentAmount     BigInt          @default(0) @map("spent_amount")
+  settledAmount   BigInt          @default(0) @map("settled_amount")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  @@unique([projectId, code])
+  @@map("project_cost_items")
+}
+
+/// Biên bản thanh lý hợp đồng/nhiệm vụ: chuyên viên lập (DRAFT), lãnh đạo phê duyệt (APPROVED).
+model ProjectLiquidation {
+  projectId          String          @id @map("project_id")
+  project            ApprovedProject @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  status             String          @default("DRAFT")
+  outcome            String
+  liquidationNumber  String?         @unique @map("liquidation_number")
+  liquidationDate    DateTime?       @map("liquidation_date") @db.Date
+  approvedBudget     BigInt          @map("approved_budget")
+  totalDisbursed     BigInt          @map("total_disbursed")
+  totalSettled       BigInt          @map("total_settled")
+  recoveredAmount    BigInt          @default(0) @map("recovered_amount")
+  productsHandedOver String?         @map("products_handed_over")
+  notes              String?
+  evidenceFileIds    Json            @default("[]") @map("evidence_file_ids")
+  preparedById       String          @map("prepared_by_id")
+  preparedBy         User            @relation("ProjectLiquidationPreparer", fields: [preparedById], references: [id], onDelete: Restrict)
+  preparedAt         DateTime        @map("prepared_at")
+  approvedById       String?         @map("approved_by_id")
+  approvedBy         User?           @relation("ProjectLiquidationApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  approvedAt         DateTime?       @map("approved_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  @@map("project_liquidations")
+}
+
+/// Sản phẩm của đề tài: mỗi nội dung công việc trong thuyết minh (dạng 1–6), nghiệm thu bởi tổ chuyên gia.
+model ProjectProduct {
+  id           String                 @id @default(uuid())
+  projectId    String                 @map("project_id")
+  project      ApprovedProject        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  position     Int
+  title        String
+  productForm  Int                    @map("product_form")
+  requirements String?
+  milestoneId  String?                @map("milestone_id")
+  milestone    ProjectMilestone?      @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  status       String                 @default("PLANNED")
+  submission   Json?
+  createdById  String                 @map("created_by_id")
+  createdBy    User                   @relation("ProjectProductCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+  reviews      ProjectProductReview[]
+
+  @@index([projectId, position])
+  @@map("project_products")
+}
+
+/// Một lần tổ chuyên gia (3–5 người) nghiệm thu một sản phẩm.
+model ProjectProductReview {
+  id                 String          @id @default(uuid())
+  productId          String          @map("product_id")
+  product            ProjectProduct  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  projectId          String          @map("project_id")
+  project            ApprovedProject @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  round              Int
+  status             String          @default("PANEL_FORMED")
+  panelMembers       Json            @map("panel_members")
+  reviewDate         DateTime?       @map("review_date") @db.Date
+  location           String?
+  submissionSnapshot Json            @map("submission_snapshot")
+  result             String?
+  conclusion         String?
+  minutesFileIds     Json            @default("[]") @map("minutes_file_ids")
+  formedById         String          @map("formed_by_id")
+  formedBy           User            @relation("ProductReviewFormer", fields: [formedById], references: [id], onDelete: Restrict)
+  recordedById       String?         @map("recorded_by_id")
+  recordedBy         User?           @relation("ProductReviewRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  formedAt           DateTime        @map("formed_at")
+  concludedAt        DateTime?       @map("concluded_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  @@unique([productId, round])
+  @@index([projectId])
+  @@map("project_product_reviews")
+}
+
+/// Đề nghị cấp trên nghiệm thu (đề tài cấp Bộ / Nhà nước): hạn 30 ngày từ ngày nghiệm thu cơ sở xong.
+model ProjectSuperiorAcceptance {
+  projectId            String            @id @map("project_id")
+  project              ApprovedProject   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  level                String
+  acceptanceId         String            @map("acceptance_id")
+  acceptance           ProjectAcceptance @relation(fields: [acceptanceId], references: [id], onDelete: Restrict)
+  facilityAcceptedOn   DateTime          @map("facility_accepted_on") @db.Date
+  dueDate              DateTime          @map("due_date") @db.Date
+  status               String            @default("PREPARING")
+  checklist            Json              @default("[]")
+  letterNumber         String?           @map("letter_number")
+  letterDate           DateTime?         @map("letter_date") @db.Date
+  recipient            String?
+  letterFileIds        Json              @default("[]") @map("letter_file_ids")
+  sentAt               DateTime?         @map("sent_at")
+  sentById             String?           @map("sent_by_id")
+  sentBy               User?             @relation("SuperiorAcceptanceSender", fields: [sentById], references: [id], onDelete: Restrict)
+  result               String?
+  resultDecisionNumber String?           @map("result_decision_number")
+  resultDate           DateTime?         @map("result_date") @db.Date
+  resultNote           String?           @map("result_note")
+  resultFileIds        Json              @default("[]") @map("result_file_ids")
+  resultRecordedById   String?           @map("result_recorded_by_id")
+  resultRecordedBy     User?             @relation("SuperiorAcceptanceRecorder", fields: [resultRecordedById], references: [id], onDelete: Restrict)
+  resultRecordedAt     DateTime?         @map("result_recorded_at")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+
+  @@map("project_superior_acceptances")
 }
 
 // ==========================================
