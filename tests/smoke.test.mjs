@@ -131,7 +131,9 @@ describe("workspace smoke checks", () => {
       "ProjectRequestRevision",
       "ProjectRequestEvidence",
       "ProjectRequestHistory",
-      "ProjectHistory"
+      "ProjectHistory",
+      "StudentResearchProject",
+      "StudentResearchDocument"
     ]);
     assert.match(schemaSource, /@@map\("users"\)/);
     assert.match(schemaSource, /@@map\("system_role_migration_issues"\)/);
