@@ -93,6 +93,6 @@ test('submitting the package rechecks the round inside the locked mutation and r
   };
   const prisma = { $transaction: async (work) => work(tx) };
   const service = new ProposalEvaluationSummaryService(prisma, { record: async () => {} }, {}, {}, participation, access);
-  await assert.rejects(() => service.submitEvaluationPackage(actor, proposal.id, { contextVersion: proposalContextVersion(proposal) }), /không còn khớp/);
+  await assert.rejects(() => service.submitEvaluationPackage(actor, proposal.id, { contextVersion: proposalContextVersion(proposal) }), /Không thể xác minh thông tin phân công/);
   assert.deepEqual(writes, []);
 });
