@@ -152,7 +152,7 @@ export function assertCanReadEvaluation(actor: SafeUserContext | undefined, prop
 
 type ConflictResolvers = {
   participation: { evaluateConflict(userId: string | undefined | null, proposalId: string): Promise<ProposalConflictDecision> };
-  reviewAccess: { resolveForProposal(userId: string | undefined, proposalId: string): Promise<{ isAssignedReviewer: boolean }> };
+  reviewAccess: { resolveConflictForProposal(userId: string | undefined, proposalId: string): Promise<{ isAssignedReviewer: boolean, hasPersistedReview: boolean }> };
 };
 
 const REVIEWER_CONFLICT: ProposalConflictDecision = {
@@ -179,8 +179,8 @@ export async function resolveActorConflict(
     return participationConflict;
   }
 
-  const access = await resolvers.reviewAccess.resolveForProposal(actorId, proposalId);
-  return access.isAssignedReviewer ? REVIEWER_CONFLICT : participationConflict;
+  const access = await resolvers.reviewAccess.resolveConflictForProposal(actorId, proposalId);
+  return (access.isAssignedReviewer || access.hasPersistedReview) ? REVIEWER_CONFLICT : participationConflict;
 }
 
 /**

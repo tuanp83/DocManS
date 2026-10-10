@@ -169,8 +169,10 @@ export class ProposalReviewAssignmentsService {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
     assertScientificManagementScope(actor, proposal);
     assertProposalStatus(proposal, REVIEWER_ASSIGNABLE_STATUSES, "Chỉ hồ sơ đã nộp hoặc đang đánh giá mới được phân công người đánh giá.");
-    // Đã gỡ bỏ: Chuyên viên quản lý vẫn có thể điều phối hồ sơ (phân công) ngay cả khi đang tham gia đề tài.
-
+    const actorConflict = await this.participation.evaluateConflict(actor.id, proposalId);
+    if (actorConflict.conflicted) {
+      throw new ForbiddenException({ message: "Người đang tham gia hồ sơ không thể phân công người đánh giá." });
+    }
     await this.assertCompletenessEvidence(proposal);
     const candidate = await this.resolveReviewerCandidate(input, actor, proposal);
     if (input.assignmentRole !== undefined && !["reviewer", "committee_member", "committee_secretary"].includes(String(input.assignmentRole))) throw new BadRequestException({ message: "Vai trò phân công không hợp lệ." });
@@ -180,10 +182,11 @@ export class ProposalReviewAssignmentsService {
     const effectiveUntil = input.effectiveUntil ? new Date(String(input.effectiveUntil)) : null;
     if (!Number.isFinite(effectiveFrom.getTime()) || (effectiveUntil && (!Number.isFinite(effectiveUntil.getTime()) || effectiveUntil <= effectiveFrom || effectiveUntil <= new Date())) || (dueDate && dueDate < effectiveFrom)) throw new BadRequestException({ message: "Thời gian hiệu lực và hạn đánh giá không hợp lệ." });
 
-    // Đã gỡ bỏ: Chuyên viên quản lý khoa học có thể tham gia vào vị trí phản biện được
-    // if (candidate.id === actor.id) {
-    //   throw new BadRequestException({ message: "Không thể tự phân công mình đánh giá hồ sơ do mình điều phối." });
-    // }
+    // Staff assigning themselves would let one person review and then consolidate their own review.
+    // The participation primitive cannot see this, because assigning staff hold no participation row.
+    if (candidate.id === actor.id) {
+      throw new BadRequestException({ message: "Không thể tự phân công mình đánh giá hồ sơ do mình điều phối." });
+    }
 
     const conflict = await this.participation.evaluateConflict(candidate.id, proposalId);
     if (conflict.conflicted) {
