@@ -278,6 +278,13 @@ export const routeDefinitions: Record<string, RouteDefinition> = {
     description: "Hệ thống văn bản quy phạm, quy chế quản lý khoa học công nghệ và biểu mẫu hướng dẫn.",
     summaryTitle: "Kho tài liệu KH&CN",
     summaryBody: "Cung cấp các văn bản pháp lý, quy chế và biểu mẫu chuẩn phục vụ nghiên cứu viên và hội đồng."
+  },
+  "/student-research": {
+    eyebrow: "NCKH Sinh viên",
+    title: "Đề tài NCKH Sinh viên",
+    description: "Quản lý đề tài sinh viên nghiên cứu khoa học",
+    summaryTitle: "NCKH Sinh viên",
+    summaryBody: "Quản lý và giám sát tiến độ thực hiện đề tài sinh viên"
   }
 };
 
@@ -299,7 +306,8 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
-    { href: "/reports", label: "Báo cáo", icon: BarChart3 }
+    { href: "/reports", label: "Báo cáo", icon: BarChart3 },
+    { href: "/student-research", label: "NCKH Sinh viên", icon: BookCopy }
   ],
   RESEARCH_MANAGEMENT_STAFF: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -310,7 +318,8 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
-    { href: "/reports", label: "Báo cáo", icon: BarChart3 }
+    { href: "/reports", label: "Báo cáo", icon: BarChart3 },
+    { href: "/student-research", label: "NCKH Sinh viên", icon: BookCopy }
   ],
   RESEARCHER_INTERNAL_USER: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
