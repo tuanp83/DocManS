@@ -14,11 +14,12 @@ export const REVIEW_ASSIGNMENT_STATUS = {
 
 export type ReviewAssignmentStatus = (typeof REVIEW_ASSIGNMENT_STATUS)[keyof typeof REVIEW_ASSIGNMENT_STATUS];
 
-export type ReviewAssignmentRole = "reviewer" | "committee_member";
+export type ReviewAssignmentRole = "reviewer" | "committee_member" | "committee_secretary";
 
 export const REVIEW_ASSIGNMENT_ROLE_LABELS: Record<ReviewAssignmentRole, string> = {
   reviewer: "Người phản biện",
-  committee_member: "Thành viên hội đồng"
+  committee_member: "Thành viên hội đồng",
+  committee_secretary: "Thư ký hội đồng"
 };
 
 export const REVIEW_ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
@@ -101,7 +102,9 @@ export function normalizeAssignmentRole(value: unknown): ReviewAssignmentRole {
   }
 
   const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  return normalized === "committee_member" ? "committee_member" : "reviewer";
+  if (normalized === "committee_member") return "committee_member";
+  if (normalized === "committee_secretary") return "committee_secretary";
+  return "reviewer";
 }
 
 export function getAssignmentRoleLabel(role: string) {

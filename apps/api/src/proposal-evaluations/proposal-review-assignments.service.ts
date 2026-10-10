@@ -169,25 +169,21 @@ export class ProposalReviewAssignmentsService {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
     assertScientificManagementScope(actor, proposal);
     assertProposalStatus(proposal, REVIEWER_ASSIGNABLE_STATUSES, "Chỉ hồ sơ đã nộp hoặc đang đánh giá mới được phân công người đánh giá.");
-    const actorConflict = await this.participation.evaluateConflict(actor.id, proposalId);
-    if (actorConflict.conflicted) {
-      throw new ForbiddenException({ message: "Người đang tham gia hồ sơ không thể phân công người đánh giá." });
-    }
+    // Đã gỡ bỏ: Chuyên viên quản lý vẫn có thể điều phối hồ sơ (phân công) ngay cả khi đang tham gia đề tài.
 
     await this.assertCompletenessEvidence(proposal);
     const candidate = await this.resolveReviewerCandidate(input, actor, proposal);
-    if (input.assignmentRole !== undefined && !["reviewer", "committee_member"].includes(String(input.assignmentRole))) throw new BadRequestException({ message: "Vai trò phân công không hợp lệ." });
+    if (input.assignmentRole !== undefined && !["reviewer", "committee_member", "committee_secretary"].includes(String(input.assignmentRole))) throw new BadRequestException({ message: "Vai trò phân công không hợp lệ." });
     const assignmentRole = normalizeAssignmentRole(input.assignmentRole);
     const dueDate = this.readOptionalDueDate(input.dueDate);
     const effectiveFrom = input.effectiveFrom ? new Date(String(input.effectiveFrom)) : new Date();
     const effectiveUntil = input.effectiveUntil ? new Date(String(input.effectiveUntil)) : null;
     if (!Number.isFinite(effectiveFrom.getTime()) || (effectiveUntil && (!Number.isFinite(effectiveUntil.getTime()) || effectiveUntil <= effectiveFrom || effectiveUntil <= new Date())) || (dueDate && dueDate < effectiveFrom)) throw new BadRequestException({ message: "Thời gian hiệu lực và hạn đánh giá không hợp lệ." });
 
-    // Staff assigning themselves would let one person review and then consolidate their own review.
-    // The participation primitive cannot see this, because assigning staff hold no participation row.
-    if (candidate.id === actor.id) {
-      throw new BadRequestException({ message: "Không thể tự phân công mình đánh giá hồ sơ do mình điều phối." });
-    }
+    // Đã gỡ bỏ: Chuyên viên quản lý khoa học có thể tham gia vào vị trí phản biện được
+    // if (candidate.id === actor.id) {
+    //   throw new BadRequestException({ message: "Không thể tự phân công mình đánh giá hồ sơ do mình điều phối." });
+    // }
 
     const conflict = await this.participation.evaluateConflict(candidate.id, proposalId);
     if (conflict.conflicted) {
@@ -237,8 +233,26 @@ export class ProposalReviewAssignmentsService {
           const currentReviewers = await tx.proposalReviewAssignment.count({
             where: { proposalId, assignmentRole: "reviewer", status: { in: [REVIEW_ASSIGNMENT_STATUS.assigned, REVIEW_ASSIGNMENT_STATUS.completed] } }
           });
-          if (currentReviewers >= 2) {
-            throw new BadRequestException({ message: "Hội đồng đánh giá chỉ được có tối đa 2 người phản biện." });
+          if (currentReviewers >= 4) {
+            throw new BadRequestException({ message: "Hội đồng đánh giá chỉ được có tối đa 4 người phản biện độc lập." });
+          }
+        }
+        
+        if (assignmentRole === "committee_member") {
+          const currentMembers = await tx.proposalReviewAssignment.count({
+            where: { proposalId, assignmentRole: "committee_member", status: { in: [REVIEW_ASSIGNMENT_STATUS.assigned, REVIEW_ASSIGNMENT_STATUS.completed] } }
+          });
+          if (currentMembers >= 5) {
+            throw new BadRequestException({ message: "Hội đồng đánh giá chỉ được có tối đa 5 thành viên hội đồng." });
+          }
+        }
+
+        if (assignmentRole === "committee_secretary") {
+          const currentSecretaries = await tx.proposalReviewAssignment.count({
+            where: { proposalId, assignmentRole: "committee_secretary", status: { in: [REVIEW_ASSIGNMENT_STATUS.assigned, REVIEW_ASSIGNMENT_STATUS.completed] } }
+          });
+          if (currentSecretaries >= 1) {
+            throw new BadRequestException({ message: "Hội đồng đánh giá chỉ được có 1 thư ký." });
           }
         }
 
