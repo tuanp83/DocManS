@@ -7,18 +7,22 @@ import { proposalContextVersion } from '../dist/apps/api/proposals-shared/propos
 const actor = { id: 'staff', role: 'scientific-management', systemRole: 'RESEARCH_MANAGEMENT_STAFF', organizationScopes: [{ id: 'unit' }] };
 const proposal = { id: 'proposal', status: 'under_review', hostOrganizationUnitId: 'unit', updatedAt: new Date(), authorizationRelationshipVersion: 1, authorizationConflictVersion: 1, authorizationDelegationVersion: 1 };
 const participation = { evaluateConflict: async () => ({ conflicted: false }) };
-const access = { resolveForProposal: async () => ({ isAssignedReviewer: false }) };
-function roster(reviewers, council) {
-  return Array.from({ length: reviewers + council }, (_, i) => ({ id: String(i), reviewerUserId: String(i), assignmentRole: i < reviewers ? 'reviewer' : 'committee_member', status: 'completed' }));
+const access = { resolveForProposal: async () => ({ isAssignedReviewer: false }), resolveConflictForProposal: async () => ({ isAssignedReviewer: false, hasPersistedReview: false, hasScoringAssignment: false, unresolved: false }) };
+// Hội đồng: 2–3 phản biện, 3–5 thành viên, đúng 1 thư ký (thư ký không chấm phiếu).
+function roster(reviewers, council, secretaries = 1) {
+  return Array.from({ length: reviewers + council + secretaries }, (_, i) => ({ id: String(i), reviewerUserId: String(i), assignmentRole: i < reviewers ? 'reviewer' : i < reviewers + council ? 'committee_member' : 'committee_secretary', status: i < reviewers + council ? 'completed' : 'assigned' }));
 }
-const submitted = assignments => assignments.map(a => ({ assignmentId: a.id, status: 'submitted', totalScore: 80 }));
+const submitted = assignments => assignments.filter(a => a.assignmentRole !== 'committee_secretary').map(a => ({ assignmentId: a.id, status: 'submitted', totalScore: 80 }));
 
-test('readiness requires exactly two reviewers, at least three distinct council members and every review', () => {
+test('readiness requires 2–3 reviewers, 3–5 distinct council members, exactly one secretary and every scoring review', () => {
   const service = new ProposalEvaluationSummaryService();
-  for (const [r, c, ready] of [[0, 0, false], [1, 3, false], [2, 0, false], [2, 2, false], [3, 3, false], [2, 3, true], [2, 4, true]]) {
-    const assignments = roster(r, c);
-    assert.equal(service.summarizeProgress(assignments, submitted(assignments)).allReviewsSubmitted, ready, `${r} reviewers, ${c} council`);
+  for (const [r, c, s, ready] of [[0, 0, 1, false], [1, 3, 1, false], [2, 0, 1, false], [2, 2, 1, false], [4, 3, 1, false], [2, 6, 1, false], [2, 3, 0, false], [2, 3, 2, false], [2, 3, 1, true], [3, 3, 1, true], [2, 4, 1, true], [3, 5, 1, true]]) {
+    const assignments = roster(r, c, s);
+    assert.equal(service.summarizeProgress(assignments, submitted(assignments)).allReviewsSubmitted, ready, `${r} reviewers, ${c} council, ${s} secretary`);
   }
+  // Thư ký không có phiếu nhưng không làm hồ sơ "chờ phiếu".
+  const withSecretary = roster(2, 3, 1);
+  assert.equal(service.summarizeProgress(withSecretary, submitted(withSecretary)).pendingCount, 0);
   const assignments = roster(2, 3);
   assert.equal(service.summarizeProgress(assignments, submitted(assignments).slice(1)).allReviewsSubmitted, false);
   for (const index of [0, 4]) {
@@ -31,7 +35,7 @@ test('readiness requires exactly two reviewers, at least three distinct council 
   assert.equal(service.summarizeProgress(duplicate, submitted(duplicate)).allReviewsSubmitted, false);
 });
 
-test('third reviewer is rejected inside the locked proposal mutation before any write', async () => {
+test('fourth reviewer is rejected inside the locked proposal mutation before any write', async () => {
   let locked = false;
   const tx = {
     $queryRaw: async strings => { if (strings.join('').includes('research_proposals')) locked = true; return [{ asOf: new Date() }]; },
@@ -47,7 +51,7 @@ test('third reviewer is rejected inside the locked proposal mutation before any 
       assert.equal(where.proposalId, proposal.id);
       assert.equal(where.assignmentRole, 'reviewer');
       assert.deepEqual(where.status.in, ['assigned', 'completed']);
-      return 2;
+      return 3;
     }, findFirst: async () => null, updateMany: async () => ({ count: 1 }), create: async () => ({ id: 'new', createdAt: new Date(), updatedAt: new Date() }) },
     auditLog: { create: async () => {} },
     // The production conflict resolver uses these reads before the cardinality check.
@@ -55,7 +59,7 @@ test('third reviewer is rejected inside the locked proposal mutation before any 
     proposalParticipation: { findMany: async () => [] }
   };
   const service = new ProposalReviewAssignmentsService({ $transaction: async work => work(tx) }, {}, participation, access);
-  await assert.rejects(() => service.assignReviewer(actor, proposal.id, { reviewerUserId: 'third', contextVersion: proposalContextVersion(proposal) }), /2 người phản biện/);
+  await assert.rejects(() => service.assignReviewer(actor, proposal.id, { reviewerUserId: 'third', contextVersion: proposalContextVersion(proposal) }), /tối đa 3 người phản biện/);
 });
 
 test('readiness rechecks assignments after locking, rejecting a concurrent revocation before writes', async () => {

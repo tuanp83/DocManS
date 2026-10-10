@@ -109,6 +109,7 @@ model OrganizationUnit {
   researcherProfiles      ResearcherProfile[]
 
   approvedProjects ApprovedProject[]
+  studentResearchProjects StudentResearchProject[] @relation("StudentResearchUnit")
 
   @@index([parentId])
   @@map("organization_units")
@@ -1152,6 +1153,10 @@ model StudentResearchProject {
   officerId String @map("officer_id")
   officer   User   @relation("ProjectOfficer", fields: [officerId], references: [id])
 
+  /// Đơn vị quản lý đề tài: phạm vi để chuyên viên QLKH xem và xử lý (để trống ở dữ liệu cũ).
+  organizationUnitId String?           @map("organization_unit_id")
+  organizationUnit   OrganizationUnit? @relation("StudentResearchUnit", fields: [organizationUnitId], references: [id])
+
   startDate DateTime? @map("start_date")
   endDate   DateTime? @map("end_date")
 
@@ -1160,6 +1165,7 @@ model StudentResearchProject {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([organizationUnitId, status])
   @@map("student_research_projects")
 }
 

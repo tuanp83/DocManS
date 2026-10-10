@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { isScoringRole } from "./evaluation-council-rules.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { resolveProposalReviewAccess, type ProposalReviewAccess, type ReviewAssignmentLike } from "./proposal-review-access.js";
 
@@ -43,6 +44,8 @@ export class ProposalReviewAccessService {
 
       return {
         isAssignedReviewer: assignments.some((assignment) => (assignment.status === "assigned" || assignment.status === "completed") && (!assignment.effectiveUntil || assignment.effectiveUntil > asOf)),
+        // Phân công có chấm phiếu (không tính thư ký hội đồng): dùng cho chốt chặn "không tự tổng hợp phiếu của mình".
+        hasScoringAssignment: assignments.some((assignment) => (assignment.status === "assigned" || assignment.status === "completed") && (!assignment.effectiveUntil || assignment.effectiveUntil > asOf) && isScoringRole(assignment.assignmentRole)),
         hasPersistedReview: Boolean(persistedReview),
         unresolved: false
       };

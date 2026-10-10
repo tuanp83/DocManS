@@ -10,7 +10,7 @@ import { getApiBaseUrl } from "@/lib/session";
  * state and conflict on each call, so a stale flag can never widen what actually happens.
  */
 
-export type ReviewAssignmentRole = "reviewer" | "committee_member";
+export type ReviewAssignmentRole = "reviewer" | "committee_member" | "committee_secretary";
 export type ReviewRecommendation = "approve" | "revise" | "reject";
 
 export type ProposalReviewAssignment = {
@@ -119,6 +119,8 @@ export type ReviewProgressCounts = {
   pendingCount: number;
   pendingReviewers: Array<{ assignmentId: string; reviewerUserId: string; reviewerDisplayName: string }>;
   allReviewsSubmitted: boolean;
+  /** Thiếu sót thành phần hội đồng (2–3 phản biện, 3–5 thành viên, 1 thư ký); rỗng khi đủ. */
+  councilProblems?: string[];
   averageTotalScore: number | null;
   maxTotalScore: number;
 };

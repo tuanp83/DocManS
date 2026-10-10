@@ -1,5 +1,6 @@
 // @ts-ignore TS7016: runtime package is JavaScript; API imports its TypeScript source contract.
 import type { AuthorizationDecisionCodeV1, PermissionActionV1, ViewerAuthorizationV1, ViewerRelationshipV1 } from "@rtms/permissions";
+import { isScoringRole } from "../proposals-shared/evaluation-council-rules.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { evaluateProposalConflict, type ProposalParticipation } from "../proposals-shared/proposal-participation.js";
 import type { ProposalReviewAccess } from "../proposals-shared/proposal-review-access.js";
@@ -137,7 +138,8 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
     if (input.participation.isParticipant) return blocked("CONFLICT_DENIED");
     if (!input.managementOfficer?.resolved) return blocked("CONTEXT_UNRESOLVED");
     if (input.managementOfficer.officer?.officerUserId === input.actor.id) return blocked("CONFLICT_DENIED");
-    if (!input.reviewAccess?.isAssignedReviewer) return blocked("ACTION_NOT_GRANTED");
+    // Thư ký hội đồng ghi biên bản, không chấm phiếu.
+    if (!input.reviewAccess?.isAssignedReviewer || !isScoringRole(input.reviewAccess.assignmentRole)) return blocked("ACTION_NOT_GRANTED");
     return input.proposal.status === "under_review" ? null : blocked("WORKFLOW_STATE_DENIED");
   }
 

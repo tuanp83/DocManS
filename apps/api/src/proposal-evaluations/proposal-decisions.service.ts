@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
+import { councilCompositionProblems, councilMetadataProblems, councilMetadataRoleToAssignmentRole, councilRoleOf } from "../proposals-shared/evaluation-council-rules.js";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
@@ -340,6 +341,12 @@ export class ProposalDecisionsService {
 
     const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
     const isDirectSubmit = input.submitToLeadership === true || input.status === "submitted";
+    // Thành phần hội đồng: 2–3 phản biện, 3–5 thành viên (chủ tịch, phó chủ tịch, uỷ viên), 1 thư ký.
+    // Bản nháp chỉ bị chặn khi vượt mức; khi trình lãnh đạo phải đủ.
+    const compositionProblems = councilMetadataProblems(members, isDirectSubmit);
+    if (compositionProblems.length) {
+      throw new BadRequestException({ message: `Thành phần hội đồng chưa đúng quy định: ${compositionProblems.join(" ")}` });
+    }
     const updatedCouncil = {
       ...currentCouncil,
       status: isDirectSubmit ? "submitted" : (input.status as string) || "draft",
@@ -519,6 +526,10 @@ export class ProposalDecisionsService {
     const members = Array.isArray(input.members)
       ? (input.members as Array<Record<string, unknown>>)
       : (Array.isArray(currentCouncil.members) ? (currentCouncil.members as Array<Record<string, unknown>>) : []);
+    const compositionProblems = councilMetadataProblems(members, true);
+    if (compositionProblems.length) {
+      throw new BadRequestException({ message: `Thành phần hội đồng chưa đúng quy định: ${compositionProblems.join(" ")}` });
+    }
 
     const updatedCouncil: Record<string, unknown> = {
       ...currentCouncil,
@@ -548,33 +559,52 @@ export class ProposalDecisionsService {
         });
       }
 
-      // Automatically create ProposalReviewAssignment for council members with userId
+      // Tạo phân công đánh giá theo quyết định thành lập hội đồng, đối chiếu với phân công đang có hiệu lực:
+      // không tạo trùng, không đổi vai trò ngầm, không vượt giới hạn (2–3 phản biện, 3–5 thành viên, 1 thư ký),
+      // và kiểm tra xung đột lợi ích với danh sách được duyệt (có thể khác danh sách đã đề xuất).
+      const live = await tx.proposalReviewAssignment.findMany({
+        where: { proposalId, status: { in: ["assigned", "completed"] } }
+      });
+      const toCreate: Array<{ userId: string; role: ReturnType<typeof councilMetadataRoleToAssignmentRole> }> = [];
       for (const m of members) {
         const userId = typeof m.userId === "string" ? m.userId : "";
-        if (userId) {
-          const role = (m.role === "reviewer_1" || m.role === "reviewer_2") ? "reviewer" : "committee_member";
-          const existing = await tx.proposalReviewAssignment.findFirst({
-            where: {
-              proposalId,
-              reviewerUserId: userId
-            }
-          });
-
-          if (!existing) {
-            await tx.proposalReviewAssignment.create({
-              data: {
-                proposalId,
-                reviewerUserId: userId,
-                assignmentRole: role,
-                status: "assigned",
-                assignedById: actor.id,
-                assignedAt: new Date(),
-                effectiveFrom: new Date(),
-                dueDate: updatedCouncil.meetingDate ? new Date(updatedCouncil.meetingDate as string) : null
-              }
-            });
-          }
+        if (!userId) continue;
+        const role = councilMetadataRoleToAssignmentRole(m.role);
+        const memberConflict = await this.participation.evaluateConflict(userId, proposalId);
+        if (memberConflict.conflicted) {
+          throw new BadRequestException({ message: `Thành viên ${m.displayName || userId} có xung đột lợi ích (${memberConflict.reason}), không thể tham gia Hội đồng.` });
         }
+        const existing = live.find((assignment: { reviewerUserId: string }) => assignment.reviewerUserId === userId);
+        if (existing) {
+          if (councilRoleOf(existing.assignmentRole) !== role) {
+            throw new BadRequestException({ message: `${m.displayName || userId} đang được phân công với vai trò khác trong vòng đánh giá; cần thu hồi phân công cũ trước khi duyệt hội đồng.` });
+          }
+          continue;
+        }
+        toCreate.push({ userId, role });
+      }
+      const roster = [
+        ...live.map((assignment: { id: string; reviewerUserId: string; assignmentRole: string; status: string }) => assignment),
+        ...toCreate.map((item, index) => ({ id: `new-${index}`, reviewerUserId: item.userId, assignmentRole: item.role, status: "assigned" }))
+      ];
+      const rosterProblems = councilCompositionProblems(roster, false);
+      if (rosterProblems.length) {
+        throw new BadRequestException({ message: `Phân công sau khi duyệt hội đồng sẽ vượt quy định: ${rosterProblems.join(" ")}` });
+      }
+      const assignedAt = new Date();
+      for (const item of toCreate) {
+        await tx.proposalReviewAssignment.create({
+          data: {
+            proposalId,
+            reviewerUserId: item.userId,
+            assignmentRole: item.role,
+            status: "assigned",
+            assignedById: actor.id,
+            assignedAt,
+            effectiveFrom: assignedAt,
+            dueDate: updatedCouncil.meetingDate ? new Date(updatedCouncil.meetingDate as string) : null
+          }
+        });
       }
     }
 

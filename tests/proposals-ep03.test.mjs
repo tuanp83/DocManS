@@ -142,6 +142,14 @@ const secretaryUser = {
   displayName: "ThS. Trần Thanh Minh"
 };
 
+/** Thư ký hội đồng đánh giá: không tham gia hồ sơ, ghi biên bản, không chấm phiếu. */
+const councilSecretaryUser = {
+  ...councilMemberUser,
+  id: "user-council-secretary",
+  username: "hdthuky",
+  displayName: "ThS. Thư ký Hội đồng"
+};
+
 const ACCOUNTS = [
   staffUser,
   outOfScopeStaffUser,
@@ -155,7 +163,8 @@ const ACCOUNTS = [
   councilMemberUser2,
   councilMemberUser3,
   memberUser,
-  secretaryUser
+  secretaryUser,
+  councilSecretaryUser
 ];
 
 const TEAM = [
@@ -555,6 +564,9 @@ async function createFullyAssignedProposalUnderReview(services, options) {
   await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: councilMemberUser.id, assignmentRole: "committee_member" });
   await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: councilMemberUser2.id, assignmentRole: "committee_member" });
   await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: councilMemberUser3.id, assignmentRole: "committee_member" });
+
+  // 1 Secretary (không chấm phiếu)
+  await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: councilSecretaryUser.id, assignmentRole: "committee_secretary" });
   
   return { proposal, assignment: assignment1 };
 }
@@ -1045,6 +1057,14 @@ describe("EP-03 hardening found by adversarial review", () => {
       assert.equal(services.prisma.store.evaluationSummaries.length, 0);
       assert.equal(services.prisma.store.proposals.find((item) => item.id === proposal.id).status, "under_review");
 
+      // Thu hồi phân công sau khi đã chấm cũng không mở đường tự tổng hợp: phiếu đã lưu vẫn là xung đột.
+      const own = services.prisma.store.reviewAssignments.find((item) => item.reviewerUserId === staffUser.id);
+      await services.assignments.revokeAssignment(collaborator, proposal.id, own.id, { reason: "Thu hồi sau khi chấm" });
+      await assert.rejects(
+        () => services.summaries.saveEvaluationSummary(staffUser, proposal.id, { summary: "Tự tổng hợp sau khi thu hồi.", recommendation: "approve", markReady: false }),
+        BadRequestException
+      );
+
       // An uninvolved staff member still consolidates normally.
       const consolidated = await services.summaries.saveEvaluationSummary(collaborator, proposal.id, {
         summary: "Tổng hợp bởi chuyên viên không tham gia đánh giá.",
@@ -1054,6 +1074,38 @@ describe("EP-03 hardening found by adversarial review", () => {
       assert.equal(consolidated.proposalStatus, "under_review");
     } finally {
       ACCOUNTS.pop();
+    }
+  });
+
+  it("council composition: 2–3 reviewers, 3–5 members, exactly one secretary who does not score", async () => {
+    const services = createServices();
+    const proposal = await createSubmittedProposal(services);
+    const extra = (id) => ({ ...councilMemberUser, id, username: id, displayName: id });
+    const people = ["r4", "m4", "m5", "m6", "s2"].map(extra);
+    ACCOUNTS.push(...people);
+    try {
+      const assign = (user, assignmentRole) => services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: user.id, assignmentRole });
+      await assign(reviewerUser, "reviewer");
+      await assign(secondReviewerUser, "reviewer");
+      await assign(unassignedReviewerUser, "reviewer");
+      await assert.rejects(() => assign(people[0], "reviewer"), /tối đa 3 người phản biện/);
+      for (const user of [councilMemberUser, councilMemberUser2, councilMemberUser3, people[1], people[2]]) await assign(user, "committee_member");
+      await assert.rejects(() => assign(people[3], "committee_member"), /tối đa 5 thành viên hội đồng/);
+      await assign(councilSecretaryUser, "committee_secretary");
+      await assert.rejects(() => assign(people[4], "committee_secretary"), /chỉ có 1 thư ký hội đồng/);
+
+      // Thư ký không chấm phiếu, và không bị tính là "chờ phiếu".
+      await assert.rejects(() => services.reviews.submitMyReview(councilSecretaryUser, proposal.id, { scoreData: FULL_SCORES, comment: "x", recommendation: "approve" }), ForbiddenException);
+      const reviewData = { scoreData: FULL_SCORES, comment: "Nhận xét", recommendation: "approve" };
+      for (const user of [reviewerUser, secondReviewerUser, unassignedReviewerUser, councilMemberUser, councilMemberUser2, councilMemberUser3, people[1], people[2]]) {
+        await services.reviews.submitMyReview(user, proposal.id, reviewData);
+      }
+      const progress = await services.summaries.getReviewProgress(staffUser, proposal.id);
+      assert.equal(progress.pendingCount, 0);
+      assert.equal(progress.allReviewsSubmitted, true);
+      assert.deepEqual(progress.councilProblems, []);
+    } finally {
+      ACCOUNTS.splice(ACCOUNTS.length - people.length, people.length);
     }
   });
 
@@ -1355,6 +1407,7 @@ describe("ST-3.5 approval decision", () => {
     await reviewing.assignments.assignReviewer(staffUser, reviewedProposal.id, { reviewerUserId: councilMemberUser.id, assignmentRole: "committee_member" });
     await reviewing.assignments.assignReviewer(staffUser, reviewedProposal.id, { reviewerUserId: councilMemberUser2.id, assignmentRole: "committee_member" });
     await reviewing.assignments.assignReviewer(staffUser, reviewedProposal.id, { reviewerUserId: councilMemberUser3.id, assignmentRole: "committee_member" });
+    await reviewing.assignments.assignReviewer(staffUser, reviewedProposal.id, { reviewerUserId: councilSecretaryUser.id, assignmentRole: "committee_secretary" });
 
     const reviewData = {
       scoreData: FULL_SCORES,

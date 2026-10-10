@@ -182,6 +182,14 @@ export function ProposalEvaluationPanel({
       name: "",
       title: "Tiến sĩ, BSCKII",
       unit: "Trung tâm Chẩn đoán hình ảnh"
+    },
+    {
+      id: "mem-2",
+      candidateId: "",
+      isCustom: false,
+      name: "",
+      title: "Tiến sĩ",
+      unit: "Học viện Quân y"
     }
   ]);
 
@@ -200,7 +208,13 @@ export function ProposalEvaluationPanel({
   const [minutesError, setMinutesError] = useState("");
   const [minutesSuccess, setMinutesSuccess] = useState("");
 
+  // Thành phần hội đồng (khớp máy chủ, evaluation-council-rules.ts): 2–3 phản biện, 3–5 thành viên
+  // (Chủ tịch + các Ủy viên Hội đồng), đúng 1 thư ký.
   function addReviewer() {
+    if (councilReviewers.length >= 3) {
+      alert("Hội đồng có tối đa 3 Ủy viên Phản biện.");
+      return;
+    }
     setCouncilReviewers((prev) => [
       ...prev,
       {
@@ -215,8 +229,8 @@ export function ProposalEvaluationPanel({
   }
 
   function removeReviewer(id: string) {
-    if (councilReviewers.length <= 1) {
-      alert("Hội đồng cần có ít nhất 1 Ủy viên Phản biện.");
+    if (councilReviewers.length <= 2) {
+      alert("Hội đồng cần có ít nhất 2 Ủy viên Phản biện.");
       return;
     }
     setCouncilReviewers((prev) => prev.filter((r) => r.id !== id));
@@ -229,6 +243,10 @@ export function ProposalEvaluationPanel({
   }
 
   function addCouncilMember() {
+    if (1 + councilMembers.length >= 5) {
+      alert("Hội đồng có tối đa 5 thành viên (gồm Chủ tịch Hội đồng).");
+      return;
+    }
     setCouncilMembers((prev) => [
       ...prev,
       {
@@ -606,6 +624,14 @@ export function ProposalEvaluationPanel({
     } catch (validationErr) {
       setCouncilError(validationErr instanceof Error ? validationErr.message : "Dữ liệu thành viên Hội đồng chưa hợp lệ.");
       return;
+    }
+    if (submitToLeadership) {
+      const reviewerCount = members.filter((m) => m.role === "reviewer_1" || m.role === "reviewer_2" || m.role === "reviewer").length;
+      const committeeCount = members.filter((m) => m.role === "chair" || m.role === "vice_chair" || m.role === "member").length;
+      if (reviewerCount < 2 || reviewerCount > 3 || committeeCount < 3 || committeeCount > 5) {
+        setCouncilError(`Hội đồng cần 2–3 Ủy viên Phản biện (hiện ${reviewerCount}) và 3–5 thành viên gồm Chủ tịch (hiện ${committeeCount}), cùng 1 Thư ký.`);
+        return;
+      }
     }
 
     setIsSubmittingCouncil(true);
@@ -1798,7 +1824,8 @@ export function ProposalEvaluationPanel({
                 <span>Vai trò trong vòng đánh giá</span>
                 <select value={assignmentRole} onChange={(event) => setAssignmentRole(event.target.value as ReviewAssignmentRole)} disabled={!canAssign}>
                   <option value="reviewer">Người phản biện</option>
-                  <option value="council_member">Thành viên hội đồng</option>
+                  <option value="committee_member">Thành viên hội đồng</option>
+                  <option value="committee_secretary">Thư ký hội đồng (không chấm phiếu)</option>
                 </select>
               </label>
             </div>
@@ -1925,7 +1952,9 @@ export function ProposalEvaluationPanel({
             <p className="record-meta">
               {progress.activeAssignmentCount === 0
                 ? "Chưa phân công người đánh giá nên chưa thể chuyển hồ sơ sang chờ phê duyệt."
-                : "Còn phiếu đánh giá chưa gửi nên chưa thể chuyển hồ sơ sang chờ phê duyệt."}
+                : progress.councilProblems?.length
+                  ? `Thành phần hội đồng chưa đúng quy định: ${progress.councilProblems.join(" ")}`
+                  : "Còn phiếu đánh giá chưa gửi nên chưa thể chuyển hồ sơ sang chờ phê duyệt."}
             </p>
           ) : null}
         </form>

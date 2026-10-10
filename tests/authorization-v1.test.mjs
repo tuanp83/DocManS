@@ -152,6 +152,15 @@ describe("Story 1.8 viewer capability V1", () => {
     assert.equal(authorityCapability.blockedActions.find((item) => item.action === "proposal.decision.approve")?.code, "CONFLICT_DENIED");
   });
 
+  it("council secretary cannot score; the coordinating officer still cannot review", () => {
+    const none = { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} };
+    const base = { proposal: { ...proposal, status: "under_review" }, participation: none, canRead: true, canEdit: false, canManageFiles: false };
+    const secretary = projectProposalViewerAuthorizationV1({ ...base, actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" }, managementOfficer: { resolved: true, officer: null }, reviewAccess: { isAssignedReviewer: true, assignmentId: "a", assignmentRole: "committee_secretary", effectiveFrom: "2026-07-01T00:00:00.000Z" } });
+    assert.equal(secretary.blockedActions.find((item) => item.action === "proposal.review.submit")?.code, "ACTION_NOT_GRANTED");
+    const officer = projectProposalViewerAuthorizationV1({ ...base, actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" }, managementOfficer: { resolved: true, officer: { officerUserId: actor.id, username: actor.username, effectiveFrom: new Date() } }, reviewAccess: { isAssignedReviewer: true, assignmentId: "b", assignmentRole: "reviewer", effectiveFrom: "2026-07-01T00:00:00.000Z" } });
+    assert.equal(officer.blockedActions.find((item) => item.action === "proposal.review.submit")?.code, "CONFLICT_DENIED");
+  });
+
   it("keeps PI submission record-scoped and blocks a repeated completeness check", () => {
     const staffCapability = projectProposalViewerAuthorizationV1({
       actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" },

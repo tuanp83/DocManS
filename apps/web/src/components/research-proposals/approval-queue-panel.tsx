@@ -549,7 +549,7 @@ export function ApprovalQueuePanel() {
                   const council = proposal.councilMetadata;
                   const chair = council?.members?.find((m) => m.role === "chair");
                   const secretary = council?.members?.find((m) => m.role === "secretary");
-                  const reviewers = council?.members?.filter((m) => m.role === "reviewer_1" || m.role === "reviewer_2") || [];
+                  const reviewers = council?.members?.filter((m) => m.role === "reviewer_1" || m.role === "reviewer_2" || m.role === "reviewer") || [];
                   const otherMembers = council?.members?.filter((m) => m.role === "member") || [];
 
                   return (

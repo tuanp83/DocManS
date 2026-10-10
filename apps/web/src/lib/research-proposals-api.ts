@@ -59,7 +59,7 @@ export type ProposalWorkflowStatus =
 export type ProposalViewerReviewAssignment = {
   isAssignedReviewer: boolean;
   assignmentId: string;
-  assignmentRole: "reviewer" | "committee_member" | "none";
+  assignmentRole: "reviewer" | "committee_member" | "committee_secretary" | "none";
   assignmentRoleLabel: string;
 };
 

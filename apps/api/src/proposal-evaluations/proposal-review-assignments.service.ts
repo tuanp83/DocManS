@@ -1,4 +1,5 @@
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
+import { assignmentLimitError, EVALUATION_COUNCIL_LIMITS } from "../proposals-shared/evaluation-council-rules.js";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
@@ -175,7 +176,7 @@ export class ProposalReviewAssignmentsService {
     }
     await this.assertCompletenessEvidence(proposal);
     const candidate = await this.resolveReviewerCandidate(input, actor, proposal);
-    if (input.assignmentRole !== undefined && !["reviewer", "committee_member", "committee_secretary"].includes(String(input.assignmentRole))) throw new BadRequestException({ message: "Vai trò phân công không hợp lệ." });
+    if (input.assignmentRole !== undefined && !Object.keys(EVALUATION_COUNCIL_LIMITS).includes(String(input.assignmentRole))) throw new BadRequestException({ message: "Vai trò phân công không hợp lệ." });
     const assignmentRole = normalizeAssignmentRole(input.assignmentRole);
     const dueDate = this.readOptionalDueDate(input.dueDate);
     const effectiveFrom = input.effectiveFrom ? new Date(String(input.effectiveFrom)) : new Date();
@@ -232,31 +233,13 @@ export class ProposalReviewAssignmentsService {
       this.prisma.$transaction(async (tx) => {
         const assignedAt = await readTransactionClockV1(tx);
 
-        if (assignmentRole === "reviewer") {
-          const currentReviewers = await tx.proposalReviewAssignment.count({
-            where: { proposalId, assignmentRole: "reviewer", status: { in: [REVIEW_ASSIGNMENT_STATUS.assigned, REVIEW_ASSIGNMENT_STATUS.completed] } }
-          });
-          if (currentReviewers >= 4) {
-            throw new BadRequestException({ message: "Hội đồng đánh giá chỉ được có tối đa 4 người phản biện độc lập." });
-          }
-        }
-        
-        if (assignmentRole === "committee_member") {
-          const currentMembers = await tx.proposalReviewAssignment.count({
-            where: { proposalId, assignmentRole: "committee_member", status: { in: [REVIEW_ASSIGNMENT_STATUS.assigned, REVIEW_ASSIGNMENT_STATUS.completed] } }
-          });
-          if (currentMembers >= 5) {
-            throw new BadRequestException({ message: "Hội đồng đánh giá chỉ được có tối đa 5 thành viên hội đồng." });
-          }
-        }
-
-        if (assignmentRole === "committee_secretary") {
-          const currentSecretaries = await tx.proposalReviewAssignment.count({
-            where: { proposalId, assignmentRole: "committee_secretary", status: { in: [REVIEW_ASSIGNMENT_STATUS.assigned, REVIEW_ASSIGNMENT_STATUS.completed] } }
-          });
-          if (currentSecretaries >= 1) {
-            throw new BadRequestException({ message: "Hội đồng đánh giá chỉ được có 1 thư ký." });
-          }
+        // Thành phần hội đồng (evaluation-council-rules.ts): 2–3 phản biện, 3–5 thành viên, 1 thư ký.
+        const currentInRole = await tx.proposalReviewAssignment.count({
+          where: { proposalId, assignmentRole, status: { in: [REVIEW_ASSIGNMENT_STATUS.assigned, REVIEW_ASSIGNMENT_STATUS.completed] } }
+        });
+        const limitError = assignmentLimitError(assignmentRole, currentInRole);
+        if (limitError) {
+          throw new BadRequestException({ message: limitError });
         }
 
         const assignment = (await tx.proposalReviewAssignment.create({

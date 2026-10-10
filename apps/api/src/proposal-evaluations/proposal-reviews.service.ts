@@ -1,4 +1,5 @@
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
+import { isScoringRole } from "../proposals-shared/evaluation-council-rules.js";
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
@@ -256,6 +257,9 @@ export class ProposalReviewsService {
     const access = await this.reviewAccess.resolveForProposal(actor?.id, proposalId);
     if (!access.isAssignedReviewer) {
       throw new ForbiddenException({ message: "Bạn không được phân công đánh giá hồ sơ này." });
+    }
+    if (!isScoringRole(access.assignmentRole)) {
+      throw new ForbiddenException({ message: "Thư ký hội đồng ghi biên bản, không chấm phiếu đánh giá." });
     }
 
     const proposal = await findEvaluationProposal(this.prisma, proposalId);

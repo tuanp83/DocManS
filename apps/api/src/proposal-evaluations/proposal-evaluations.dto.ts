@@ -93,7 +93,7 @@ export const assignProposalReviewerPipe: PipeTransform<unknown, AssignProposalRe
     assertOptionalText(input.effectiveFrom, "effectiveFrom", 40);
     assertOptionalText(input.effectiveUntil, "effectiveUntil", 40);
 
-    if (input.assignmentRole !== undefined && !["reviewer", "committee_member"].includes(String(input.assignmentRole))) {
+    if (input.assignmentRole !== undefined && !["reviewer", "committee_member", "committee_secretary"].includes(String(input.assignmentRole))) {
       throw new BadRequestException({ message: "Vai trò phân công không hợp lệ." });
     }
 

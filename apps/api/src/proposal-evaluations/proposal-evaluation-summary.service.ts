@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { councilCompositionProblems, councilReady, isScoringRole } from "../proposals-shared/evaluation-council-rules.js";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
@@ -252,7 +253,8 @@ export class ProposalEvaluationSummaryService {
     const active = assignments.filter((assignment) => assignment.status !== REVIEW_ASSIGNMENT_STATUS.revoked);
     const submitted = reviews.filter((review) => review.status === REVIEW_STATUS.submitted);
     const submittedAssignmentIds = new Set(submitted.map((review) => review.assignmentId));
-    const pending = active.filter((assignment) => !submittedAssignmentIds.has(assignment.id));
+    // Thư ký hội đồng không chấm phiếu, nên không bao giờ "chờ phiếu".
+    const pending = active.filter((assignment) => isScoringRole(assignment.assignmentRole) && !submittedAssignmentIds.has(assignment.id));
     const scored = submitted.map((review) => review.totalScore).filter((score): score is number => typeof score === "number");
 
     return {
@@ -264,13 +266,9 @@ export class ProposalEvaluationSummaryService {
         reviewerUserId: assignment.reviewerUserId,
         reviewerDisplayName: assignment.reviewer?.displayName ?? ""
       })),
-      allReviewsSubmitted: (() => {
-        if (active.length === 0 || pending.length > 0) return false;
-        const reviewers = active.filter(a => a.assignmentRole === "reviewer");
-        const committee = active.filter(a => a.assignmentRole === "committee_member");
-        const uniqueCommittee = new Set(committee.map(a => a.reviewerUserId));
-        return reviewers.length >= 2 && reviewers.length <= 4 && uniqueCommittee.size >= 3;
-      })(),
+      // Đủ thành phần (2–3 phản biện, 3–5 thành viên, 1 thư ký, không trùng người) và mọi phiếu đã gửi.
+      allReviewsSubmitted: councilReady(active, submittedAssignmentIds),
+      councilProblems: councilCompositionProblems(active),
       averageTotalScore: scored.length ? Math.round((scored.reduce((sum, score) => sum + score, 0) / scored.length) * 10) / 10 : null,
       maxTotalScore: REVIEW_MAX_TOTAL_SCORE
     };
