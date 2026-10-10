@@ -27,6 +27,9 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
+  blockedProposalAction,
+  canPerformProposalAction,
+  getProposalCapabilityState,
   loadResearchProposals,
   loadResearchProposal,
   type ResearchProposal,
@@ -59,6 +62,20 @@ function formatDate(dateStr?: string) {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(dateStr));
+}
+
+/** Quyền thao tác của bảng đánh giá lấy từ capability máy chủ trả về cho hồ sơ, không mặc định "được phép". */
+function evaluationPanelPermissions(proposal: ResearchProposal) {
+  const state = getProposalCapabilityState(proposal);
+  return {
+    canAssignReviewers: canPerformProposalAction(state, "proposal.review.assign"),
+    canConsolidate: canPerformProposalAction(state, "proposal.review.consolidate"),
+    canFinalize: canPerformProposalAction(state, "proposal.review.finalize"),
+    canSubmitPackage: canPerformProposalAction(state, "proposal.review.submit-package"),
+    blockedReason: blockedProposalAction(state, "proposal.review.assign")?.reason ?? state.reason ?? "",
+    consolidateBlockedReason: blockedProposalAction(state, "proposal.review.consolidate")?.reason ?? state.reason ?? "",
+    contextVersion: proposal.viewerAuthorization?.contextVersion
+  };
 }
 
 export function ProposalReviewsWorkspace() {
@@ -694,10 +711,7 @@ export function ProposalReviewsWorkspace() {
             <ProposalEvaluationPanel
               key={selectedProposal.id}
               proposalId={selectedProposal.id}
-              canAssignReviewers={true}
-              canConsolidate={true}
-              blockedReason=""
-              consolidateBlockedReason=""
+              {...evaluationPanelPermissions(selectedProposal)}
               onWorkflowChange={() => void loadData()}
             />
           )}
@@ -766,10 +780,7 @@ export function ProposalReviewsWorkspace() {
             <ProposalEvaluationPanel
               key={`minutes-${selectedProposal.id}`}
               proposalId={selectedProposal.id}
-              canAssignReviewers={true}
-              canConsolidate={true}
-              blockedReason=""
-              consolidateBlockedReason=""
+              {...evaluationPanelPermissions(selectedProposal)}
               onWorkflowChange={() => void loadData()}
             />
           )}

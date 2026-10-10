@@ -93,13 +93,24 @@ test('any active account can be assigned reviewer/council unless it participates
         organization: otherOrg.name
       }
     });
+    // Lần nộp (bản chụp bất biến) và kết quả kiểm tra đầy đủ gắn đúng lần nộp đó (submission-evidence.ts).
+    const submission = await db.proposalSubmissionEvent.create({
+      data: {
+        proposalId: proposal.id,
+        actorId: users.pi.id,
+        fromStatus: 'draft',
+        toStatus: 'submitted',
+        submittedAt,
+        snapshot: { members: [], attachments: [], requiredPackage: [] }
+      }
+    });
     await db.proposalSubmissionEvent.create({
       data: {
         proposalId: proposal.id,
         actorId: users.staff.id,
         fromStatus: 'submitted',
         toStatus: 'submitted',
-        snapshot: { kind: 'completeness_check' }
+        snapshot: { kind: 'completeness_check', submissionEventId: submission.id, readiness: { ready: true } }
       }
     });
 

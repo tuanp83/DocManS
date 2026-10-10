@@ -5,6 +5,8 @@ import { PROPOSAL_DECISIONS, ProposalDecisionsService } from "./proposal-decisio
 import { ProposalEvaluationSummaryService } from "./proposal-evaluation-summary.service.js";
 import {
   approveProposalBudgetPipe,
+  evaluationSummaryLifecyclePipe,
+  type EvaluationSummaryLifecycleDto,
   assignProposalReviewerPipe,
   proposalDecisionPipe,
   revokeReviewAssignmentPipe,
@@ -116,6 +118,21 @@ export class ProposalEvaluationsController {
     @Body(saveEvaluationSummaryPipe) body: SaveEvaluationSummaryDto
   ) {
     return this.summaries.saveEvaluationSummary(request.currentUser!, id, body);
+  }
+
+  @Post(":id/evaluation-summary/finalize")
+  async finalizeEvaluationSummary(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(evaluationSummaryLifecyclePipe) body: EvaluationSummaryLifecycleDto) {
+    return this.summaries.finalizeEvaluationSummary(request.currentUser!, id, body as Record<string, unknown>);
+  }
+
+  @Post(":id/evaluation-summary/reopen")
+  async reopenEvaluationSummary(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(evaluationSummaryLifecyclePipe) body: EvaluationSummaryLifecycleDto) {
+    return this.summaries.reopenEvaluationSummary(request.currentUser!, id, body as Record<string, unknown>);
+  }
+
+  @Post(":id/evaluation-summary/submit")
+  async submitEvaluationPackage(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(evaluationSummaryLifecyclePipe) body: EvaluationSummaryLifecycleDto) {
+    return this.summaries.submitEvaluationPackage(request.currentUser!, id, body as Record<string, unknown>);
   }
 
   // ST-3.5 ------------------------------------------------------------------------------------

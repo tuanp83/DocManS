@@ -675,10 +675,14 @@ model ProposalReviewAssignment {
   updatedAt           DateTime           @updatedAt @map("updated_at")
   review              ProposalReview?
 
+  /// Lần nộp hồ sơ mà phân công này đánh giá (bằng chứng bất biến). Null chỉ ở dữ liệu cũ chưa gắn được.
+  reviewedSubmissionEventId String? @map("reviewed_submission_event_id")
+
   @@index([proposalId])
   @@index([reviewerUserId])
   @@index([researcherProfileId])
   @@index([status])
+  @@index([reviewedSubmissionEventId])
   @@map("proposal_review_assignments")
 }
 
@@ -700,9 +704,15 @@ model ProposalReview {
   createdAt      DateTime                 @default(now()) @map("created_at")
   updatedAt      DateTime                 @updatedAt @map("updated_at")
 
+  /// Lần nộp mà phiếu đánh giá (phiếu đã gửi là bất biến; trigger CSDL chặn sửa/xoá).
+  submissionEventId String? @map("submission_event_id")
+  contextVersion    Json?   @map("context_version")
+  evidenceSnapshot  Json?   @map("evidence_snapshot")
+
   @@index([proposalId])
   @@index([reviewerUserId])
   @@index([status])
+  @@index([submissionEventId])
   @@map("proposal_reviews")
 }
 
@@ -721,6 +731,11 @@ model ProposalEvaluationSummary {
   markedReadyAt  DateTime?        @map("marked_ready_at")
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  /// Phiên bản gói đánh giá: tăng mỗi lần lưu nháp, chốt, mở lại. Lãnh đạo quyết định trên đúng phiên bản này.
+  revision         Int   @default(0)
+  contextVersion   Json? @map("context_version")
+  evidenceSnapshot Json? @map("evidence_snapshot")
 
   @@index([status])
   @@map("proposal_evaluation_summaries")
@@ -741,6 +756,11 @@ model ProposalDecision {
   createdAt   DateTime         @default(now()) @map("created_at")
 
   approvedProjects ApprovedProject[] @relation("ProjectSourceDecision")
+
+  /// Phiên bản gói đánh giá lãnh đạo đã xem khi quyết định, và bản chụp bằng chứng của gói đó.
+  packageRevision Int?  @map("package_revision")
+  contextVersion  Json? @map("context_version")
+  packageSnapshot Json? @map("package_snapshot")
 
   @@index([proposalId])
   @@index([decidedById])

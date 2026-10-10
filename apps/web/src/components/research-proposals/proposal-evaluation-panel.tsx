@@ -33,6 +33,9 @@ import {
   revokeProposalReviewAssignment,
   isNotEntitled,
   saveProposalEvaluationSummary,
+  finalizeProposalEvaluationSummary,
+  reopenProposalEvaluationSummary,
+  submitProposalEvaluationPackage,
   type EvaluationApiError,
   type ProposalReviewProgress,
   type ReviewAssignmentRole
@@ -91,6 +94,8 @@ export function ProposalEvaluationPanel({
   onWorkflowChange,
   canAssignReviewers,
   canConsolidate,
+  canFinalize = false,
+  canSubmitPackage = false,
   blockedReason,
   consolidateBlockedReason,
   contextVersion
@@ -98,7 +103,12 @@ export function ProposalEvaluationPanel({
   proposalId: string;
   onWorkflowChange: () => void;
   canAssignReviewers: boolean;
+  /** Lưu nháp tổng hợp (proposal.review.consolidate). */
   canConsolidate: boolean;
+  /** Chốt bản nháp (proposal.review.finalize). */
+  canFinalize?: boolean;
+  /** Trình lãnh đạo hoặc mở lại bản đã chốt (proposal.review.submit-package). */
+  canSubmitPackage?: boolean;
   blockedReason: string;
   consolidateBlockedReason: string;
   contextVersion?: ViewerAuthorizationV1["contextVersion"];
@@ -124,7 +134,7 @@ export function ProposalEvaluationPanel({
   const [summaryError, setSummaryError] = useState("");
   const [summaryDirty, setSummaryDirty] = useState(false);
   const [pendingNames, setPendingNames] = useState<string[]>([]);
-  const [savingMode, setSavingMode] = useState<"" | "draft" | "ready">("");
+  const [savingMode, setSavingMode] = useState<"" | "draft" | "finalize" | "reopen" | "submit">("");
   const [message, setMessage] = useState("");
 
   // --- State Hội đồng (Giai đoạn 1) ---
@@ -540,6 +550,8 @@ export function ProposalEvaluationPanel({
 
   const canAssign = canAssignReviewers;
   const isReadyForApproval = progress.evaluationSummary?.status === "ready_for_approval";
+  const isFinalized = progress.evaluationSummary?.status === "finalized";
+  const canEditSummary = canConsolidate && !isFinalized && !isReadyForApproval;
   const council = proposal?.councilMetadata;
   const isCouncilApproved = council?.status === "approved";
   const isCouncilSubmitted = council?.status === "submitted";
@@ -754,28 +766,39 @@ export function ProposalEvaluationPanel({
     }
   }
 
-  async function handleSaveSummary(markReady: boolean) {
+  /** Tổng hợp ba bước: lưu nháp → chốt → trình lãnh đạo; bản đã chốt có thể mở lại (kèm lý do) trước khi trình. */
+  async function handleSummaryAction(mode: "draft" | "finalize" | "reopen" | "submit") {
     setSummaryError("");
     setPendingNames([]);
     setMessage("");
+    const revision = progress?.evaluationSummary?.revision;
 
-    if (!summaryText.trim()) {
-      setSummaryError("Nhập nội dung tổng hợp kết quả đánh giá.");
-      return;
+    if (mode === "draft") {
+      if (!summaryText.trim()) {
+        setSummaryError("Nhập nội dung tổng hợp kết quả đánh giá.");
+        return;
+      }
+      if (!recommendation) {
+        setSummaryError("Chọn kết luận tổng hợp.");
+        return;
+      }
     }
-    if (!recommendation) {
-      setSummaryError("Chọn kết luận tổng hợp.");
-      return;
-    }
-    if (markReady && !window.confirm("Gửi lãnh đạo phê duyệt? Vòng đánh giá sẽ được đóng lại.")) {
-      return;
+    if (mode === "finalize" && !window.confirm("Chốt bản tổng hợp? Nội dung và danh sách phiếu sẽ được khoá; muốn sửa phải mở lại.")) return;
+    if (mode === "submit" && !window.confirm("Trình lãnh đạo phê duyệt? Vòng đánh giá sẽ được đóng lại và không sửa được bản tổng hợp.")) return;
+    let reason = "";
+    if (mode === "reopen") {
+      reason = window.prompt("Lý do mở lại bản tổng hợp đã chốt:")?.trim() ?? "";
+      if (!reason) return;
     }
 
-    setSavingMode(markReady ? "ready" : "draft");
+    setSavingMode(mode);
     try {
-      await saveProposalEvaluationSummary(proposalId, { summary: summaryText, recommendation, markReady });
-      setSummaryDirty(false);
-      setMessage(markReady ? "Đã gửi hồ sơ tới lãnh đạo phê duyệt." : "Đã lưu bản nháp tổng hợp.");
+      if (mode === "draft") await saveProposalEvaluationSummary(proposalId, { summary: summaryText, recommendation });
+      else if (mode === "finalize") await finalizeProposalEvaluationSummary(proposalId, { revision });
+      else if (mode === "reopen") await reopenProposalEvaluationSummary(proposalId, { reason, revision });
+      else await submitProposalEvaluationPackage(proposalId, { revision });
+      if (mode === "draft") setSummaryDirty(false);
+      setMessage({ draft: "Đã lưu bản nháp tổng hợp.", finalize: "Đã chốt bản tổng hợp.", reopen: "Đã mở lại bản tổng hợp để sửa.", submit: "Đã trình hồ sơ tới lãnh đạo phê duyệt." }[mode]);
       await refresh();
       onWorkflowChange();
     } catch (error) {
@@ -1875,7 +1898,7 @@ export function ProposalEvaluationPanel({
                 setSummaryText(event.target.value);
                 setSummaryDirty(true);
               }}
-              disabled={!canConsolidate}
+              disabled={!canEditSummary}
             />
           </label>
           <label className="field">
@@ -1886,7 +1909,7 @@ export function ProposalEvaluationPanel({
                 setRecommendation(event.target.value);
                 setSummaryDirty(true);
               }}
-              disabled={!canConsolidate}
+              disabled={!canEditSummary}
             >
               <option value="">-- Chọn kết luận --</option>
               {progress.recommendations.map((option) => (
@@ -1898,6 +1921,8 @@ export function ProposalEvaluationPanel({
           </label>
 
           {summaryError ? <p className="form-error">{summaryError}</p> : null}
+          {progress.evaluationSummary?.reopenReason ? <p className="record-meta">Đã mở lại bản đã chốt: {progress.evaluationSummary.reopenReason}</p> : null}
+          {isFinalized ? <p className="record-meta">Bản tổng hợp đã chốt (phiên bản {progress.evaluationSummary?.revision}); chờ trình lãnh đạo.</p> : null}
           {pendingNames.length ? <p className="record-meta">Chờ phiếu của: {pendingNames.join(", ")}.</p> : null}
           {isReadyForApproval ? (
             <p className="state-message success compact-state">
@@ -1930,24 +1955,43 @@ export function ProposalEvaluationPanel({
             <button
               className="button"
               type="button"
-              disabled={!canConsolidate || savingMode !== ""}
-              onClick={() => void handleSaveSummary(false)}
+              disabled={!canEditSummary || savingMode !== ""}
+              onClick={() => void handleSummaryAction("draft")}
             >
               <Save size={16} aria-hidden="true" />
               {savingMode === "draft" ? "Đang lưu" : "Lưu nháp tổng hợp"}
             </button>
-            <button
-              className="button primary"
-              type="button"
-              disabled={!canConsolidate || isReadyForApproval || !progress.allReviewsSubmitted || savingMode !== ""}
-              onClick={() => void handleSaveSummary(true)}
-            >
-              <Send size={16} aria-hidden="true" />
-              {savingMode === "ready" ? "Đang gửi" : "Gửi lãnh đạo phê duyệt"}
-            </button>
+            {canFinalize ? (
+              <button
+                className="button"
+                type="button"
+                disabled={!progress.allReviewsSubmitted || summaryDirty || savingMode !== ""}
+                title={summaryDirty ? "Lưu nháp trước khi chốt" : undefined}
+                onClick={() => void handleSummaryAction("finalize")}
+              >
+                <CheckCircle2 size={16} aria-hidden="true" />
+                {savingMode === "finalize" ? "Đang chốt" : "Chốt bản tổng hợp"}
+              </button>
+            ) : null}
+            {canSubmitPackage && isFinalized ? (
+              <button className="button" type="button" disabled={savingMode !== ""} onClick={() => void handleSummaryAction("reopen")}>
+                {savingMode === "reopen" ? "Đang mở lại" : "Mở lại để sửa"}
+              </button>
+            ) : null}
+            {canSubmitPackage ? (
+              <button
+                className="button primary"
+                type="button"
+                disabled={!progress.allReviewsSubmitted || savingMode !== ""}
+                onClick={() => void handleSummaryAction("submit")}
+              >
+                <Send size={16} aria-hidden="true" />
+                {savingMode === "submit" ? "Đang trình" : "Trình lãnh đạo phê duyệt"}
+              </button>
+            ) : null}
           </div>
-          {!canConsolidate ? (
-            <p className="record-meta">{consolidateBlockedReason || "Chỉ hồ sơ đang đánh giá hoặc chờ phê duyệt mới được tổng hợp kết quả."}</p>
+          {!canConsolidate && !canFinalize && !canSubmitPackage && !isReadyForApproval ? (
+            <p className="record-meta">{consolidateBlockedReason || "Chỉ hồ sơ đang đánh giá mới được tổng hợp kết quả."}</p>
           ) : !progress.allReviewsSubmitted && !isReadyForApproval ? (
             <p className="record-meta">
               {progress.activeAssignmentCount === 0

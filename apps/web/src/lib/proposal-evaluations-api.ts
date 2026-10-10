@@ -103,8 +103,13 @@ export type ProposalEvaluationSummary = {
   summary: string;
   recommendation: string;
   recommendationLabel: string;
-  status: "draft" | "ready_for_approval";
+  /** Lưu nháp → chốt → trình lãnh đạo. */
+  status: "draft" | "finalized" | "ready_for_approval";
   statusLabel: string;
+  /** Phiên bản gói đánh giá; lãnh đạo quyết định trên đúng phiên bản này. */
+  revision: number;
+  /** Lý do mở lại (khi bản đã chốt được mở lại về nháp). */
+  reopenReason: string;
   createdById: string;
   updatedById: string;
   updatedByDisplayName: string;
@@ -170,7 +175,12 @@ export type ProposalDecisionPackage = {
     reason: string;
     viewerMessage: string;
   };
-  progress: ReviewProgressCounts;
+  /** Lãnh đạo không thấy danh sách người chưa gửi phiếu (bảo mật phiếu). */
+  progress: Omit<ReviewProgressCounts, "pendingReviewers"> & { pendingReviewers?: ReviewProgressCounts["pendingReviewers"] };
+  /** Phiên bản gói đánh giá phải gửi kèm khi quyết định. */
+  packageRevision: number;
+  /** Phiếu từng người được bảo mật với lãnh đạo. */
+  disclosure?: { protectedReviewData: string };
   reviews: SubmittedProposalReview[];
   evaluationSummary: ProposalEvaluationSummary | null;
   decisions: ProposalDecisionRecord[];
@@ -351,12 +361,27 @@ export async function loadProposalReviewProgress(proposalId: string) {
 
 export async function saveProposalEvaluationSummary(
   proposalId: string,
-  input: { summary: string; recommendation: string; markReady: boolean }
+  input: { summary: string; recommendation: string; contextVersion?: unknown }
 ) {
   return requestJson<{ evaluationSummary: ProposalEvaluationSummary; proposalStatus: string }>(
     `/research-proposals/${proposalId}/evaluation-summary`,
     { method: "PUT", body: JSON.stringify(input) }
   );
+}
+
+/** Chốt bản nháp tổng hợp (khoá nội dung cùng danh sách phân công và phiếu của vòng hiện tại). */
+export async function finalizeProposalEvaluationSummary(proposalId: string, input: { revision?: number; contextVersion?: unknown } = {}) {
+  return requestJson<{ evaluationSummary: ProposalEvaluationSummary; proposalStatus: string }>(`/research-proposals/${proposalId}/evaluation-summary/finalize`, { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Mở lại bản đã chốt về nháp (chưa trình), kèm lý do. */
+export async function reopenProposalEvaluationSummary(proposalId: string, input: { reason: string; revision?: number; contextVersion?: unknown }) {
+  return requestJson<{ evaluationSummary: ProposalEvaluationSummary; proposalStatus: string }>(`/research-proposals/${proposalId}/evaluation-summary/reopen`, { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Trình lãnh đạo bản tổng hợp đã chốt; hồ sơ chuyển "chờ phê duyệt". */
+export async function submitProposalEvaluationPackage(proposalId: string, input: { revision?: number; contextVersion?: unknown } = {}) {
+  return requestJson<{ evaluationSummary: ProposalEvaluationSummary; proposalStatus: string }>(`/research-proposals/${proposalId}/evaluation-summary/submit`, { method: "POST", body: JSON.stringify(input) });
 }
 
 // ST-3.5 --------------------------------------------------------------------------------------
@@ -369,9 +394,9 @@ export async function loadProposalDecisionPackage(proposalId: string) {
 export async function decideProposal(
   proposalId: string,
   decision: "approve" | "reject",
-  payload: string | { note?: string; approvedBudget?: number; budgetNote?: string }
+  payload: { note?: string; approvedBudget?: number; budgetNote?: string; packageRevision: number }
 ) {
-  const body = typeof payload === "string" ? { note: payload } : payload;
+  const body = payload;
   return requestJson<{ decision: ProposalDecisionRecord; proposalStatus: string; proposalStatusLabel: string }>(
     `/research-proposals/${proposalId}/${decision}`,
     { method: "POST", body: JSON.stringify(body) }

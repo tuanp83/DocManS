@@ -162,8 +162,10 @@ export function ProposalDecisionPanel({
 
     setBusyDecision(decision);
     try {
+      // Quyết định gắn với đúng phiên bản gói đánh giá đang hiển thị; gói đã đổi thì máy chủ từ chối và yêu cầu tải lại.
       const payload = {
-        note: note.trim()
+        note: note.trim(),
+        packageRevision: decisionPackage?.packageRevision ?? 0
       };
 
       const result = await decideProposal(proposalId, decision, payload);
@@ -340,6 +342,13 @@ export function ProposalDecisionPanel({
           ) : (
             <EmptyState title="Chưa có tổng hợp kết quả" message="Chuyên viên quản lý khoa học cần tổng hợp kết quả trước khi trình phê duyệt." />
           )}
+
+          {decisionPackage.disclosure?.protectedReviewData === "REDACTED" ? (
+            <p className="record-meta">
+              Phiếu đánh giá của từng thành viên được bảo mật. Quyết định dựa trên bản tổng hợp đã chốt (phiên bản gói {decisionPackage.packageRevision})
+              {typeof decisionPackage.progress.averageTotalScore === "number" ? ` · điểm trung bình ${decisionPackage.progress.averageTotalScore}/${decisionPackage.progress.maxTotalScore}` : ""}.
+            </p>
+          ) : null}
 
           {decisionPackage.reviews.length ? (
             <div className="form-section-inline">

@@ -146,10 +146,27 @@ export const proposalDecisionPipe: PipeTransform<unknown, ProposalDecisionDto> =
     // reject-needs-a-reason rule lives in the service where the decision type is known.
     const input = value === undefined || value === null || value === "" ? {} : assertRecord(value);
     assertOptionalText(input.note, "note", 2000);
+    // Lãnh đạo quyết định trên đúng phiên bản gói đánh giá đã xem (khoá phiên bản gói).
+    if (input.packageRevision === undefined || input.packageRevision === null || input.packageRevision === "" || !Number.isInteger(Number(input.packageRevision)) || Number(input.packageRevision) < 1) {
+      throw new BadRequestException({ code: "PACKAGE_CONTEXT_MISMATCH", message: "Thiếu phiên bản gói đánh giá. Vui lòng tải lại trước khi quyết định." });
+    }
     if (input.budgetNote !== undefined && input.budgetNote !== null) {
       assertOptionalText(input.budgetNote, "budgetNote", 500);
     }
     return input as ProposalDecisionDto;
+  }
+};
+
+/** Chốt, mở lại, trình bản tổng hợp: thân rỗng hợp lệ; revision (bản đang xem) và lý do (mở lại) là tuỳ chọn. */
+export type EvaluationSummaryLifecycleDto = { revision?: number; reason?: string; contextVersion?: ContextVersionTokenV1 };
+
+export const evaluationSummaryLifecyclePipe: PipeTransform<unknown, EvaluationSummaryLifecycleDto> = {
+  transform(value: unknown) {
+    const input = value === undefined || value === null || value === "" ? {} : assertRecord(value);
+    if (input.revision !== undefined && (!Number.isInteger(Number(input.revision)) || Number(input.revision) < 0)) throw new BadRequestException({ message: "Phiên bản bản tổng hợp không hợp lệ." });
+    assertOptionalText(input.reason, "reason", 1000);
+    if (input.contextVersion !== undefined && !isContextVersionTokenV1(input.contextVersion)) throw new BadRequestException({ message: "contextVersion của hồ sơ không hợp lệ." });
+    return input as EvaluationSummaryLifecycleDto;
   }
 };
 

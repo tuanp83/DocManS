@@ -1,10 +1,10 @@
+import { assertCurrentCompletenessEvidence, currentRoundAssignments, currentRoundReviews, sameEvidenceIds } from "../proposals-shared/submission-evidence.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
 import { councilCompositionProblems, councilMetadataProblems, councilMetadataRoleToAssignmentRole, councilRoleOf } from "../proposals-shared/evaluation-council-rules.js";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { proposalContextVersion, runProposalMutation } from "../proposals-shared/proposal-mutation.js";
-import { REVIEW_STATUS } from "../proposals-shared/proposal-review-access.js";
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
 import { ProposalParticipationService } from "../research-proposals/proposal-participation.service.js";
 import { DECIDABLE_STATUSES, PROPOSAL_STATUS, PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
@@ -22,8 +22,8 @@ import {
   type ProposalDecisionRecord
 } from "./proposal-evaluation-support.js";
 import { ProposalEvaluationSummaryService } from "./proposal-evaluation-summary.service.js";
-import { ProposalReviewAssignmentsService } from "./proposal-review-assignments.service.js";
-import { ProposalReviewsService } from "./proposal-reviews.service.js";
+import { ProposalReviewAssignmentsService, retireStaleOpenAssignments } from "./proposal-review-assignments.service.js";
+import { ProposalReviewsService, REVIEW_SUBMITTED_NOTE } from "./proposal-reviews.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { ACCEPTANCE_ELIGIBLE_PROPOSAL_STATUSES, assertAcceptanceStatus, readAcceptanceMembers, readAcceptanceScores, readAcceptanceStatus, readCouncilType, readOptionalDateText, readOptionalText, readResolution, type AcceptanceMemberInput } from "./acceptance-council.js";
 import { computeDisbursementTotals, emptyDisbursement, readApprovedBudget, readDisbursementInput, stampMilestoneDates, type DisbursementRecord } from "./disbursement.js";
@@ -100,7 +100,12 @@ export class ProposalDecisionsService {
     }
   }
 
-  /** AC-ST-3.5-01 — everything the authority needs in one authority-scoped read model. */
+  /**
+   * AC-ST-3.5-01 — everything the authority needs in one authority-scoped read model.
+   * Lãnh đạo nhận bản tổng hợp đã trình và số liệu chung của vòng đánh giá; danh tính người phản biện, điểm và
+   * nhận xét từng phiếu được bảo mật (mang từ thanhdotien278/DocManS). `packageRevision` là phiên bản gói phải
+   * gửi kèm khi quyết định.
+   */
   async getDecisionPackage(actor: SafeUserContext, proposalId: string) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
     assertApprovalAuthority(actor);
@@ -108,9 +113,8 @@ export class ProposalDecisionsService {
     // must not become a side channel that reports an unsubmitted proposal's existence.
     assertCanReadEvaluation(actor, proposal);
 
-    const [assignmentRecords, reviewRecords, summary, decisions, attachments, history] = await Promise.all([
-      this.assignments.findAssignments(proposalId),
-      this.assignments.findReviews(proposalId),
+    const [round, summary, decisions, attachments, history] = await Promise.all([
+      this.assignments.findCurrentRound(proposal),
       this.summaries.findSummary(proposalId),
       this.findDecisions(proposalId),
       this.prisma.fileRecord.findMany({
@@ -125,6 +129,8 @@ export class ProposalDecisionsService {
     ]);
 
     const conflict = await this.resolveDecisionConflict(actor, proposal);
+    const { pendingReviewers: _pendingReviewers, ...progress } = this.summaries.summarizeProgress(round.assignments, round.reviews);
+    const reviewerIds = new Set(round.allAssignments.map((assignment) => assignment.reviewerUserId));
 
     return {
       proposalId,
@@ -135,36 +141,43 @@ export class ProposalDecisionsService {
       proposalTypeCode: proposal.proposalTypeCode,
       researchFieldCode: proposal.researchFieldCode,
       budgetMetadata: proposal.budgetMetadata,
-      canDecide: (DECIDABLE_STATUSES as string[]).includes(proposal.status) && !conflict.conflicted,
+      canDecide: (DECIDABLE_STATUSES as string[]).includes(proposal.status) && !conflict.conflicted && summary?.status === "ready_for_approval",
       conflict,
-      progress: this.summaries.summarizeProgress(assignmentRecords, reviewRecords),
-      reviews: reviewRecords
-        .filter((review) => review.status === REVIEW_STATUS.submitted)
-        .map((review) => this.reviews.toSubmittedReviewResponse(review)),
+      progress,
+      reviews: [],
+      disclosure: { protectedReviewData: "REDACTED" },
       evaluationSummary: this.summaries.toSummaryResponse(summary),
+      packageRevision: summary?.revision ?? 0,
       decisions: decisions.map((decision) => this.toDecisionResponse(decision)),
       attachmentCount: (attachments as unknown[]).length,
       history: (
         history as Array<{
           id: string;
+          actorId?: string | null;
           fromStatus: string;
           toStatus: string;
           submittedAt: Date;
           note: string | null;
+          snapshot?: unknown;
           actor?: { displayName: string } | null;
         }>
-      ).map((event) => ({
+      ).filter((event) => !(event.snapshot as { backfilledFrom?: unknown } | null | undefined)?.backfilledFrom).map((event) => ({
         id: event.id,
         fromStatus: event.fromStatus,
         toStatus: event.toStatus,
         submittedAt: event.submittedAt.toISOString(),
-        actorDisplayName: event.actor?.displayName ?? "",
+        // Không lộ danh tính người phản biện qua lịch sử gửi phiếu.
+        actorDisplayName: event.note === REVIEW_SUBMITTED_NOTE && event.actorId && reviewerIds.has(event.actorId) ? "Người đánh giá" : event.actor?.displayName ?? "",
         note: event.note ?? ""
       }))
     };
   }
 
-  /** AC-ST-3.5-02. Status, decision record, history and audit are written in one transaction. */
+  /**
+   * AC-ST-3.5-02. Status, decision record, history and audit are written in one transaction.
+   * Khoá phiên bản gói: quyết định chỉ hợp lệ khi bản tổng hợp đã trình còn đúng `packageRevision` lãnh đạo đã xem,
+   * bằng chứng gói (đã chốt) vẫn khớp lần nộp, danh sách phân công và phiếu hiện tại.
+   */
   async decide(actor: SafeUserContext, proposalId: string, decision: ProposalDecisionCode, input: Record<string, unknown> = {}) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
     assertApprovalAuthority(actor);
@@ -185,11 +198,19 @@ export class ProposalDecisionsService {
       throw new BadRequestException({ message: conflict.viewerMessage, reasonCode: conflict.reasonCode });
     }
 
+    const packageRevision = Number(input.packageRevision);
+    if (!Number.isInteger(packageRevision) || packageRevision < 1) {
+      throw new BadRequestException({ code: "PACKAGE_CONTEXT_MISMATCH", message: "Thiếu phiên bản gói đánh giá. Vui lòng tải lại trước khi quyết định." });
+    }
     const note = this.readNote(input.note, { required: decision === PROPOSAL_DECISIONS.rejected });
     const toStatus = DECISION_TARGET_STATUS[decision];
     const decidedAt = new Date();
 
     const created = (await this.prisma.$transaction(async (tx) => {
+      // Khoá hồ sơ rồi đối chiếu gói trong cùng giao dịch: không ai sửa, mở lại hay trình lại gói giữa lúc kiểm tra và ghi.
+      await tx.$queryRaw`SELECT id FROM research_proposals WHERE id = ${proposalId} FOR UPDATE`;
+      const packageSnapshot = await this.assertDecidablePackage(tx as unknown as PrismaService, proposal, packageRevision);
+
       // Conditional on the status we validated, so two authorities deciding at once cannot both win.
       await updateProposalStatusGuarded(tx, proposalId, proposal.status, toStatus);
 
@@ -219,7 +240,10 @@ export class ProposalDecisionsService {
           decidedById: actor.id,
           decidedAt,
           fromStatus: proposal.status,
-          toStatus
+          toStatus,
+          packageRevision,
+          contextVersion: (input.contextVersion ?? null) as never,
+          packageSnapshot: packageSnapshot as never
         } as never,
         // Included so the response names the deciding authority, matching what `findDecisions`
         // returns on a later read of the same record.
@@ -233,6 +257,7 @@ export class ProposalDecisionsService {
           fromStatus: proposal.status,
           toStatus,
           submittedAt: decidedAt,
+          snapshot: { kind: "proposal_decision", schemaVersion: "proposal-decision-evidence.v1", decision, packageRevision, packageSnapshot },
           note: decision === PROPOSAL_DECISIONS.approved ? "Lãnh đạo phê duyệt hồ sơ" : "Lãnh đạo không phê duyệt hồ sơ"
         } as never
       });
@@ -245,7 +270,7 @@ export class ProposalDecisionsService {
           targetEntity: "proposal-decision",
           targetEntityId: record.id,
           username: actor.username,
-          reason: JSON.stringify({ proposalId, decision, fromStatus: proposal.status, toStatus, hasNote: Boolean(note) })
+          reason: JSON.stringify({ proposalId, decision, fromStatus: proposal.status, toStatus, packageRevision, hasNote: Boolean(note) })
         }
       });
 
@@ -257,6 +282,25 @@ export class ProposalDecisionsService {
       proposalStatus: toStatus,
       proposalStatusLabel: PROPOSAL_STATUS_LABELS[toStatus] ?? toStatus
     };
+  }
+
+  /** Gói đánh giá đủ điều kiện quyết định trên đúng phiên bản; trả về bản chụp bằng chứng để lưu cùng quyết định. */
+  private async assertDecidablePackage(client: PrismaService, proposal: EvaluationProposalRecord, packageRevision: number) {
+    const mismatch = () => new BadRequestException({ code: "PACKAGE_CONTEXT_MISMATCH", message: "Gói đánh giá đã thay đổi so với bản bạn đang xem. Vui lòng tải lại trước khi quyết định." });
+    const summary = (await client.proposalEvaluationSummary.findFirst({ where: { proposalId: proposal.id } })) as { status: string; revision?: number; evidenceSnapshot?: unknown } | null;
+    if (!summary || summary.status !== "ready_for_approval") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Hồ sơ chưa có gói đánh giá đã trình lãnh đạo." });
+    if ((summary.revision ?? 0) !== packageRevision) throw mismatch();
+    const evidence = await assertCurrentCompletenessEvidence(client, proposal);
+    const snapshot = summary.evidenceSnapshot as Record<string, unknown> | null | undefined;
+    const assignments = await client.proposalReviewAssignment.findMany({ where: { proposalId: proposal.id } });
+    const reviews = await client.proposalReview.findMany({ where: { proposalId: proposal.id } });
+    const roundAssignments = currentRoundAssignments(assignments as never[], evidence.eventId) as unknown as Parameters<ProposalEvaluationSummaryService["summarizeProgress"]>[0];
+    const roundReviews = currentRoundReviews(reviews as never[], roundAssignments as never[], evidence.eventId) as unknown as Parameters<ProposalEvaluationSummaryService["summarizeProgress"]>[1];
+    if (!snapshot || snapshot.lifecycle !== "finalized" || snapshot.submissionEventId !== evidence.eventId || !sameEvidenceIds(snapshot, roundAssignments, roundReviews)) throw mismatch();
+    // Gói được migration tạo cho hồ sơ đã trình theo quy định cũ (backfilled) không bị chặn bởi quy tắc thành phần
+    // hội đồng mới; gói mới luôn đã qua kiểm tra này khi chốt và khi trình.
+    if (snapshot.backfilled !== true && !this.summaries.summarizeProgress(roundAssignments, roundReviews).allReviewsSubmitted) throw mismatch();
+    return snapshot;
   }
 
   async findDecisions(proposalId: string) {
@@ -518,6 +562,12 @@ export class ProposalDecisionsService {
     }
 
     const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
+    // Duyệt hội đồng chỉ cho tờ trình đã gửi, khi hồ sơ còn trong bước đánh giá và gói đánh giá chưa chốt/trình:
+    // thêm phân công sau khi gói đã chốt sẽ làm gói không còn khớp vòng đánh giá.
+    assertProposalStatus(proposal, ["submitted", "resubmitted", "under_review"], "Chỉ duyệt hội đồng khi hồ sơ đã nộp hoặc đang đánh giá.");
+    if (currentCouncil.status !== "submitted") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ duyệt được tờ trình hội đồng đã gửi lãnh đạo." });
+    const existingSummary = await tx.proposalEvaluationSummary.findFirst({ where: { proposalId } }) as { status: string } | null;
+    if (existingSummary && existingSummary.status !== "draft") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Bản tổng hợp đánh giá đã chốt hoặc đã trình; không thay đổi hội đồng được nữa." });
     const proposalCode = proposal.code || proposal.id.slice(0, 8).toUpperCase();
     const decisionNumber = (typeof input.decisionNumber === "string" && input.decisionNumber.trim())
       ? input.decisionNumber.trim()
@@ -562,9 +612,10 @@ export class ProposalDecisionsService {
       // Tạo phân công đánh giá theo quyết định thành lập hội đồng, đối chiếu với phân công đang có hiệu lực:
       // không tạo trùng, không đổi vai trò ngầm, không vượt giới hạn (2–3 phản biện, 3–5 thành viên, 1 thư ký),
       // và kiểm tra xung đột lợi ích với danh sách được duyệt (có thể khác danh sách đã đề xuất).
-      const live = await tx.proposalReviewAssignment.findMany({
-        where: { proposalId, status: { in: ["assigned", "completed"] } }
-      });
+      // Phân công tạo từ hội đồng gắn với lần nộp đã được kiểm tra đầy đủ (vòng hiện tại).
+      // Luôn cần kết quả kiểm tra đầy đủ của lần nộp hiện tại: duyệt hội đồng mở vòng đánh giá.
+      const evidence = await assertCurrentCompletenessEvidence(tx, proposal);
+      const live = await tx.proposalReviewAssignment.findMany({ where: { proposalId, reviewedSubmissionEventId: evidence.eventId, status: { in: ["assigned", "completed"] } } });
       const toCreate: Array<{ userId: string; role: ReturnType<typeof councilMetadataRoleToAssignmentRole> }> = [];
       for (const m of members) {
         const userId = typeof m.userId === "string" ? m.userId : "";
@@ -593,9 +644,11 @@ export class ProposalDecisionsService {
       }
       const assignedAt = new Date();
       for (const item of toCreate) {
+        await retireStaleOpenAssignments(tx, proposalId, item.userId, evidence.eventId, assignedAt);
         await tx.proposalReviewAssignment.create({
           data: {
             proposalId,
+            reviewedSubmissionEventId: evidence.eventId,
             reviewerUserId: item.userId,
             assignmentRole: item.role,
             status: "assigned",
