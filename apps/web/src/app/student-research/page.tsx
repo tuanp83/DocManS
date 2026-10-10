@@ -1,14 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
+import { SectionCard } from "@/components/ui/section-card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useRouter } from "next/navigation";
-import { Search, Plus, BookOpen, User, CheckCircle, GraduationCap, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { Search, Plus, Eye, Save } from "lucide-react";
 
 export default function StudentResearchPage() {
   const [projects, setProjects] = useState([]);
   const [open, setOpen] = useState(false);
+  const [keyword, setKeyword] = useState("");
   const router = useRouter();
   
   // Form state
@@ -19,6 +24,7 @@ export default function StudentResearchPage() {
     studentClass: "",
     supervisorId: "",
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchProjects = async () => {
     try {
@@ -38,6 +44,7 @@ export default function StudentResearchPage() {
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       const res = await fetch("/api/v1/student-research", {
         method: "POST",
@@ -53,141 +60,161 @@ export default function StudentResearchPage() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    if (status === "COMPLETED") return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200"><CheckCircle size={14} /> Đã nghiệm thu</span>;
-    return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200"><BookOpen size={14} /> Đang thực hiện</span>;
-  };
+  const filteredProjects = useMemo(() => {
+    const term = keyword.toLowerCase().trim();
+    if (!term) return projects;
+    return projects.filter((p: any) => 
+      (p.title || p.name || "").toLowerCase().includes(term) ||
+      (p.code || "").toLowerCase().includes(term) ||
+      (p.studentName || "").toLowerCase().includes(term)
+    );
+  }, [keyword, projects]);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <Breadcrumb items={[{ label: "Dashboard", href: "/dashboard" }, { label: "NCKH Sinh viên", href: "/student-research" }]} />
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <PageHeader
-          eyebrow="NCKH"
-          title="Đề tài NCKH Sinh viên"
-          description="Quản lý, giám sát và nghiệm thu đề tài cấp sinh viên."
-        />
-        <button 
-          onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors"
-        >
-          <Plus size={18} />
-          <span>Đề tài mới</span>
-        </button>
-      </div>
+    <>
+      <Breadcrumb items={[{ label: "Dashboard", href: "/dashboard" }, { label: "NCKH Sinh viên" }]} />
+      <PageHeader
+        eyebrow="NCKH"
+        title="Đề tài NCKH Sinh viên"
+        description="Quản lý, giám sát và nghiệm thu đề tài cấp sinh viên."
+      />
       
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 font-medium uppercase tracking-wider text-xs">
-              <tr>
-                <th className="px-6 py-4">Mã ĐT</th>
-                <th className="px-6 py-4">Tên đề tài</th>
-                <th className="px-6 py-4">Sinh viên / Lớp</th>
-                <th className="px-6 py-4">Trạng thái</th>
-                <th className="px-6 py-4 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {projects.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                    <BookOpen className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-                    <p className="text-base font-medium">Chưa có đề tài nào</p>
-                    <p className="text-sm">Hãy tạo đề tài đầu tiên cho sinh viên.</p>
-                  </td>
-                </tr>
-              ) : (
-                projects.map((p: any) => (
-                  <tr key={p.id} className="hover:bg-gray-50 transition-colors group">
-                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
-                      {p.code}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900 line-clamp-2">{p.name}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                          {p.studentName.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="font-medium text-gray-900">{p.studentName}</div>
-                          <div className="text-xs text-gray-500">{p.studentClass}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(p.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button 
-                        className="inline-flex items-center justify-center p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        onClick={() => router.push(`/student-research/${p.id}`)}
-                        title="Xem chi tiết"
-                      >
-                        <ArrowRight size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm transition-opacity">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-900">Khởi tạo Đề tài Sinh viên</h3>
-              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-500">
-                <span className="sr-only">Close</span>
-                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">Mã đề tài</label>
-                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow" value={formData.code} onChange={(e: any) => setFormData({...formData, code: e.target.value})} placeholder="VD: SV2026-01" required />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">Mã Giảng viên (ID)</label>
-                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow" value={formData.supervisorId} onChange={(e: any) => setFormData({...formData, supervisorId: e.target.value})} placeholder="User ID GVHD" required />
-                </div>
-              </div>
-              
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700">Tên đề tài</label>
-                <textarea className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow resize-none" rows={2} value={formData.name} onChange={(e: any) => setFormData({...formData, name: e.target.value})} placeholder="Nhập tên đề tài..." required />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">Họ tên sinh viên</label>
-                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow" value={formData.studentName} onChange={(e: any) => setFormData({...formData, studentName: e.target.value})} placeholder="Nguyễn Văn A" required />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700">Lớp hành chính</label>
-                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow" value={formData.studentClass} onChange={(e: any) => setFormData({...formData, studentClass: e.target.value})} placeholder="AT18A" required />
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
-                <button type="button" className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors" onClick={() => setOpen(false)}>Hủy bỏ</button>
-                <button type="submit" className="px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 shadow-sm transition-colors">Xác nhận tạo</button>
-              </div>
-            </form>
+      <div className="grid two-column">
+        <SectionCard
+          title="Danh sách đề tài sinh viên"
+          subtitle="Theo dõi tiến độ, trạng thái và các tài liệu liên quan đến đề tài"
+        >
+          <div className="filter-bar" style={{ display: "grid", gridTemplateColumns: "1fr", gap: "10px" }}>
+            <label className="filter-field">
+              <span>Từ khóa</span>
+              <span className="field-input plain">
+                <Search size={16} aria-hidden="true" />
+                <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Mã số, Tên đề tài, Tên sinh viên..." />
+              </span>
+            </label>
           </div>
-        </div>
-      )}
-    </div>
+
+          {filteredProjects.length === 0 ? (
+            <EmptyState title="Chưa có đề tài nào" message="Tạo đề tài đầu tiên cho sinh viên bằng biểu mẫu bên dưới hoặc thử lại từ khóa khác." />
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: "240px" }}>Mã & Tên đề tài</th>
+                    <th style={{ minWidth: "150px" }}>Sinh viên / Lớp</th>
+                    <th style={{ minWidth: "140px" }}>Tiến độ</th>
+                    <th style={{ textAlign: "center" }}>Trạng thái</th>
+                    <th style={{ textAlign: "center" }}>Hành động</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProjects.map((p: any) => (
+                    <tr key={p.id}>
+                      <td>
+                        <Link className="record-title" href={`/student-research/${p.id}`}>
+                          {p.name}
+                        </Link>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
+                          <span className="record-meta" style={{ fontWeight: 700, color: "#15803d" }}>
+                            {p.code}
+                          </span>
+                          <span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "var(--surface-muted, #f1f5f9)", color: "var(--text-primary)", fontWeight: 600 }}>
+                            Cấp Sinh viên
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontSize: "13px", fontWeight: 600, color: "#0f172a" }}>
+                          {p.studentName}
+                        </div>
+                        <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+                          Lớp: {p.studentClass}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: p.status === "COMPLETED" ? "#16a34a" : "#0891b2" }}>
+                            {p.status === "COMPLETED" ? "Đã nghiệm thu" : "Đang thực hiện"}
+                          </span>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>
+                            {p.status === "COMPLETED" ? "100%" : "30%"}
+                          </span>
+                        </div>
+                        <div style={{ width: "100%", height: "6px", background: "#e2e8f0", borderRadius: "3px", overflow: "hidden" }}>
+                          <div
+                            style={{
+                              width: p.status === "COMPLETED" ? "100%" : "30%",
+                              height: "100%",
+                              background: p.status === "COMPLETED" ? "#16a34a" : "#0891b2",
+                              borderRadius: "3px",
+                              transition: "width 0.3s ease"
+                            }}
+                          />
+                        </div>
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <StatusBadge status={p.status === "COMPLETED" ? "approved" : "under_review"} />
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <Link className="button" href={`/student-research/${p.id}`} style={{ padding: "5px 10px", fontSize: "12px" }}>
+                          <Eye size={14} aria-hidden="true" />
+                          Xem
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Tạo đề tài sinh viên mới" subtitle="Nhập các thông tin cơ bản để khởi tạo đề tài mới cho sinh viên">
+          <form className="admin-form" onSubmit={handleSubmit}>
+            <div className="form-section-inline">
+              <div className="section-mini-heading">Thông tin đề tài</div>
+              <label className="field">
+                <span>Mã đề tài</span>
+                <input value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} placeholder="VD: SV2026-01" required />
+              </label>
+              <label className="field">
+                <span>Tên đề tài</span>
+                <textarea rows={2} value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Nhập tên đề tài..." required />
+              </label>
+            </div>
+
+            <div className="form-section-inline">
+              <div className="section-mini-heading">Thông tin thực hiện</div>
+              <div className="form-grid two">
+                <label className="field">
+                  <span>Họ tên sinh viên</span>
+                  <input value={formData.studentName} onChange={(e) => setFormData({ ...formData, studentName: e.target.value })} placeholder="Nguyễn Văn A" required />
+                </label>
+                <label className="field">
+                  <span>Lớp hành chính</span>
+                  <input value={formData.studentClass} onChange={(e) => setFormData({ ...formData, studentClass: e.target.value })} placeholder="AT18A" required />
+                </label>
+              </div>
+              <label className="field">
+                <span>User ID Giảng viên hướng dẫn</span>
+                <input value={formData.supervisorId} onChange={(e) => setFormData({ ...formData, supervisorId: e.target.value })} placeholder="VD: uuid..." required />
+              </label>
+            </div>
+
+            <button className="button primary" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? <Save size={16} aria-hidden="true" /> : <Plus size={16} aria-hidden="true" />}
+              {isSubmitting ? "Đang tạo..." : "Khởi tạo đề tài"}
+            </button>
+          </form>
+        </SectionCard>
+      </div>
+    </>
   );
 }
 
