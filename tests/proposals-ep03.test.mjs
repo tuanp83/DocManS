@@ -1023,22 +1023,16 @@ describe("EP-03 hardening found by adversarial review", () => {
     assert.equal((await services.summaries.getReviewProgress(staffUser, proposal.id)).activeAssignmentCount, 1);
   });
 
-  it("blocks the staff self-review-then-self-consolidate path", async () => {
+  it("staff may self-assign and score, but never consolidate their own review", async () => {
     const services = createServices();
     const proposal = await createSubmittedProposal(services);
 
-    // Staff naming themselves would let one person review and then consolidate their own review.
-    await assert.rejects(
-      () => services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: staffUser.id }),
-      BadRequestException
-    );
-    assert.equal(services.prisma.store.reviewAssignments.length, 0);
-
-    // Even if a second staff member assigns them, they cannot then write the consolidated outcome.
+    // Chuyên viên không tham gia đề tài được tự phân công mình và chấm phiếu.
     const collaborator = { ...staffUser, id: "user-staff-2", username: "hdtien1", displayName: "HD Tiến 1" };
     ACCOUNTS.push(collaborator);
     try {
-      await services.assignments.assignReviewer(collaborator, proposal.id, { reviewerUserId: staffUser.id });
+      await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: staffUser.id });
+      assert.equal(services.prisma.store.reviewAssignments.length, 1);
       await services.reviews.submitMyReview(staffUser, proposal.id, {
         scoreData: FULL_SCORES,
         comment: "Nhận xét của chuyên viên được phân công.",
@@ -1104,9 +1098,32 @@ describe("EP-03 hardening found by adversarial review", () => {
       assert.equal(progress.pendingCount, 0);
       assert.equal(progress.allReviewsSubmitted, true);
       assert.deepEqual(progress.councilProblems, []);
+
+      // Thư ký hội đồng (không phải cán bộ QLKH) xem tiến độ và tổng hợp kết quả của hồ sơ mình được phân công.
+      const secretaryProgress = await services.summaries.getReviewProgress(councilSecretaryUser, proposal.id);
+      assert.equal(secretaryProgress.reviews.length, 8);
+      const consolidated = await services.summaries.saveEvaluationSummary(councilSecretaryUser, proposal.id, { summary: "Biên bản tổng hợp của thư ký.", recommendation: "approve", markReady: false });
+      assert.equal(consolidated.proposalStatus, "under_review");
+      // Người chấm phiếu (không phải thư ký, không phải cán bộ QLKH) không được tổng hợp.
+      await assert.rejects(() => services.summaries.saveEvaluationSummary(reviewerUser, proposal.id, { summary: "x", recommendation: "approve", markReady: false }), ForbiddenException);
     } finally {
       ACCOUNTS.splice(ACCOUNTS.length - people.length, people.length);
     }
+  });
+
+  it("a self-assigned scoring officer sees other reviews only after submitting their own", async () => {
+    const services = createServices();
+    const proposal = await createSubmittedProposal(services);
+    await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: reviewerUser.id, assignmentRole: "reviewer" });
+    await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: staffUser.id, assignmentRole: "reviewer" });
+    await services.reviews.submitMyReview(reviewerUser, proposal.id, { scoreData: FULL_SCORES, comment: "Phiếu của người phản biện.", recommendation: "approve" });
+
+    const before = await services.summaries.getReviewProgress(staffUser, proposal.id);
+    assert.equal(before.reviews.length, 0);
+    assert.equal(before.assignments.length, 2);
+    await services.reviews.submitMyReview(staffUser, proposal.id, { scoreData: FULL_SCORES, comment: "Phiếu của chuyên viên.", recommendation: "revise" });
+    const after = await services.summaries.getReviewProgress(staffUser, proposal.id);
+    assert.equal(after.reviews.length, 2);
   });
 
   it("the evaluation read models do not report on a draft proposal", async () => {

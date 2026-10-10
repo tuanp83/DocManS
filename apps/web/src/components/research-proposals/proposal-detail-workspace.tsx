@@ -158,7 +158,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
     const blocked = blockedProposalAction(capabilityState, action);
     return blocked?.code === "CONFLICT_DENIED" || blocked?.code === "WORKFLOW_STATE_DENIED";
   };
-  const showEvaluationPanel = shouldRenderAction("proposal.review.assign");
+  const showEvaluationPanel = shouldRenderAction("proposal.review.assign") || canPerformProposalAction(capabilityState, "proposal.review.consolidate");
   const showReviewForm = shouldRenderAction("proposal.review.submit");
   const showDecisionPanel = shouldRenderAction("proposal.decision.approve") || shouldRenderAction("proposal.decision.reject");
   const showCompletenessCheck = shouldRenderAction("proposal.completeness.check");

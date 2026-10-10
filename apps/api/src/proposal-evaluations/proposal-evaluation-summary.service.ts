@@ -14,11 +14,11 @@ import {
   REVIEW_STATUS,
   type ReviewRecommendation
 } from "../proposals-shared/proposal-review-access.js";
-import { CONSOLIDATABLE_STATUSES, PROPOSAL_STATUS, PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
+import { CONSOLIDATABLE_STATUSES, isWorkflowVisibleStatus, PROPOSAL_STATUS, PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
 import {
   assertCanReadEvaluation,
   assertProposalStatus,
-  assertScientificManagementScope,
+  isEvaluationCoordinator,
   findEvaluationProposal,
   resolveActorConflict,
   updateProposalStatusGuarded,
@@ -54,12 +54,19 @@ export class ProposalEvaluationSummaryService {
   /** AC-ST-3.4-01. Staff and leadership read; reviewers and PIs never see the panel roster. */
   async getReviewProgress(actor: SafeUserContext, proposalId: string) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertCanReadEvaluation(actor, proposal);
+    const access = actor ? await this.reviewAccess.resolveForProposal(actor.id, proposalId) : null;
+    // Thư ký hội đồng của hồ sơ được xem tiến độ để tổng hợp; các vai trò khác theo quyền đọc đánh giá.
+    const isCouncilSecretary = !!access?.isAssignedReviewer && access.assignmentRole === "committee_secretary" && isWorkflowVisibleStatus(proposal.status);
+    if (!isCouncilSecretary) assertCanReadEvaluation(actor, proposal);
     if ((await this.participation.evaluateConflict(actor.id, proposalId)).conflicted) throw new BadRequestException({ message: "Không được xem dữ liệu phản biện của hồ sơ mình tham gia." });
 
     const assignmentRecords = await this.assignments.findAssignments(proposalId);
     const reviewRecords = await this.assignments.findReviews(proposalId);
     const summary = await this.findSummary(proposalId);
+    // Chuyên viên/Trưởng phòng tự phân công mình chấm phiếu chỉ xem phiếu người khác sau khi đã gửi phiếu của mình,
+    // để giữ tính độc lập của phản biện.
+    const scoringPending = !!access?.isAssignedReviewer && isScoringRole(access.assignmentRole) &&
+      !reviewRecords.some((review) => review.assignmentId === access.assignmentId && review.status === REVIEW_STATUS.submitted);
 
     return {
       proposalId,
@@ -68,7 +75,7 @@ export class ProposalEvaluationSummaryService {
       ...this.summarizeProgress(assignmentRecords, reviewRecords),
       assignments: assignmentRecords.map((assignment) => this.assignments.toAssignmentResponse(assignment, reviewRecords)),
       reviews: reviewRecords
-        .filter((review) => review.status === REVIEW_STATUS.submitted)
+        .filter((review) => review.status === REVIEW_STATUS.submitted && (!scoringPending || review.assignmentId === access?.assignmentId))
         .map((review) => this.reviews.toSubmittedReviewResponse(review)),
       evaluationSummary: this.toSummaryResponse(summary),
       recommendations: REVIEW_RECOMMENDATIONS.map((code) => ({ code, label: REVIEW_RECOMMENDATION_LABELS[code] }))
@@ -82,7 +89,14 @@ export class ProposalEvaluationSummaryService {
    */
   async saveEvaluationSummary(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertScientificManagementScope(actor, proposal);
+    // Người được tổng hợp (quy định 10/2026): chuyên viên, Trưởng phòng QLKH có phạm vi đơn vị, hoặc thư ký
+    // hội đồng đánh giá của chính hồ sơ này. Thư ký không chấm phiếu nên không vướng "tự tổng hợp phiếu của mình".
+    if (!isEvaluationCoordinator(actor, proposal)) {
+      const access = actor ? await this.reviewAccess.resolveForProposal(actor.id, proposalId) : null;
+      if (!access?.isAssignedReviewer || access.assignmentRole !== "committee_secretary") {
+        throw new ForbiddenException({ message: "Chỉ chuyên viên, Trưởng phòng QLKH hoặc thư ký hội đồng của hồ sơ được tổng hợp kết quả." });
+      }
+    }
     assertProposalStatus(proposal, CONSOLIDATABLE_STATUSES, "Chỉ hồ sơ đang đánh giá hoặc chờ phê duyệt mới được tổng hợp kết quả.");
 
     // AC-ST-3.4-03 read through the conflict lens: a staff member who participates in the proposal

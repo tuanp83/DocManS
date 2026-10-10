@@ -20,13 +20,11 @@ import { PROPOSAL_STATUS, PROPOSAL_STATUS_LABELS, REVIEWER_ASSIGNABLE_STATUSES }
 import {
   assertCanReadEvaluation,
   assertProposalStatus,
-  assertScientificManagementScope,
   findEvaluationProposal,
   updateProposalStatusGuarded,
   type EvaluationProposalRecord,
   type ProposalReviewRecord,
-  type ReviewAssignmentRecord
-} from "./proposal-evaluation-support.js";
+  type ReviewAssignmentRecord, assertEvaluationCoordinator } from "./proposal-evaluation-support.js";
 
 type ReviewerCandidate = {
   id: string;
@@ -88,7 +86,7 @@ export class ProposalReviewAssignmentsService {
 
   async candidates(actor: SafeUserContext, proposalId: string, query: unknown = "") {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertScientificManagementScope(actor, proposal);
+    assertEvaluationCoordinator(actor, proposal);
     assertProposalStatus(proposal, REVIEWER_ASSIGNABLE_STATUSES, "Hồ sơ không ở trạng thái cho phép phân công đánh giá.");
     if (typeof query !== "string") {
       throw new BadRequestException({ message: "Từ khóa tìm kiếm người đánh giá không hợp lệ." });
@@ -168,7 +166,7 @@ export class ProposalReviewAssignmentsService {
       return result;
     }
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertScientificManagementScope(actor, proposal);
+    assertEvaluationCoordinator(actor, proposal);
     assertProposalStatus(proposal, REVIEWER_ASSIGNABLE_STATUSES, "Chỉ hồ sơ đã nộp hoặc đang đánh giá mới được phân công người đánh giá.");
     const actorConflict = await this.participation.evaluateConflict(actor.id, proposalId);
     if (actorConflict.conflicted) {
@@ -183,11 +181,9 @@ export class ProposalReviewAssignmentsService {
     const effectiveUntil = input.effectiveUntil ? new Date(String(input.effectiveUntil)) : null;
     if (!Number.isFinite(effectiveFrom.getTime()) || (effectiveUntil && (!Number.isFinite(effectiveUntil.getTime()) || effectiveUntil <= effectiveFrom || effectiveUntil <= new Date())) || (dueDate && dueDate < effectiveFrom)) throw new BadRequestException({ message: "Thời gian hiệu lực và hạn đánh giá không hợp lệ." });
 
-    // Staff assigning themselves would let one person review and then consolidate their own review.
-    // The participation primitive cannot see this, because assigning staff hold no participation row.
-    if (candidate.id === actor.id) {
-      throw new BadRequestException({ message: "Không thể tự phân công mình đánh giá hồ sơ do mình điều phối." });
-    }
+    // Quy định 10/2026: chuyên viên/Trưởng phòng QLKH được tự phân công và chấm phiếu nếu không tham gia đề tài
+    // (người điều phối đã được kiểm tra tham gia ở trên; ứng viên được kiểm tra ngay dưới). Chốt chặn còn lại:
+    // người đã chấm không tự tổng hợp phiếu của mình (resolveActorConflict).
 
     const conflict = await this.participation.evaluateConflict(candidate.id, proposalId);
     if (conflict.conflicted) {
@@ -340,7 +336,7 @@ export class ProposalReviewAssignmentsService {
     if (!this.transactional) return this.mutate(actor, proposalId, input.contextVersion, (s, a) => s.revokeAssignment(a, proposalId, assignmentId, input));
     if ((await this.participation.evaluateConflict(actor.id, proposalId)).conflicted) throw new ForbiddenException({ code: "CONFLICT_DENIED", message: "Người tham gia không được thay đổi phân công." });
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertScientificManagementScope(actor, proposal);
+    assertEvaluationCoordinator(actor, proposal);
     assertProposalStatus(proposal, REVIEWER_ASSIGNABLE_STATUSES, "Hồ sơ không ở trạng thái cho phép thay đổi phân công đánh giá.");
 
     const assignment = await this.findAssignmentById(proposalId, assignmentId);

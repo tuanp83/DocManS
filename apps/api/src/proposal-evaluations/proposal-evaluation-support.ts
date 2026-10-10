@@ -110,10 +110,23 @@ export function assertScientificManagementScope(actor: SafeUserContext | undefin
     throw new ForbiddenException({ message: "Chỉ cán bộ quản lý khoa học được thực hiện thao tác này." });
   }
 
-  if ((actor.unit || "").toLowerCase().includes("chuyên viên")) {
-    throw new ForbiddenException({ message: "Chuyên viên QLKH không có quyền thực hiện đánh giá hồ sơ hoặc phân công hội đồng." });
-  }
+  assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
+  return actor;
+}
 
+/**
+ * Người điều phối vòng đánh giá (quy định 10/2026): chuyên viên QLKH hoặc Trưởng phòng QLKH có phạm vi đơn vị
+ * chủ trì. Dùng cho phân công (kể cả tự phân công) và tổng hợp kết quả. Xung đột lợi ích (tham gia đề tài,
+ * tự tổng hợp phiếu của mình) được kiểm tra riêng ở từng thao tác.
+ */
+export function isEvaluationCoordinator(actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
+  return !!actor && (isResearchManagementStaff(actor) || actor.systemRole === "RESEARCH_MANAGEMENT_HEAD") && actor.organizationScopes.some((scope) => scope.id === proposal.hostOrganizationUnitId);
+}
+
+export function assertEvaluationCoordinator(actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
+  if (!actor || !(isResearchManagementStaff(actor) || actor.systemRole === "RESEARCH_MANAGEMENT_HEAD")) {
+    throw new ForbiddenException({ message: "Chỉ chuyên viên hoặc Trưởng phòng quản lý khoa học được thực hiện thao tác này." });
+  }
   assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
   return actor;
 }
@@ -140,9 +153,7 @@ export function assertCanReadEvaluation(actor: SafeUserContext | undefined, prop
   }
 
   if (actor && isResearchManagementStaff(actor)) {
-    if ((actor.unit || "").toLowerCase().includes("chuyên viên")) {
-      throw new ForbiddenException({ message: "Chuyên viên QLKH không có quyền xem thông tin đánh giá hồ sơ." });
-    }
+    // Quy định 10/2026: mọi chuyên viên QLKH có phạm vi đơn vị được điều phối đánh giá (không còn phân biệt theo tên đơn vị).
     assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
     return actor;
   }

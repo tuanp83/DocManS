@@ -152,13 +152,46 @@ describe("Story 1.8 viewer capability V1", () => {
     assert.equal(authorityCapability.blockedActions.find((item) => item.action === "proposal.decision.approve")?.code, "CONFLICT_DENIED");
   });
 
-  it("council secretary cannot score; the coordinating officer still cannot review", () => {
+  it("council secretary cannot score but may consolidate; a non-participating officer may score", () => {
     const none = { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} };
     const base = { proposal: { ...proposal, status: "under_review" }, participation: none, canRead: true, canEdit: false, canManageFiles: false };
-    const secretary = projectProposalViewerAuthorizationV1({ ...base, actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" }, managementOfficer: { resolved: true, officer: null }, reviewAccess: { isAssignedReviewer: true, assignmentId: "a", assignmentRole: "committee_secretary", effectiveFrom: "2026-07-01T00:00:00.000Z" } });
+    const secretary = projectProposalViewerAuthorizationV1({ ...base, actor: { ...actor, systemRole: "RESEARCHER_INTERNAL_USER", organizationScopes: [] }, managementOfficer: { resolved: true, officer: null }, reviewAccess: { isAssignedReviewer: true, assignmentId: "a", assignmentRole: "committee_secretary", effectiveFrom: "2026-07-01T00:00:00.000Z" } });
     assert.equal(secretary.blockedActions.find((item) => item.action === "proposal.review.submit")?.code, "ACTION_NOT_GRANTED");
+    assert.ok(secretary.allowedActions.includes("proposal.review.consolidate"));
+    assert.equal(secretary.allowedActions.includes("proposal.review.assign"), false);
     const officer = projectProposalViewerAuthorizationV1({ ...base, actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" }, managementOfficer: { resolved: true, officer: { officerUserId: actor.id, username: actor.username, effectiveFrom: new Date() } }, reviewAccess: { isAssignedReviewer: true, assignmentId: "b", assignmentRole: "reviewer", effectiveFrom: "2026-07-01T00:00:00.000Z" } });
-    assert.equal(officer.blockedActions.find((item) => item.action === "proposal.review.submit")?.code, "CONFLICT_DENIED");
+    assert.ok(officer.allowedActions.includes("proposal.review.submit"));
+    // Người đã chấm phiếu không tự tổng hợp kết quả.
+    assert.equal(officer.blockedActions.find((item) => item.action === "proposal.review.consolidate")?.code, "CONFLICT_DENIED");
+  });
+
+  it("staff and head may assign reviewers (including themselves) and consolidate when not participating", () => {
+    const none = { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} };
+    for (const systemRole of ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD"]) {
+      const capability = projectProposalViewerAuthorizationV1({
+        actor: { ...actor, systemRole },
+        proposal: { ...proposal, status: "under_review" },
+        completenessCheckCompleted: true,
+        participation: none,
+        reviewAccess: { isAssignedReviewer: false },
+        canRead: true,
+        canEdit: false,
+        canManageFiles: false
+      });
+      assert.ok(capability.allowedActions.includes("proposal.review.assign"), systemRole);
+      assert.ok(capability.allowedActions.includes("proposal.review.consolidate"), systemRole);
+    }
+    const outOfScope = projectProposalViewerAuthorizationV1({
+      actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF", organizationScopes: [{ id: "org-2" }] },
+      proposal: { ...proposal, status: "under_review" },
+        completenessCheckCompleted: true,
+      participation: none,
+      reviewAccess: { isAssignedReviewer: false },
+      canRead: true,
+      canEdit: false,
+      canManageFiles: false
+    });
+    assert.equal(outOfScope.blockedActions.find((item) => item.action === "proposal.review.assign")?.code, "ORG_SCOPE_DENIED");
   });
 
   it("keeps PI submission record-scoped and blocks a repeated completeness check", () => {

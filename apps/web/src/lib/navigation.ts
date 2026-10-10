@@ -10,10 +10,7 @@ export function getNavigationItems(role: UserRole, account?: { unit?: string }) 
     const profileItem = getRoleNavigationItems("RESEARCH_MANAGEMENT_STAFF").find((item) => item.href === "/researcher-profiles");
     if (profileItem) items = [...items, profileItem];
   }
-  // Chuyên viên QLKH không có quyền Đánh giá hồ sơ (/reviews); thẩm quyền thuộc Trưởng phòng QLKH.
-  if (role === "RESEARCH_MANAGEMENT_STAFF") {
-    items = items.filter((item) => item.href !== "/reviews");
-  }
+  // Quy định 10/2026: chuyên viên QLKH cũng điều phối đánh giá (phân công, tổng hợp), nên thấy /reviews.
 
   // FEATURE FLAG: "Giao việc" (/tasks) chờ Đợt 2 (docs/design/quan-ly-tien-do-nhiem-vu.md); "Việc của tôi" đã dùng dữ liệu thật.
   items = items.filter((item) => item.href !== "/tasks");
