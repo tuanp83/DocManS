@@ -269,7 +269,7 @@ export class ProposalEvaluationSummaryService {
         const reviewers = active.filter(a => a.assignmentRole === "reviewer");
         const committee = active.filter(a => a.assignmentRole === "committee_member");
         const uniqueCommittee = new Set(committee.map(a => a.reviewerUserId));
-        return reviewers.length === 2 && uniqueCommittee.size >= 3;
+        return reviewers.length >= 2 && reviewers.length <= 4 && uniqueCommittee.size >= 3;
       })(),
       averageTotalScore: scored.length ? Math.round((scored.reduce((sum, score) => sum + score, 0) / scored.length) * 10) / 10 : null,
       maxTotalScore: REVIEW_MAX_TOTAL_SCORE
