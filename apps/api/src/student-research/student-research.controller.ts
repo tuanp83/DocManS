@@ -35,7 +35,7 @@ export class StudentResearchController {
   }
 
   @Patch(":id/complete")
-  completeProject(@Param("id") id: string) {
-    return this.studentResearchService.completeProject(id);
+  completeProject(@Param("id") id: string, @Body() body?: { score?: number; award?: string }) {
+    return this.studentResearchService.completeProject(id, body);
   }
 }

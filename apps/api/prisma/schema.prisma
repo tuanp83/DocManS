@@ -1075,6 +1075,8 @@ model StudentResearchProject {
   studentContact String?
 
   status StudentProjectStatus @default(DRAFT)
+  score  Float?
+  award  String?
 
   supervisorId String @map("supervisor_id")
   supervisor   User   @relation("ProjectSupervisor", fields: [supervisorId], references: [id])

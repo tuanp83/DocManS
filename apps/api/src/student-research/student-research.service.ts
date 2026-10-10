@@ -70,10 +70,14 @@ export class StudentResearchService {
     });
   }
 
-  async completeProject(id: string) {
+  async completeProject(id: string, body?: { score?: number; award?: string }) {
     return this.prisma.studentResearchProject.update({
       where: { id },
-      data: { status: "COMPLETED" },
+      data: {
+        status: "COMPLETED",
+        score: body?.score,
+        award: body?.award
+      },
     });
   }
 }
