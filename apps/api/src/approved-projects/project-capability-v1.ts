@@ -14,7 +14,9 @@ export const PROJECT_ACTIONS: PermissionActionV1[] = [
   "project.progress.update", "project.health.assess",
   "project.acceptance.submit", "project.acceptance.return", "project.acceptance.council.propose", "project.acceptance.council.establish",
   "project.acceptance.minutes.record", "project.acceptance.revision.submit", "project.acceptance.revision.confirm",
-  "project.finance.read", "project.finance.manage", "project.liquidation.prepare", "project.liquidation.approve", "project.close"
+  "project.finance.read", "project.finance.manage", "project.liquidation.prepare", "project.liquidation.approve", "project.close",
+  "project.product.manage", "project.product.submit", "project.product.review",
+  "project.superior.prepare", "project.superior.send", "project.superior.result"
 ];
 
 /** Trạng thái một vòng nghiệm thu (project_acceptances.status). */
@@ -30,12 +32,17 @@ export const ACCEPTANCE_ROUND_STATUSES = {
 } as const;
 export const CLOSED_ACCEPTANCE_ROUND_STATUSES: string[] = [ACCEPTANCE_ROUND_STATUSES.returned, ACCEPTANCE_ROUND_STATUSES.passed, ACCEPTANCE_ROUND_STATUSES.failed];
 export const LIQUIDATION_STATUSES = { draft: "DRAFT", approved: "APPROVED" } as const;
+export const SUPERIOR_STATUSES = { preparing: "PREPARING", sent: "SENT", passed: "PASSED", failed: "FAILED" } as const;
+/** Cấp đề tài phải được cấp trên nghiệm thu sau nghiệm thu cơ sở. */
+export const SUPERIOR_ACCEPTANCE_LEVELS = ["ministry-level", "national-level"];
 
 export const PROJECT_STATUSES = {
   preparing: "preparing",
   executing: "executing",
   paused: "paused",
   pendingAcceptance: "pending_acceptance",
+  /** Đề tài cấp Bộ / Nhà nước đã nghiệm thu cơ sở, chờ cấp trên nghiệm thu. */
+  pendingSuperiorAcceptance: "pending_superior_acceptance",
   accepted: "accepted",
   failed: "failed",
   closed: "closed"
@@ -67,7 +74,7 @@ export type ProjectCapabilityInput = {
   request?: { requestType: string; status: string; requesterId: string };
   report?: { status: string; authorId: string };
   /** Vòng nghiệm thu gần nhất và biên bản thanh lý (nếu có). */
-  closure?: { acceptanceStatus: string | null; liquidationStatus: string | null };
+  closure?: { acceptanceStatus: string | null; liquidationStatus: string | null; superiorStatus?: string | null };
 };
 
 // Ánh xạ vai trò của nhánh này: xem project-roles.ts.
@@ -151,7 +158,7 @@ function projectActionDenial(action: PermissionActionV1, input: ProjectCapabilit
   if (action === "project.report.review") return input.canOperate && (!input.report || ["submitted", "under_review"].includes(input.report.status)) ? null : blocked(input.report && !["submitted", "under_review"].includes(input.report.status) ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
   if (action === "project.report.request-supplement") return input.canOperate && (!input.report || ["submitted", "under_review"].includes(input.report.status)) ? null : blocked(input.report && !["submitted", "under_review"].includes(input.report.status) ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
   if (action === "project.report.accept") return input.canOperate && (!input.report || input.report.status === "under_review") ? null : blocked(input.report && input.report.status !== "under_review" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
-  if (action.startsWith("project.acceptance.") || action.startsWith("project.finance.") || action.startsWith("project.liquidation.") || action === "project.close") {
+  if (action.startsWith("project.acceptance.") || action.startsWith("project.finance.") || action.startsWith("project.liquidation.") || action.startsWith("project.product.") || action.startsWith("project.superior.") || action === "project.close") {
     return closureActionDenial(action, input);
   }
   if (action.startsWith("project.adjustment.")) {
@@ -204,6 +211,15 @@ function closureActionDenial(action: PermissionActionV1, input: DenialInput): { 
     case "project.liquidation.prepare": return gate(input.canOperate, concluded && liquidation !== LIQUIDATION_STATUSES.approved);
     case "project.liquidation.approve": return gate(input.canHeadDecide, concluded && liquidation === LIQUIDATION_STATUSES.draft);
     case "project.close": return gate(input.canOperate, concluded && liquidation === LIQUIDATION_STATUSES.approved);
+    // Sản phẩm (nội dung công việc): chuyên viên lập danh sách khi chuẩn bị / đang thực hiện; chủ nhiệm nộp minh chứng;
+    // chuyên viên lập tổ chuyên gia và ghi kết quả. Trạng thái từng sản phẩm được kiểm tra ở service.
+    case "project.product.manage": return gate(input.canOperate, status === PROJECT_STATUSES.preparing || status === PROJECT_STATUSES.executing);
+    case "project.product.submit": return gate(pi, status === PROJECT_STATUSES.executing);
+    case "project.product.review": return gate(input.canOperate, status === PROJECT_STATUSES.executing);
+    // Cấp trên: chuyên viên chuẩn bị hồ sơ, gửi công văn, ghi kết quả.
+    case "project.superior.prepare":
+    case "project.superior.send": return gate(input.canOperate, status === PROJECT_STATUSES.pendingSuperiorAcceptance && input.closure?.superiorStatus === SUPERIOR_STATUSES.preparing);
+    case "project.superior.result": return gate(input.canOperate, status === PROJECT_STATUSES.pendingSuperiorAcceptance && input.closure?.superiorStatus === SUPERIOR_STATUSES.sent);
     default: return blocked("ACTION_NOT_GRANTED");
   }
 }

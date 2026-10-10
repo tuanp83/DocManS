@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { NotificationsService } from "../dist/apps/api/notifications/notifications.service.js";
 import { DeadlineReminderService } from "../dist/apps/api/notifications/deadline-reminder.service.js";
-import { collectProjectReminders, collectProposalSupplementReminders, upcomingBucket } from "../dist/apps/api/notifications/deadline-reminders.js";
+import { collectProjectReminders, collectProposalSupplementReminders, collectSuperiorReminders, upcomingBucket } from "../dist/apps/api/notifications/deadline-reminders.js";
 import { absoluteLink, recipientsOf, renderNotificationEmail } from "../dist/apps/api/notifications/workflow-events.js";
 import { createClosureDb, seedExecutingProject } from "./helpers/project-closure-prisma.mjs";
 
@@ -116,5 +116,35 @@ describe("Nhắc hạn báo cáo", () => {
     assert.equal(await service.run(NOW), 0);
     assert.equal(db.tables.notifications[0].userId, "pi");
     assert.equal(db.tables.notifications[0].type, "REPORT_DUE");
+  });
+});
+
+describe("Nhắc hạn 30 ngày đề nghị cấp trên nghiệm thu", () => {
+  const item = (offset, status = "PREPARING") => ({ projectId: "p1", code: "DT-B1", title: "Đề tài cấp Bộ", level: "ministry-level", facilityAcceptedOn: day(offset - 30), dueDate: day(offset), status, officerUserId: "officer", leadershipUserIds: ["leader"] });
+
+  it("nhắc chuyên viên khi còn ≤10, ≤3, ≤1 ngày; quá hạn báo cả lãnh đạo mỗi tuần; đã gửi thì thôi", () => {
+    assert.equal(collectSuperiorReminders(item(11), NOW).length, 0);
+    const d10 = collectSuperiorReminders(item(10), NOW)[0];
+    assert.equal(d10.dedupKey, "superior-due:p1:2026-10-20:d10");
+    assert.deepEqual(d10.userIds, ["officer"]);
+    assert.equal(collectSuperiorReminders(item(3), NOW)[0].dedupKey, "superior-due:p1:2026-10-13:d3");
+    assert.equal(collectSuperiorReminders(item(0), NOW)[0].dedupKey, "superior-due:p1:2026-10-10:d1");
+    const overdue = collectSuperiorReminders(item(-8), NOW)[0];
+    assert.equal(overdue.type, "SUPERIOR_REQUEST_OVERDUE");
+    assert.deepEqual(overdue.userIds, ["officer", "leader"]);
+    assert.equal(overdue.dedupKey, "superior-overdue:p1:w1");
+    assert.equal(collectSuperiorReminders(item(-8, "SENT"), NOW).length, 0);
+  });
+
+  it("tác vụ hằng ngày đọc các đề tài đang chờ cấp trên", async () => {
+    const db = seedExecutingProject(createClosureDb(), { level: "ministry-level" });
+    db.tables.superiors.push({ projectId: "project-1", level: "ministry-level", acceptanceId: "a1", facilityAcceptedOn: day(-32), dueDate: day(-2), status: "PREPARING", checklist: [] });
+    const original = db.approvedProject.findMany;
+    db.approvedProject.findMany = async () => [];
+    const service = new DeadlineReminderService(db, new NotificationsService(db));
+    assert.equal(await service.run(NOW), 2);
+    assert.deepEqual(db.tables.notifications.map((row) => row.userId).sort(), ["leader", "officer"]);
+    assert.equal(await service.run(NOW), 0);
+    db.approvedProject.findMany = original;
   });
 });

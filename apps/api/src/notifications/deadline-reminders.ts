@@ -141,3 +141,49 @@ export function collectProposalSupplementReminders(request: ReminderSupplementRe
     metadata: { proposalId: request.proposalId, supplementRequestId: request.id, dueDate: request.dueDate.toISOString(), bucket }
   }];
 }
+
+export type ReminderSuperior = {
+  projectId: string;
+  code?: string | null;
+  title: string;
+  level: string;
+  dueDate: Date;
+  facilityAcceptedOn: Date;
+  status: string;
+  officerUserId: string | null;
+  leadershipUserIds: string[];
+};
+
+/**
+ * Hạn 30 ngày gửi đề nghị cấp trên nghiệm thu (đề tài cấp Bộ / Nhà nước): nhắc chuyên viên khi còn ≤ 10, ≤ 3, ≤ 1
+ * ngày; quá hạn thì báo cả chuyên viên và lãnh đạo, mỗi tuần một lần, tới khi công văn được gửi.
+ */
+export function collectSuperiorReminders(item: ReminderSuperior, now: Date): WorkflowEvent[] {
+  if (item.status !== "PREPARING") return [];
+  const daysLeft = calendarDayIndex(item.dueDate) - localDayIndex(now);
+  const levelText = item.level === "national-level" ? "cấp Nhà nước" : "cấp Bộ";
+  const link = projectLink(item.projectId);
+  if (daysLeft >= 0) {
+    const bucket = daysLeft <= 1 ? "d1" : daysLeft <= 3 ? "d3" : daysLeft <= 10 ? "d10" : null;
+    if (!bucket) return [];
+    return [{
+      type: NOTIFICATION_TYPES.superiorRequestDue,
+      userIds: [item.officerUserId],
+      title: `Sắp hết hạn đề nghị cấp trên nghiệm thu: ${item.title}`,
+      message: `Đề tài ${label(item)} (${levelText}) nghiệm thu cơ sở ngày ${vnDate(item.facilityAcceptedOn)}; hạn gửi công văn đề nghị và hồ sơ cấp trên yêu cầu là ${vnDate(item.dueDate)} (${whenText(daysLeft)}).`,
+      link,
+      dedupKey: `superior-due:${item.projectId}:${item.dueDate.toISOString().slice(0, 10)}:${bucket}`,
+      metadata: { projectId: item.projectId, dueDate: item.dueDate.toISOString().slice(0, 10), bucket }
+    }];
+  }
+  const week = Math.floor(-daysLeft / 7);
+  return [{
+    type: NOTIFICATION_TYPES.superiorRequestOverdue,
+    userIds: [item.officerUserId, ...item.leadershipUserIds],
+    title: `Quá hạn đề nghị cấp trên nghiệm thu: ${item.title}`,
+    message: `Đề tài ${label(item)} (${levelText}) đã quá ${-daysLeft} ngày so với hạn 30 ngày (${vnDate(item.dueDate)}) mà Học viện chưa gửi công văn đề nghị cấp trên nghiệm thu.`,
+    link,
+    dedupKey: `superior-overdue:${item.projectId}:w${week}`,
+    metadata: { projectId: item.projectId, dueDate: item.dueDate.toISOString().slice(0, 10), daysOverdue: -daysLeft }
+  }];
+}

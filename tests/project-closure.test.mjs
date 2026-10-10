@@ -19,21 +19,26 @@ function setup(overrides) {
   return { db, projects, closure, context, as, project, round, dispatched };
 }
 
+// Ngày hôm nay theo giờ Việt Nam (ngày họp hội đồng không được ở tương lai).
+const TODAY = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+const PLUS_30 = new Date(Date.parse(`${TODAY}T00:00:00Z`) + 30 * 86_400_000).toISOString().slice(0, 10);
 const dossier = { finalReportSummary: "Đã hoàn thành toàn bộ nội dung.", products: "02 bài báo", evidenceFileIds: ["file-report"] };
 const councilMembers = [{ profileId: "prof-a", role: "CHAIRMAN" }, { profileId: "prof-b", role: "SECRETARY" }, { profileId: "prof-c", role: "REVIEWER_1" }, { profileId: "prof-d", role: "MEMBER" }];
 const passingScores = { reportScore: 28, scientificProductsScore: 27, trainingProductsScore: 13, militaryMedicalPracticalScore: 22 };
 
 async function toEstablishedCouncil(env) {
   await env.closure.submitAcceptance(env.as("pi"), "project-1", { ...dossier, contextVersion: await env.context() });
-  await env.closure.proposeCouncil(env.as("officer"), "project-1", { members: councilMembers, meetingDate: "2026-12-01", meetingLocation: "Phòng họp 1", contextVersion: await env.context() });
+  await env.closure.proposeCouncil(env.as("officer"), "project-1", { members: councilMembers, meetingDate: TODAY, meetingLocation: "Phòng họp 1", contextVersion: await env.context() });
   await env.closure.establishCouncil(env.as("leader"), "project-1", { contextVersion: await env.context() });
 }
 
 describe("Nghiệm thu đề tài", () => {
-  it("chỉ nộp hồ sơ khi mọi mốc đã hoàn thành, có tệp thuộc đề tài; chuyển sang chờ nghiệm thu và báo chuyên viên", async () => {
-    const env = setup({ milestoneStatus: "in_progress" });
-    await assert.rejects(env.closure.submitAcceptance(env.as("pi"), "project-1", { ...dossier, contextVersion: await env.context() }), /mốc chưa hoàn thành/);
-    env.db.tables.milestones[0].status = "completed";
+  it("chỉ nộp hồ sơ khi mọi sản phẩm đã được tổ chuyên gia nghiệm thu đạt, có tệp thuộc đề tài; chuyển sang chờ nghiệm thu và báo chuyên viên", async () => {
+    const env = setup({ productStatus: "UNDER_REVIEW" });
+    await assert.rejects(env.closure.submitAcceptance(env.as("pi"), "project-1", { ...dossier, contextVersion: await env.context() }), /sản phẩm chưa được tổ chuyên gia nghiệm thu đạt/);
+    env.db.tables.products.length = 0;
+    await assert.rejects(env.closure.submitAcceptance(env.as("pi"), "project-1", { ...dossier, contextVersion: await env.context() }), /chưa có danh sách sản phẩm/);
+    env.db.tables.products.push({ id: "prod-1", projectId: "project-1", position: 0, title: "Nội dung 1", productForm: 1, status: "PASSED", submission: null, createdById: "officer" });
     await assert.rejects(env.closure.submitAcceptance(env.as("pi"), "project-1", { ...dossier, evidenceFileIds: ["file-other-project"], contextVersion: await env.context() }), /không thuộc đề tài/);
     await assert.rejects(env.closure.submitAcceptance(env.as("pi"), "project-1", { ...dossier, evidenceFileIds: ["file-voucher"], contextVersion: await env.context() }), /không đúng loại tệp/, "chứng từ giải ngân không được gắn vào hồ sơ nghiệm thu");
     await assert.rejects(env.closure.submitAcceptance(env.as("member"), "project-1", { ...dossier, contextVersion: await env.context() }), (error) => error.status === 403);
@@ -240,7 +245,16 @@ describe("Capability nghiệm thu / thanh lý (một nguồn sự thật cho gia
     ["leader", "failed", { acceptanceStatus: "FAILED", liquidationStatus: "DRAFT" }, "project.liquidation.approve", true],
     ["officer", "accepted", { acceptanceStatus: "PASSED", liquidationStatus: "DRAFT" }, "project.close", false],
     ["officer", "accepted", { acceptanceStatus: "PASSED", liquidationStatus: "APPROVED" }, "project.close", true],
-    ["officer", "closed", { acceptanceStatus: "PASSED", liquidationStatus: "APPROVED" }, "project.close", false]
+    ["officer", "closed", { acceptanceStatus: "PASSED", liquidationStatus: "APPROVED" }, "project.close", false],
+    ["officer", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.product.manage", true],
+    ["officer", "pending_acceptance", { acceptanceStatus: "SUBMITTED", liquidationStatus: null }, "project.product.manage", false],
+    ["pi", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.product.submit", true],
+    ["staff2", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.product.review", false],
+    ["officer", "pending_superior_acceptance", { acceptanceStatus: "PASSED", liquidationStatus: null, superiorStatus: "PREPARING" }, "project.superior.send", true],
+    ["officer", "pending_superior_acceptance", { acceptanceStatus: "PASSED", liquidationStatus: null, superiorStatus: "SENT" }, "project.superior.send", false],
+    ["officer", "pending_superior_acceptance", { acceptanceStatus: "PASSED", liquidationStatus: null, superiorStatus: "SENT" }, "project.superior.result", true],
+    ["leader", "pending_superior_acceptance", { acceptanceStatus: "PASSED", liquidationStatus: null, superiorStatus: "SENT" }, "project.superior.result", false],
+    ["officer", "pending_superior_acceptance", { acceptanceStatus: "PASSED", liquidationStatus: null, superiorStatus: "PREPARING" }, "project.liquidation.prepare", false]
   ];
   for (const [who, status, closure, action, expected] of cases) {
     it(`${who} · ${status} · ${closure.acceptanceStatus ?? "-"}/${closure.liquidationStatus ?? "-"} → ${action} = ${expected}`, () => {
@@ -275,5 +289,124 @@ describe("Giao dịch đề tài", () => {
     assert.equal(calls, 2);
     assert.equal(env.db.tables.acceptances.length, 1);
     assert.equal(env.dispatched.filter((event) => event.type === "ACCEPTANCE_SUBMITTED").length, 1);
+  });
+});
+
+describe("Bước 1: nghiệm thu sản phẩm bởi tổ chuyên gia", () => {
+  const panel = [{ profileId: "prof-a", role: "LEADER" }, { profileId: "prof-b", role: "MEMBER" }, { profileId: "prof-c", role: "MEMBER" }];
+
+  it("chuyên viên lập danh sách sản phẩm theo nội dung công việc (dạng 1–6); chủ nhiệm không lập được", async () => {
+    const env = setup({ productStatus: null });
+    const products = [{ title: "Nội dung 1: Khảo sát", productForm: 1 }, { title: "Nội dung 2: Quy trình", productForm: 2, milestoneId: "ms-1" }];
+    await assert.rejects(env.closure.saveProducts(env.as("pi"), "project-1", { products, contextVersion: await env.context() }), (error) => error.status === 403);
+    await assert.rejects(env.closure.saveProducts(env.as("officer"), "project-1", { products: [{ title: "X", productForm: 7 }], contextVersion: await env.context() }), /từ 1 đến 6/);
+    const saved = await env.closure.saveProducts(env.as("officer"), "project-1", { products, contextVersion: await env.context() });
+    assert.deepEqual(saved.products.map((item) => [item.title, item.productForm, item.status]), [["Nội dung 1: Khảo sát", 1, "PLANNED"], ["Nội dung 2: Quy trình", 2, "PLANNED"]]);
+  });
+
+  it("nộp minh chứng → tổ chuyên gia 3–5 người, 1 tổ trưởng, không người tham gia → không đạt → nộp lại → đạt", async () => {
+    const env = setup({ productStatus: "PLANNED" });
+    await assert.rejects(env.closure.submitProduct(env.as("pi"), "project-1", { productId: "prod-1", evidenceFileIds: ["file-voucher"], contextVersion: await env.context() }), /không đúng loại tệp/);
+    await env.closure.submitProduct(env.as("pi"), "project-1", { productId: "prod-1", note: "Báo cáo khảo sát", evidenceFileIds: ["file-product"], contextVersion: await env.context() });
+    assert.equal(env.db.tables.products[0].status, "SUBMITTED");
+    assert.equal(env.dispatched.at(-1).type, "PRODUCT_SUBMITTED");
+    assert.deepEqual(env.dispatched.at(-1).userIds, ["officer"]);
+    // Không cho sửa nội dung / dạng sản phẩm đã nộp.
+    await assert.rejects(env.closure.saveProducts(env.as("officer"), "project-1", { products: [{ id: "prod-1", title: "Đổi tên", productForm: 1 }], contextVersion: await env.context() }), /không đổi nội dung/);
+    await assert.rejects(env.closure.formProductPanel(env.as("officer"), "project-1", { productId: "prod-1", members: panel.slice(0, 2), contextVersion: await env.context() }), /từ 3 đến 5/);
+    await assert.rejects(env.closure.formProductPanel(env.as("officer"), "project-1", { productId: "prod-1", members: [...panel, { profileId: "prof-d", role: "LEADER" }], contextVersion: await env.context() }), /đúng một tổ trưởng/);
+    await assert.rejects(env.closure.formProductPanel(env.as("officer"), "project-1", { productId: "prod-1", members: [...panel, { profileId: "prof-pi", role: "MEMBER" }], contextVersion: await env.context() }), /không thể tham gia tổ chuyên gia/);
+    await assert.rejects(env.closure.formProductPanel(env.as("staff2"), "project-1", { productId: "prod-1", members: panel, contextVersion: await env.context() }), (error) => error.status === 403);
+    // Minh chứng bị xoá trước khi lập tổ chuyên gia → không lập được.
+    const evidence = env.db.tables.files.find((file) => file.id === "file-product");
+    evidence.status = "deleted";
+    await assert.rejects(env.closure.formProductPanel(env.as("officer"), "project-1", { productId: "prod-1", members: panel, contextVersion: await env.context() }), /đã bị xoá/);
+    evidence.status = "active";
+    await env.closure.formProductPanel(env.as("officer"), "project-1", { productId: "prod-1", members: panel, reviewDate: "2026-11-01", location: "Phòng 2", contextVersion: await env.context() });
+    assert.equal(env.db.tables.products[0].status, "UNDER_REVIEW");
+    assert.ok(env.dispatched.some((event) => event.type === "INVITATION_TO_REVIEW" && event.userIds.includes("ext-a")));
+    await assert.rejects(env.closure.recordProductReview(env.as("officer"), "project-1", { productId: "prod-1", result: "FAILED", minutesFileIds: ["file-panel-minutes"], contextVersion: await env.context() }), /bắt buộc/);
+    await assert.rejects(env.closure.recordProductReview(env.as("officer"), "project-1", { productId: "prod-1", result: "PASSED", contextVersion: await env.context() }), /biên bản/);
+    await env.closure.recordProductReview(env.as("officer"), "project-1", { productId: "prod-1", result: "FAILED", conclusion: "Thiếu số liệu nhóm chứng", minutesFileIds: ["file-panel-minutes"], contextVersion: await env.context() });
+    assert.equal(env.db.tables.products[0].status, "FAILED");
+    assert.match(env.dispatched.at(-1).message, /Thiếu số liệu nhóm chứng/);
+    await env.closure.submitProduct(env.as("pi"), "project-1", { productId: "prod-1", evidenceFileIds: ["file-product-2"], contextVersion: await env.context() });
+    await env.closure.formProductPanel(env.as("officer"), "project-1", { productId: "prod-1", members: panel, contextVersion: await env.context() });
+    await env.closure.recordProductReview(env.as("officer"), "project-1", { productId: "prod-1", result: "PASSED", reviewDate: "2026-11-15", minutesFileIds: ["file-panel-minutes"], contextVersion: await env.context() });
+    assert.equal(env.db.tables.products[0].status, "PASSED");
+    assert.deepEqual(env.db.tables.productReviews.map((row) => [row.round, row.result]).sort(), [[1, "FAILED"], [2, "PASSED"]]);
+    assert.match(env.dispatched.at(-1).message, /có thể nộp hồ sơ nghiệm thu cơ sở/);
+    const result = await env.closure.submitAcceptance(env.as("pi"), "project-1", { ...dossier, contextVersion: await env.context() });
+    assert.equal(result.status, "pending_acceptance");
+  });
+});
+
+describe("Bước 3: đề nghị cấp trên nghiệm thu (cấp Bộ / Nhà nước)", () => {
+  async function facilityPassed(level) {
+    const env = setup({ level });
+    await toEstablishedCouncil(env);
+    await env.closure.recordMinutes(env.as("officer"), "project-1", { ...passingScores, meetingDate: TODAY, contextVersion: await env.context() });
+    return env;
+  }
+
+  it("ngày họp ở tương lai bị từ chối (không được dời hạn 30 ngày)", async () => {
+    const env = setup({ level: "ministry-level" });
+    await toEstablishedCouncil(env);
+    await assert.rejects(env.closure.recordMinutes(env.as("officer"), "project-1", { ...passingScores, meetingDate: "2099-01-01", contextVersion: await env.context() }), /tương lai/);
+    await assert.rejects(env.closure.recordMinutes(env.as("officer"), "project-1", { ...passingScores, meetingDate: "2020-01-01", contextVersion: await env.context() }), /không được trước/);
+  });
+
+  it("đề tài cấp Học viện: nghiệm thu cơ sở đạt là kết thúc", async () => {
+    const env = await facilityPassed("academy-level");
+    assert.equal(env.project().status, "accepted");
+    assert.equal(env.db.tables.superiors.length, 0);
+  });
+
+  it("cấp Bộ: chờ cấp trên, hạn 30 ngày từ ngày nghiệm thu cơ sở; chưa thanh lý được; gửi khi đủ hồ sơ; cấp trên đạt → đã nghiệm thu", async () => {
+    const env = await facilityPassed("ministry-level");
+    assert.equal(env.project().status, "pending_superior_acceptance");
+    const superior = env.db.tables.superiors[0];
+    assert.equal(superior.facilityAcceptedOn.toISOString().slice(0, 10), TODAY);
+    assert.equal(superior.dueDate.toISOString().slice(0, 10), PLUS_30);
+    const due = env.dispatched.find((event) => event.type === "SUPERIOR_REQUEST_DUE");
+    assert.deepEqual(due.userIds.sort(), ["leader", "officer"]);
+    assert.match(due.message, new RegExp(PLUS_30.split("-").reverse().join("/")));
+    const view = await env.projects.getProject(env.as("officer"), "project-1");
+    assert.ok(!view.viewerAuthorization.allowedActions.includes("project.liquidation.prepare"), "chưa thanh lý khi cấp trên chưa nghiệm thu");
+    assert.ok(view.viewerAuthorization.allowedActions.includes("project.superior.prepare"));
+
+    await assert.rejects(env.closure.sendSuperiorRequest(env.as("officer"), "project-1", { contextVersion: await env.context() }), /Chưa có danh mục hồ sơ/);
+    const checklist = [{ title: "Báo cáo tổng hợp kết quả đề tài" }, { title: "Biên bản nghiệm thu cơ sở", done: true, fileIds: ["file-superior-1"] }];
+    await env.closure.saveSuperiorDossier(env.as("officer"), "project-1", { checklist, letterNumber: "123/HVQY-KHQS", letterDate: "2026-11-20", recipient: "Cục Khoa học quân sự", letterFileIds: ["file-superior-letter"], contextVersion: await env.context() });
+    await assert.rejects(env.closure.sendSuperiorRequest(env.as("officer"), "project-1", { contextVersion: await env.context() }), /Còn 1 mục hồ sơ chưa hoàn thành/);
+    const saved = env.db.tables.superiors[0].checklist;
+    await env.closure.saveSuperiorDossier(env.as("officer"), "project-1", { checklist: saved.map((item) => ({ ...item, done: true, fileIds: ["file-superior-1"] })), letterNumber: "123/HVQY-KHQS", letterDate: "2026-11-20", recipient: "Cục Khoa học quân sự", letterFileIds: ["file-superior-letter"], contextVersion: await env.context() });
+    await env.closure.sendSuperiorRequest(env.as("officer"), "project-1", { contextVersion: await env.context() });
+    assert.equal(env.db.tables.superiors[0].status, "SENT");
+    assert.equal(env.dispatched.at(-1).type, "SUPERIOR_REQUEST_SENT");
+    await assert.rejects(env.closure.saveSuperiorDossier(env.as("officer"), "project-1", { checklist: [], contextVersion: await env.context() }), /trạng thái|bước/i);
+    await assert.rejects(env.closure.recordSuperiorResult(env.as("officer"), "project-1", { result: "PASSED", resultDate: "2026-12-20", contextVersion: await env.context() }), /quyết định hoặc biên bản/);
+    await env.closure.recordSuperiorResult(env.as("officer"), "project-1", { result: "PASSED", decisionNumber: "45/QĐ-BQP", resultDate: "2026-12-20", resultFileIds: ["file-superior-result"], contextVersion: await env.context() });
+    assert.equal(env.project().status, "accepted");
+    const after = await env.projects.getProject(env.as("officer"), "project-1");
+    assert.ok(after.viewerAuthorization.allowedActions.includes("project.liquidation.prepare"));
+    assert.equal(after.superiorAcceptance.status, "PASSED");
+  });
+
+  it("cấp Nhà nước, hoàn thiện sau hội đồng: hạn tính từ ngày chuyên viên xác nhận bản hoàn thiện; cấp trên không đạt → không đạt", async () => {
+    const env = setup({ level: "national-level" });
+    await toEstablishedCouncil(env);
+    await env.closure.recordMinutes(env.as("officer"), "project-1", { ...passingScores, resolution: "revise", contextVersion: await env.context() });
+    await env.closure.submitRevision(env.as("pi"), "project-1", { finalReportSummary: "Đã sửa", evidenceFileIds: ["file-revision"], contextVersion: await env.context() });
+    await env.closure.confirmRevision(env.as("officer"), "project-1", { outcome: "accept", contextVersion: await env.context() });
+    assert.equal(env.project().status, "pending_superior_acceptance");
+    const superior = env.db.tables.superiors[0];
+    const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+    assert.equal(superior.facilityAcceptedOn.toISOString().slice(0, 10), today);
+    assert.equal(superior.level, "national-level");
+    superior.status = "SENT"; superior.letterNumber = "1"; superior.letterDate = new Date(); superior.sentAt = new Date();
+    env.project().aggregateVersion += 1;
+    await env.closure.recordSuperiorResult(env.as("officer"), "project-1", { result: "FAILED", resultDate: "2027-01-05", resultFileIds: ["file-superior-result"], contextVersion: await env.context() });
+    assert.equal(env.project().status, "failed");
   });
 });

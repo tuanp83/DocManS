@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SectionCard } from "@/components/ui/section-card";
-import { acceptanceCandidates, canProject, projectDenial, projectFileUrl, type AcceptanceMemberRole, type CouncilCandidate, type ProjectAcceptance, type ProjectRecord } from "@/lib/projects-api";
+import { acceptanceCandidates, canProject, PROJECT_LEVEL_LABELS, projectDenial, projectFileUrl, type AcceptanceMemberRole, type CouncilCandidate, type ProjectAcceptance, type ProjectRecord, type SuperiorChecklistItem } from "@/lib/projects-api";
 import { exportAcceptanceMinutesWord } from "@/lib/word-export";
 
 /**
@@ -15,7 +15,7 @@ type Props = {
   project: ProjectRecord;
   files: ProjectFile[];
   busy: boolean;
-  run: (path: string, body?: Record<string, unknown>, confirmText?: string) => Promise<boolean>;
+  run: (path: string, body?: Record<string, unknown>, confirmText?: string, method?: string) => Promise<boolean>;
   upload: (file: File | undefined, purpose: string) => Promise<void>;
 };
 
@@ -72,7 +72,7 @@ export function ProjectClosurePanel({ project, files, busy, run, upload }: Props
   const [reason, setReason] = useState("");
   const [candidates, setCandidates] = useState<CouncilCandidate[]>([]);
   const [council, setCouncil] = useState<Array<{ role: AcceptanceMemberRole; profileId: string }>>(DEFAULT_ROLES.map((role) => ({ role, profileId: "" })));
-  const [meeting, setMeeting] = useState({ councilType: "OFFICIAL", meetingDate: "", meetingLocation: "", tentativeAgenda: "" });
+  const [meeting, setMeeting] = useState({ councilType: "FACILITY", meetingDate: "", meetingLocation: "", tentativeAgenda: "" });
   const [decision, setDecision] = useState({ decisionNumber: "", decisionDate: "" });
   const [scores, setScores] = useState<Record<string, string>>({});
   const [minutes, setMinutes] = useState({ resolution: "", assessmentComments: "", minutesNotes: "", meetingDate: "", meetingLocation: "" });
@@ -92,7 +92,8 @@ export function ProjectClosurePanel({ project, files, busy, run, upload }: Props
     if (liquidation) setLiquidationFiles(liquidation.evidenceFileIds ?? []);
   }, [liquidation?.status, liquidation?.preparedAt]);
 
-  const relevant = ["pending_acceptance", "accepted", "failed", "closed"].includes(project.status) || rounds.length > 0 || allowed("project.acceptance.submit");
+  const relevant = ["pending_acceptance", "pending_superior_acceptance", "accepted", "failed", "closed"].includes(project.status) || rounds.length > 0 || allowed("project.acceptance.submit");
+  const needsSuperior = project.level === "ministry-level" || project.level === "national-level";
   if (!relevant) return null;
 
   const totalScore = SCORE_FIELDS.reduce((sum, field) => sum + (Number(scores[field.key]) || 0), 0);
@@ -102,8 +103,9 @@ export function ProjectClosurePanel({ project, files, busy, run, upload }: Props
   const outstanding = finance ? finance.totalDisbursed - finance.totalSettled - recovered : 0;
 
   return <>
-    <SectionCard title="Nghiệm thu đề tài" subtitle={current ? `Vòng ${current.round}: ${current.statusLabel}` : "Chưa nộp hồ sơ nghiệm thu"}>
-      {rounds.length ? <div className="project-list">{rounds.map((round) => <RoundSummary key={round.id} round={round} files={files} />)}</div> : <p>Khi mọi mốc đã hoàn thành (báo cáo mốc được chấp nhận), chủ nhiệm nộp hồ sơ nghiệm thu gồm báo cáo tổng kết và sản phẩm.</p>}
+    <SectionCard title="Nghiệm thu cơ sở" subtitle={current ? `Vòng ${current.round}: ${current.statusLabel}` : "Chưa nộp hồ sơ nghiệm thu cơ sở"}>
+      <p className="kpi-meta">{PROJECT_LEVEL_LABELS[project.level ?? ""] ?? "Đề tài"}: {needsSuperior ? "sau khi nghiệm thu cơ sở đạt, trong vòng 30 ngày Học viện gửi công văn đề nghị cấp trên nghiệm thu kèm hồ sơ cấp trên yêu cầu." : "nghiệm thu cơ sở đạt là hoàn thành nghiệm thu."} Chỉ nộp được hồ sơ khi mọi sản phẩm đã được tổ chuyên gia nghiệm thu đạt.</p>
+      {rounds.length ? <div className="project-list">{rounds.map((round) => <RoundSummary key={round.id} round={round} files={files} />)}</div> : <p>Khi mọi sản phẩm đã được tổ chuyên gia nghiệm thu đạt, chủ nhiệm nộp hồ sơ nghiệm thu cơ sở gồm báo cáo tổng kết và sản phẩm.</p>}
 
       {current?.evaluationResult ? <div className="button-row"><button className="button" type="button" onClick={() => exportAcceptanceMinutesWord({ id: project.proposalId, code: project.code ?? undefined, title: project.title, ownerDisplayName: project.members.find((member) => member.participationRole === "TOPIC_PI")?.name, hostOrganizationUnit: project.hostOrganizationUnit?.name }, { councilType: current.councilType ?? undefined, meetingDate: current.meetingDate ?? undefined, meetingLocation: current.meetingLocation ?? undefined, decisionNumber: current.decisionNumber ?? undefined, members: current.councilMembers, evaluationResult: current.evaluationResult ?? undefined })}>Xuất biên bản nghiệm thu (Word)</button></div> : null}
 
@@ -139,7 +141,7 @@ export function ProjectClosurePanel({ project, files, busy, run, upload }: Props
       {allowed("project.acceptance.minutes.record") ? <div className="form-section-inline">
         <h3>Biên bản họp hội đồng</h3>
         <div className="form-grid two">{SCORE_FIELDS.map((field) => <label className="field" key={field.key}><span>{field.label} (0–{field.max})</span><input type="number" min={0} max={field.max} step={0.5} value={scores[field.key] ?? ""} onChange={(event) => setScores({ ...scores, [field.key]: event.target.value })} /></label>)}</div>
-        <p className="kpi-meta">Tổng: {Math.round(totalScore * 10) / 10}/100 — {totalScore >= 90 ? "Xuất sắc" : totalScore >= 70 ? "Đạt" : "Không đạt"} (dưới 70 điểm chỉ được kết luận không đạt).</p>
+        <p className="kpi-meta">Ngày họp hội đồng không được ở tương lai{needsSuperior ? "; ngày này là mốc tính hạn 30 ngày đề nghị cấp trên" : ""}. Tổng: {Math.round(totalScore * 10) / 10}/100 — {totalScore >= 90 ? "Xuất sắc" : totalScore >= 70 ? "Đạt" : "Không đạt"} (dưới 70 điểm chỉ được kết luận không đạt).</p>
         <div className="form-grid two">
           <label className="field"><span>Kết luận</span><select value={minutes.resolution} onChange={(event) => setMinutes({ ...minutes, resolution: event.target.value })}><option value="">Theo điểm</option><option value="approved" disabled={totalScore < 70}>Đạt</option><option value="revise" disabled={totalScore < 70}>Đạt, cần hoàn thiện</option><option value="rejected">Không đạt</option></select></label>
           <label className="field"><span>Ngày họp</span><input type="date" value={minutes.meetingDate} onChange={(event) => setMinutes({ ...minutes, meetingDate: event.target.value })} /></label>
@@ -150,8 +152,10 @@ export function ProjectClosurePanel({ project, files, busy, run, upload }: Props
         <button className="button primary" disabled={busy || !scoresComplete} onClick={() => void run("acceptance/minutes", { ...Object.fromEntries(SCORE_FIELDS.map((field) => [field.key, Number(scores[field.key])])), ...minutes }, "Ghi biên bản? Kết quả nghiệm thu không sửa được sau khi ghi.")}>Ghi biên bản và kết luận</button>
       </div> : null}
 
-      {allowed("project.acceptance.revision.confirm") ? <div className="form-section-inline"><h3>Xác nhận bản hoàn thiện</h3><label className="field"><span>Ý kiến (bắt buộc khi yêu cầu hoàn thiện tiếp)</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="button-row"><button className="button primary" disabled={busy} onClick={() => void run("acceptance/revision/confirm", { outcome: "accept", note: reason }, "Xác nhận bản hoàn thiện đạt yêu cầu? Đề tài sẽ được ghi nhận đã nghiệm thu.")}>Xác nhận đạt</button><button className="button" disabled={busy || !reason.trim()} onClick={() => void run("acceptance/revision/confirm", { outcome: "return", note: reason }, "Yêu cầu chủ nhiệm hoàn thiện tiếp?")}>Yêu cầu hoàn thiện tiếp</button></div></div> : null}
+      {allowed("project.acceptance.revision.confirm") ? <div className="form-section-inline"><h3>Xác nhận bản hoàn thiện</h3><label className="field"><span>Ý kiến (bắt buộc khi yêu cầu hoàn thiện tiếp)</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="button-row"><button className="button primary" disabled={busy} onClick={() => void run("acceptance/revision/confirm", { outcome: "accept", note: reason }, needsSuperior ? "Xác nhận bản hoàn thiện đạt yêu cầu? Đề tài được ghi nhận đã nghiệm thu cơ sở và bắt đầu tính hạn 30 ngày đề nghị cấp trên nghiệm thu." : "Xác nhận bản hoàn thiện đạt yêu cầu? Đề tài sẽ được ghi nhận đã nghiệm thu.")}>Xác nhận đạt</button><button className="button" disabled={busy || !reason.trim()} onClick={() => void run("acceptance/revision/confirm", { outcome: "return", note: reason }, "Yêu cầu chủ nhiệm hoàn thiện tiếp?")}>Yêu cầu hoàn thiện tiếp</button></div></div> : null}
     </SectionCard>
+
+    {project.superiorAcceptance ? <SuperiorSection project={project} files={files} busy={busy} run={run} upload={upload} /> : null}
 
     {["accepted", "failed", "closed"].includes(project.status) || liquidation ? <SectionCard title="Thanh lý đề tài" subtitle={liquidation ? (liquidation.status === "APPROVED" ? `Đã phê duyệt — biên bản số ${liquidation.liquidationNumber}` : "Dự thảo chờ lãnh đạo phê duyệt") : "Chưa lập biên bản thanh lý"}>
       {finance ? <p>Kinh phí được duyệt {money(finance.totalBudget)} · đã giải ngân {money(finance.totalDisbursed)} · đã quyết toán {money(finance.totalSettled)}.</p> : <p>Chưa có dữ liệu kinh phí; nếu đề tài đã được cấp kinh phí, cập nhật mục Kinh phí và giải ngân trước khi thanh lý.</p>}
@@ -178,4 +182,63 @@ export function ProjectClosurePanel({ project, files, busy, run, upload }: Props
       {project.status !== "closed" ? <><label className="field"><span>Ghi chú đóng đề tài</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label><button className="button primary" disabled={busy || !allowed("project.close")} title={allowed("project.close") ? undefined : projectDenial(project, "project.close")} onClick={() => void run("close", { note: reason }, "Đóng đề tài? Sau khi đóng, đề tài chỉ còn xem.")}>Đóng đề tài</button></> : null}
     </SectionCard> : null}
   </>;
+}
+
+/** Bước 3: đề nghị cấp trên nghiệm thu (cấp Bộ / Nhà nước) — hạn 30 ngày từ ngày nghiệm thu cơ sở xong. */
+function SuperiorSection({ project, files, busy, run, upload }: Props) {
+  const superior = project.superiorAcceptance!;
+  const allowed = (action: Parameters<typeof canProject>[1]) => canProject(project, action);
+  const [checklist, setChecklist] = useState<SuperiorChecklistItem[]>(superior.checklist);
+  const [letter, setLetter] = useState({ letterNumber: superior.letterNumber ?? "", letterDate: superior.letterDate ?? "", recipient: superior.recipient ?? "" });
+  const [letterFiles, setLetterFiles] = useState<string[]>(superior.letterFileIds);
+  const [result, setResult] = useState({ result: "PASSED", decisionNumber: "", resultDate: "", note: "" });
+  const [resultFiles, setResultFiles] = useState<string[]>([]);
+  // Đồng bộ lại sau mỗi lần lưu (máy chủ cấp mã cho đề mục mới).
+  useEffect(() => { setChecklist(superior.checklist); setLetterFiles(superior.letterFileIds); }, [superior.status, superior.checklist.map((item) => item.id ?? "").join("|")]);
+  const dossierFiles = files.filter((file) => file.filePurpose === "superior_dossier");
+  const editable = allowed("project.superior.prepare");
+  const deadline = superior.status === "PREPARING" && superior.daysLeft !== null ? (superior.daysLeft < 0 ? `QUÁ HẠN ${-superior.daysLeft} ngày` : `còn ${superior.daysLeft} ngày`) : null;
+  const statusText = superior.status === "PREPARING" ? "Đang chuẩn bị hồ sơ đề nghị" : superior.status === "SENT" ? `Đã gửi công văn ${superior.letterNumber ?? ""}${superior.sentLate ? " (quá hạn 30 ngày)" : ""}, chờ cấp trên nghiệm thu` : superior.status === "PASSED" ? "Cấp trên nghiệm thu: đạt" : "Cấp trên nghiệm thu: không đạt";
+  const ready = checklist.length > 0 && checklist.every((item) => item.done && item.fileIds.length) && letter.letterNumber.trim() && letter.letterDate && letterFiles.length;
+
+  return <SectionCard title={`Nghiệm thu cấp trên (${PROJECT_LEVEL_LABELS[superior.level] ?? superior.level})`} subtitle={statusText}>
+    <p>Nghiệm thu cơ sở xong ngày {date(superior.facilityAcceptedOn)} · hạn gửi đề nghị: <strong>{date(superior.dueDate)}</strong>{deadline ? ` (${deadline})` : ""}</p>
+    <h3>Danh mục hồ sơ cấp trên yêu cầu</h3>
+    {checklist.length ? null : <p className="kpi-meta">Chưa có mục nào. Chuyên viên tự đặt tên từng đề mục theo yêu cầu của cấp trên.</p>}
+    {checklist.map((item, index) => <div className="form-grid two" key={item.id ?? `new-${index}`}>
+      <label className="field"><span>Đề mục #{index + 1}</span><input value={item.title} disabled={!editable} onChange={(event) => setChecklist(checklist.map((row, at) => at === index ? { ...row, title: event.target.value } : row))} /></label>
+      <label className="field"><span><input type="checkbox" checked={item.done} disabled={!editable} onChange={(event) => setChecklist(checklist.map((row, at) => at === index ? { ...row, done: event.target.checked } : row))} /> Đã hoàn thành</span></label>
+      <label className="field"><span>Tệp của mục</span><select multiple value={item.fileIds} disabled={!editable} onChange={(event) => setChecklist(checklist.map((row, at) => at === index ? { ...row, fileIds: Array.from(event.target.selectedOptions).map((option) => (option as HTMLOptionElement).value) } : row))}>{dossierFiles.map((file) => <option key={file.id} value={file.id}>{file.fileName}</option>)}</select></label>
+      {!editable ? <FileLinks ids={item.fileIds} files={files} /> : <button className="button" type="button" onClick={() => setChecklist(checklist.filter((_, at) => at !== index))}>Xoá mục</button>}
+    </div>)}
+    {editable ? <div className="form-section-inline">
+      <div className="button-row"><button className="button" type="button" onClick={() => setChecklist([...checklist, { title: "", done: false, fileIds: [] }])}>Thêm đề mục</button></div>
+      <label className="field"><span>Tải tệp hồ sơ / công văn</span><input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" disabled={busy} onChange={(event) => void upload(event.target.files?.[0], "superior_dossier")} /></label>
+      <h3>Công văn đề nghị nghiệm thu</h3>
+      <div className="form-grid two">
+        <label className="field"><span>Số công văn</span><input value={letter.letterNumber} onChange={(event) => setLetter({ ...letter, letterNumber: event.target.value })} /></label>
+        <label className="field"><span>Ngày công văn</span><input type="date" value={letter.letterDate} onChange={(event) => setLetter({ ...letter, letterDate: event.target.value })} /></label>
+        <label className="field"><span>Nơi nhận</span><input value={letter.recipient} onChange={(event) => setLetter({ ...letter, recipient: event.target.value })} /></label>
+        <label className="field"><span>Tệp công văn</span><select multiple value={letterFiles} onChange={(event) => setLetterFiles(Array.from(event.target.selectedOptions).map((option) => (option as HTMLOptionElement).value))}>{dossierFiles.map((file) => <option key={file.id} value={file.id}>{file.fileName}</option>)}</select></label>
+      </div>
+      <div className="button-row">
+        <button className="button" disabled={busy || checklist.some((item) => !item.title.trim())} onClick={() => void run("superior", { checklist, ...letter, letterFileIds: letterFiles }, undefined, "PUT")}>Lưu hồ sơ</button>
+        <button className="button primary" disabled={busy || !ready || !allowed("project.superior.send")} title={ready ? undefined : "Cần mọi đề mục đã hoàn thành (có tệp) và đủ số, ngày, tệp công văn. Hãy lưu hồ sơ trước khi gửi."} onClick={() => void run("superior/send", {}, "Xác nhận đã gửi công văn đề nghị cấp trên nghiệm thu? Hồ sơ sẽ bị khoá.")}>Xác nhận đã gửi công văn</button>
+      </div>
+    </div> : <div><p>Công văn: {superior.letterNumber ?? "—"} ngày {date(superior.letterDate)}{superior.recipient ? ` · gửi ${superior.recipient}` : ""}</p><FileLinks ids={superior.letterFileIds} files={files} /></div>}
+
+    {allowed("project.superior.result") ? <div className="form-section-inline">
+      <h3>Kết quả nghiệm thu của cấp trên</h3>
+      <div className="form-grid two">
+        <label className="field"><span>Kết quả</span><select value={result.result} onChange={(event) => setResult({ ...result, result: event.target.value })}><option value="PASSED">Đạt</option><option value="FAILED">Không đạt</option></select></label>
+        <label className="field"><span>Số quyết định</span><input value={result.decisionNumber} onChange={(event) => setResult({ ...result, decisionNumber: event.target.value })} /></label>
+        <label className="field"><span>Ngày quyết định</span><input type="date" value={result.resultDate} onChange={(event) => setResult({ ...result, resultDate: event.target.value })} /></label>
+      </div>
+      <label className="field"><span>Ghi chú</span><textarea value={result.note} onChange={(event) => setResult({ ...result, note: event.target.value })} /></label>
+      <label className="field"><span>Tải quyết định / biên bản của cấp trên</span><input type="file" accept=".pdf,.doc,.docx" disabled={busy} onChange={(event) => void upload(event.target.files?.[0], "superior_dossier")} /></label>
+      {dossierFiles.filter((file) => !superior.letterFileIds.includes(file.id)).map((file) => <label className="field" key={file.id}><span><input type="checkbox" checked={resultFiles.includes(file.id)} onChange={(event) => setResultFiles(event.target.checked ? [...resultFiles, file.id] : resultFiles.filter((id) => id !== file.id))} /> {file.fileName}</span></label>)}
+      <button className="button primary" disabled={busy || !result.resultDate || !resultFiles.length} onClick={() => void run("superior/result", { ...result, resultFileIds: resultFiles }, "Ghi kết quả nghiệm thu của cấp trên? Kết quả không sửa được.")}>Ghi kết quả</button>
+    </div> : null}
+    {superior.result ? <div><p>Kết quả: {superior.result === "PASSED" ? "Đạt" : "Không đạt"}{superior.resultDecisionNumber ? ` · QĐ ${superior.resultDecisionNumber}` : ""} · ngày {date(superior.resultDate)}{superior.resultNote ? ` · ${superior.resultNote}` : ""}</p><FileLinks ids={superior.resultFileIds} files={files} /></div> : null}
+  </SectionCard>;
 }

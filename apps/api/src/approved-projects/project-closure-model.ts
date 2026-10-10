@@ -183,3 +183,74 @@ export function readRequiredText(value: unknown, field: string, maxLength: numbe
   if (value.trim().length > maxLength) throw new BadRequestException({ message: `${field} không được vượt quá ${maxLength} ký tự.` });
   return value.trim();
 }
+
+export const PRODUCT_STATUS_LABELS: Record<string, string> = {
+  PLANNED: "Chưa nộp minh chứng",
+  SUBMITTED: "Đã nộp, chờ lập tổ chuyên gia",
+  UNDER_REVIEW: "Tổ chuyên gia đang nghiệm thu",
+  PASSED: "Đạt",
+  FAILED: "Không đạt — cần hoàn thiện và nộp lại"
+};
+
+export function toProductResponse(row: AnyRecord) {
+  return {
+    id: row.id,
+    position: row.position,
+    title: row.title,
+    productForm: row.productForm,
+    requirements: row.requirements ?? null,
+    milestoneId: row.milestoneId ?? null,
+    status: row.status,
+    statusLabel: PRODUCT_STATUS_LABELS[row.status] ?? row.status,
+    submission: row.submission ?? null,
+    reviews: (row.reviews ?? []).map((review: AnyRecord) => ({
+      id: review.id,
+      round: review.round,
+      status: review.status,
+      panelMembers: Array.isArray(review.panelMembers) ? review.panelMembers : [],
+      reviewDate: day(review.reviewDate) ?? null,
+      location: review.location ?? null,
+      submissionSnapshot: review.submissionSnapshot ?? null,
+      result: review.result ?? null,
+      conclusion: review.conclusion ?? null,
+      minutesFileIds: Array.isArray(review.minutesFileIds) ? review.minutesFileIds : [],
+      formedBy: review.formedBy?.displayName ?? null,
+      recordedBy: review.recordedBy?.displayName ?? null,
+      formedAt: iso(review.formedAt),
+      concludedAt: iso(review.concludedAt)
+    }))
+  };
+}
+
+const VIETNAM_OFFSET_MS = 7 * 3_600_000;
+const DAY_MS = 86_400_000;
+
+/** Số ngày còn lại (theo lịch Việt Nam) tới một ngày DATE; âm là đã quá hạn. */
+export function daysUntil(date: Date, now: Date) {
+  return Math.floor(date.getTime() / DAY_MS) - Math.floor((now.getTime() + VIETNAM_OFFSET_MS) / DAY_MS);
+}
+
+export function toSuperiorResponse(row: AnyRecord, now = new Date()) {
+  const dueDate = row.dueDate instanceof Date ? row.dueDate : new Date(row.dueDate);
+  return {
+    level: row.level,
+    status: row.status,
+    facilityAcceptedOn: day(row.facilityAcceptedOn) ?? null,
+    dueDate: day(row.dueDate) ?? null,
+    daysLeft: row.status === "PREPARING" ? daysUntil(dueDate, now) : null,
+    checklist: Array.isArray(row.checklist) ? row.checklist : [],
+    letterNumber: row.letterNumber ?? null,
+    letterDate: day(row.letterDate) ?? null,
+    recipient: row.recipient ?? null,
+    letterFileIds: Array.isArray(row.letterFileIds) ? row.letterFileIds : [],
+    sentAt: iso(row.sentAt),
+    sentBy: row.sentBy?.displayName ?? null,
+    sentLate: row.sentAt ? daysUntil(dueDate, row.sentAt instanceof Date ? row.sentAt : new Date(row.sentAt)) < 0 : false,
+    result: row.result ?? null,
+    resultDecisionNumber: row.resultDecisionNumber ?? null,
+    resultDate: day(row.resultDate) ?? null,
+    resultNote: row.resultNote ?? null,
+    resultFileIds: Array.isArray(row.resultFileIds) ? row.resultFileIds : [],
+    resultRecordedBy: row.resultRecordedBy?.displayName ?? null
+  };
+}

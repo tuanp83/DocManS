@@ -38,3 +38,15 @@ test("hồ sơ đề xuất không còn mở hội đồng nghiệm thu / giải
   assert.equal(/AcceptanceCouncilModal|MilestoneDisbursementModal/.test(workspace), false);
   assert.match(workspace, /\/projects\/\$\{selectedProposal\.project\.id\}/);
 });
+
+test("sản phẩm (tổ chuyên gia) và nghiệm thu cấp trên hiển thị theo capability", () => {
+  const products = read("apps/web/src/components/projects/project-products-panel.tsx");
+  for (const action of ["project.product.manage", "project.product.submit", "project.product.review"]) assert.ok(products.includes(`"${action}"`), action);
+  assert.match(products, /run\("products", .*"PUT"\)/s);
+  assert.match(products, /`\$\{path\}\/panel`/);
+  const panel = read("apps/web/src/components/projects/project-closure-panel.tsx");
+  for (const action of ["project.superior.prepare", "project.superior.send", "project.superior.result"]) assert.ok(panel.includes(`"${action}"`), action);
+  assert.match(panel, /run\("superior", .*"PUT"\)/s);
+  const detail = read("apps/web/src/components/projects/project-detail.tsx");
+  assert.match(detail, /<ProjectProductsPanel /);
+});

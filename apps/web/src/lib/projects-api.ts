@@ -18,7 +18,26 @@ export type ProjectRecord = {
   acceptances?: ProjectAcceptance[];
   finance?: { totalBudget: number; totalDisbursed: number; totalSettled: number; settlementStatus: string; version: number; updatedAt: string | null } | null;
   liquidation?: ProjectLiquidation | null;
+  /** Cấp đề tài (academy-level / ministry-level / national-level). */
+  level?: string | null;
+  products?: ProjectProduct[];
+  superiorAcceptance?: ProjectSuperiorAcceptance | null;
 };
+
+export type ProductPanelMember = { profileId: string; fullName: string; academicTitle?: string; unit?: string; userId?: string; role: "LEADER" | "MEMBER" };
+export type ProjectProduct = {
+  id: string; position: number; title: string; productForm: number; requirements: string | null; milestoneId: string | null; status: string; statusLabel: string;
+  submission: { note?: string; evidenceFileIds?: string[]; submittedAt?: string } | null;
+  reviews: Array<{ id: string; round: number; status: string; panelMembers: ProductPanelMember[]; reviewDate: string | null; location: string | null; result: "PASSED" | "FAILED" | null; conclusion: string | null; minutesFileIds: string[]; formedBy: string | null; recordedBy: string | null; formedAt: string | null; concludedAt: string | null }>;
+};
+export type SuperiorChecklistItem = { id?: string; title: string; done: boolean; fileIds: string[]; note?: string | null };
+export type ProjectSuperiorAcceptance = {
+  level: string; status: "PREPARING" | "SENT" | "PASSED" | "FAILED"; facilityAcceptedOn: string | null; dueDate: string | null; daysLeft: number | null;
+  checklist: SuperiorChecklistItem[]; letterNumber: string | null; letterDate: string | null; recipient: string | null; letterFileIds: string[];
+  sentAt: string | null; sentBy: string | null; sentLate: boolean; result: "PASSED" | "FAILED" | null; resultDecisionNumber: string | null; resultDate: string | null;
+  resultNote: string | null; resultFileIds: string[]; resultRecordedBy: string | null;
+};
+export const PROJECT_LEVEL_LABELS: Record<string, string> = { "academy-level": "Cấp Học viện", "ministry-level": "Cấp Bộ Quốc phòng", "national-level": "Cấp Nhà nước" };
 
 export type AcceptanceMemberRole = "CHAIRMAN" | "SECRETARY" | "REVIEWER_1" | "REVIEWER_2" | "MEMBER";
 export type AcceptanceCouncilMember = { profileId: string; fullName: string; academicTitle?: string; unit?: string; userId?: string; role: AcceptanceMemberRole };
@@ -90,7 +109,8 @@ export const PROJECT_STATUS_LABELS: Record<string, string> = {
   preparing: "Chuẩn bị triển khai",
   executing: "Đang thực hiện",
   paused: "Tạm dừng",
-  pending_acceptance: "Chờ nghiệm thu",
+  pending_acceptance: "Chờ nghiệm thu cơ sở",
+  pending_superior_acceptance: "Đã nghiệm thu cơ sở, chờ cấp trên nghiệm thu",
   accepted: "Đã nghiệm thu",
   failed: "Không đạt",
   closed: "Đã đóng",

@@ -14,16 +14,20 @@ import { assertHasOrganizationScope, isInternalResearcherEligible } from "../../
 import { ProposalManagementOfficerService } from "../../proposals-shared/proposal-management-officer.service.js";
 import { ProposalReviewAccessService } from "../../proposals-shared/proposal-review-access.service.js";
 import { ProposalParticipationService } from "../../research-proposals/proposal-participation.service.js";
-import { ACCEPTANCE_DOSSIER_PURPOSE, APPROVED_PROJECT_ENTITY_TYPE, DISBURSEMENT_VOUCHER_PURPOSE, LIQUIDATION_RECORD_PURPOSE, RESEARCH_PROPOSAL_ENTITY_TYPE } from "./files.dto.js";
+import { ACCEPTANCE_DOSSIER_PURPOSE, APPROVED_PROJECT_ENTITY_TYPE, DISBURSEMENT_VOUCHER_PURPOSE, LIQUIDATION_RECORD_PURPOSE, PRODUCT_EVIDENCE_PURPOSE, PRODUCT_REVIEW_MINUTES_PURPOSE, RESEARCH_PROPOSAL_ENTITY_TYPE, SUPERIOR_DOSSIER_PURPOSE } from "./files.dto.js";
 
 /** Quyền cần có để tải từng loại tệp của đề tài (mặc định: đóng góp minh chứng khi đang thực hiện). */
 const PROJECT_FILE_PURPOSE_ACTIONS: Record<string, string[]> = {
   [DISBURSEMENT_VOUCHER_PURPOSE]: ["project.finance.manage"],
   [ACCEPTANCE_DOSSIER_PURPOSE]: ["project.acceptance.submit", "project.acceptance.revision.submit"],
-  [LIQUIDATION_RECORD_PURPOSE]: ["project.liquidation.prepare"]
+  [LIQUIDATION_RECORD_PURPOSE]: ["project.liquidation.prepare"],
+  [PRODUCT_EVIDENCE_PURPOSE]: ["project.product.submit"],
+  [PRODUCT_REVIEW_MINUTES_PURPOSE]: ["project.product.review"],
+  // Kết quả cấp trên được tải lên sau khi đã gửi công văn (bước ghi kết quả).
+  [SUPERIOR_DOSSIER_PURPOSE]: ["project.superior.prepare", "project.superior.result"]
 };
 /** Tệp do cán bộ quản lý (không phải chủ nhiệm) tải lên đề tài. */
-const MANAGER_PROJECT_FILE_PURPOSES = [DISBURSEMENT_VOUCHER_PURPOSE, LIQUIDATION_RECORD_PURPOSE];
+const MANAGER_PROJECT_FILE_PURPOSES = [DISBURSEMENT_VOUCHER_PURPOSE, LIQUIDATION_RECORD_PURPOSE, PRODUCT_REVIEW_MINUTES_PURPOSE, SUPERIOR_DOSSIER_PURPOSE];
 import { assertValidUpload, defaultFileConfig, readUploadFileName, type FileModuleConfig } from "./file-validation.js";
 
 export type { FileModuleConfig } from "./file-validation.js";
@@ -282,7 +286,13 @@ export class FilesService {
       const liquidation = (await client.projectLiquidation?.findUnique({ where: { projectId: record.relatedEntityId }, select: { status: true, evidenceFileIds: true } })) ?? null;
       const inAcceptance = acceptances.some((row) => listed(row.dossier, "evidenceFileIds") || listed(row.revisionDossier, "evidenceFileIds") || listed(row.revisionDossier, "allEvidenceFileIds"));
       const inLiquidation = liquidation?.status === "APPROVED" && Array.isArray(liquidation.evidenceFileIds) && liquidation.evidenceFileIds.includes(record.id);
-      if (inAcceptance || inLiquidation) throw new BadRequestException({ code: "EVIDENCE_PINNED", message: "Tệp đã nộp trong hồ sơ nghiệm thu hoặc biên bản thanh lý đã duyệt được giữ nguyên." });
+      const reviews = (await (this.prisma as unknown as { projectProductReview?: { findMany: (args: unknown) => Promise<Array<{ status: string; submissionSnapshot: unknown; minutesFileIds: unknown }>> } }).projectProductReview?.findMany({ where: { projectId: record.relatedEntityId }, select: { status: true, submissionSnapshot: true, minutesFileIds: true } })) ?? [];
+      const superior = (await (this.prisma as unknown as { projectSuperiorAcceptance?: { findUnique: (args: unknown) => Promise<{ status: string; checklist: unknown; letterFileIds: unknown; resultFileIds: unknown } | null> } }).projectSuperiorAcceptance?.findUnique({ where: { projectId: record.relatedEntityId }, select: { status: true, checklist: true, letterFileIds: true, resultFileIds: true } })) ?? null;
+      const products = (await (this.prisma as unknown as { projectProduct?: { findMany: (args: unknown) => Promise<Array<{ status: string; submission: unknown }>> } }).projectProduct?.findMany({ where: { projectId: record.relatedEntityId }, select: { status: true, submission: true } })) ?? [];
+      const inProductSubmission = products.some((row) => !["PLANNED", "FAILED"].includes(row.status) && listed(row.submission, "evidenceFileIds"));
+      const inProductReview = inProductSubmission || reviews.some((row) => listed(row.submissionSnapshot, "evidenceFileIds") || (row.status === "CONCLUDED" && Array.isArray(row.minutesFileIds) && row.minutesFileIds.includes(record.id)));
+      const inSuperior = !!superior && superior.status !== "PREPARING" && ([superior.letterFileIds, superior.resultFileIds].some((ids) => Array.isArray(ids) && ids.includes(record.id)) || (Array.isArray(superior.checklist) && superior.checklist.some((item) => listed(item, "fileIds"))));
+      if (inAcceptance || inLiquidation || inProductReview || inSuperior) throw new BadRequestException({ code: "EVIDENCE_PINNED", message: "Tệp đã nộp trong hồ sơ nghiệm thu hoặc biên bản thanh lý đã duyệt được giữ nguyên." });
       return;
     }
     const events = await this.prisma.proposalSubmissionEvent.findMany({ where: { proposalId: record.relatedEntityId }, select: { snapshot: true } });

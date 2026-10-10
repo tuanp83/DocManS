@@ -50,7 +50,7 @@ export function createClosureDb(options = {}) {
     users: [], scopes: [], units: [{ id: "unit-1", code: "U1", name: "Khoa Nội", status: "active" }],
     proposals: [], projects: [], members: [], officers: [], milestones: [], checkpoints: [], reports: [], requests: [],
     history: [], acceptances: [], finances: [], disbursements: [], costItems: [], liquidations: [], files: [], profiles: [],
-    auditLogs: [], notifications: [], counters: new Map(), supplementRequests: []
+    auditLogs: [], notifications: [], counters: new Map(), supplementRequests: [], products: [], productReviews: [], superiors: []
   };
   const userName = (id) => t.users.find((user) => user.id === id) ?? null;
   const displayOf = (id) => (id ? { displayName: userName(id)?.displayName ?? id } : null);
@@ -74,6 +74,9 @@ export function createClosureDb(options = {}) {
     view.finance = clone(t.finances.find((row) => row.projectId === project.id) ?? null);
     const liquidation = t.liquidations.find((row) => row.projectId === project.id);
     view.liquidation = liquidation ? { ...clone(liquidation), preparedBy: displayOf(liquidation.preparedById), approvedBy: displayOf(liquidation.approvedById) } : null;
+    view.products = clone(t.products.filter((row) => row.projectId === project.id)).sort((a, b) => a.position - b.position).map((row) => ({ ...row, reviews: clone(t.productReviews.filter((review) => review.productId === row.id)).sort((a, b) => b.round - a.round).map((review) => ({ ...review, formedBy: displayOf(review.formedById), recordedBy: displayOf(review.recordedById) })) }));
+    const superior = t.superiors.find((row) => row.projectId === project.id);
+    view.superiorAcceptance = superior ? { ...clone(superior), sentBy: displayOf(superior.sentById), resultRecordedBy: displayOf(superior.resultRecordedById) } : null;
     return view;
   };
 
@@ -129,6 +132,15 @@ export function createClosureDb(options = {}) {
     projectDisbursement: table(t.disbursements),
     projectCostItem: table(t.costItems),
     projectLiquidation: table(t.liquidations),
+    projectProduct: table(t.products),
+    projectProductReview: table(t.productReviews),
+    projectSuperiorAcceptance: {
+      ...table(t.superiors),
+      findMany: async ({ where } = {}) => clone(t.superiors.filter((row) => matches(row, where)).map((row) => {
+        const project = t.projects.find((item) => item.id === row.projectId);
+        return { ...row, project: { code: project.code, title: project.title, managementOfficers: t.officers.filter((officer) => officer.projectId === project.id && officer.status === "ACTIVE") } };
+      }))
+    },
     fileRecord: table(t.files),
     researcherProfile: table(t.profiles),
     auditLog: { ...table(t.auditLogs), create: async ({ data }) => { const row = { id: randomUUID(), timestamp: new Date(), ...clone(data) }; t.auditLogs.push(row); return clone(row); } },
@@ -169,11 +181,12 @@ export function seedExecutingProject(db, overrides = {}) {
   user("leader", "LEADERSHIP_APPROVAL_AUTHORITY");
   user("outsider", "RESEARCH_MANAGEMENT_STAFF");
   t.proposals.push({ id: "proposal-1", code: "DT-01", title: "Đề tài thử nghiệm", ownerId: "pi", hostOrganizationUnitId: "unit-1", status: "approved", budgetMetadata: { amount: 120_000_000, approvedAmount: 100_000_000 } });
-  t.projects.push({ id: "project-1", code: "DT-01", proposalId: "proposal-1", sourceSubmissionEventId: "e1", sourceDecisionId: "d1", hostOrganizationUnitId: "unit-1", title: "Đề tài thử nghiệm", scopeSnapshot: { budgetMetadata: { amount: 120_000_000 } }, planSnapshot: null, status: "executing", startDate: past, endDate: new Date(Date.now() + 86_400_000 * 60), aggregateVersion: 3, relationshipVersion: 1, conflictVersion: 0, delegationVersion: 0, authorizationContextUpdatedAt: past, createdById: "officer", createdAt: past, updatedAt: past, ...overrides.project });
+  t.projects.push({ id: "project-1", code: "DT-01", proposalId: "proposal-1", sourceSubmissionEventId: "e1", sourceDecisionId: "d1", hostOrganizationUnitId: "unit-1", title: "Đề tài thử nghiệm", scopeSnapshot: { budgetMetadata: { amount: 120_000_000 }, proposalTypeCode: overrides.level ?? "academy-level" }, planSnapshot: null, status: "executing", startDate: past, endDate: new Date(Date.now() + 86_400_000 * 60), aggregateVersion: 3, relationshipVersion: 1, conflictVersion: 0, delegationVersion: 0, authorizationContextUpdatedAt: past, createdById: "officer", createdAt: past, updatedAt: past, ...overrides.project });
   t.members.push({ id: "m-pi", projectId: "project-1", userId: "pi", name: "Chủ nhiệm", role: "TOPIC_PI", participationRole: "TOPIC_PI", status: "ACTIVE", effectiveFrom: past, effectiveUntil: null, createdAt: past });
   t.members.push({ id: "m-member", projectId: "project-1", userId: "member", name: "Thành viên", role: "TOPIC_MEMBER", participationRole: "TOPIC_MEMBER", status: "ACTIVE", effectiveFrom: past, effectiveUntil: null, createdAt: past });
   t.officers.push({ id: "o-1", projectId: "project-1", officerUserId: "officer", assignedById: "head", status: "ACTIVE", effectiveFrom: past, effectiveUntil: null, createdAt: past });
   t.milestones.push({ id: "ms-1", projectId: "project-1", title: "Thu thập số liệu", dueDate: past, status: overrides.milestoneStatus ?? "completed", position: 0, weightPercent: 100, progressPercent: 100 });
+  if (overrides.productStatus !== null) t.products.push({ id: "prod-1", projectId: "project-1", position: 0, title: "Nội dung 1: Khảo sát thực trạng", productForm: 1, requirements: null, milestoneId: null, status: overrides.productStatus ?? "PASSED", submission: null, createdById: "officer", createdAt: past, updatedAt: past });
   for (const [id, fullName, linkedUserId] of [["prof-a", "GS. A", "ext-a"], ["prof-b", "PGS. B", null], ["prof-c", "TS. C", null], ["prof-d", "TS. D", null], ["prof-pi", "Chủ nhiệm", "pi"]]) {
     t.profiles.push({ id, fullName, title: "TS", status: "ACTIVE", linkedUserId, managementOrganizationUnitId: "unit-2", managementOrganizationUnit: { name: "Khoa khác" } });
   }
@@ -184,6 +197,12 @@ export function seedExecutingProject(db, overrides = {}) {
   file("file-voucher", "disbursement_voucher", "staff2");
   file("file-liquidation", "liquidation_record", "officer");
   file("file-other-project", "disbursement_voucher", "staff2", "project-2");
+  file("file-product", "product_evidence", "pi");
+  file("file-product-2", "product_evidence", "pi");
+  file("file-panel-minutes", "product_review_minutes", "officer");
+  file("file-superior-1", "superior_dossier", "officer");
+  file("file-superior-letter", "superior_dossier", "officer");
+  file("file-superior-result", "superior_dossier", "officer");
   return db;
 }
 

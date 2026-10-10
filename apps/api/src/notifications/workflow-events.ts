@@ -42,7 +42,13 @@ export const NOTIFICATION_TYPES = {
   liquidationPrepared: "LIQUIDATION_PREPARED",
   liquidationApproved: "LIQUIDATION_APPROVED",
   projectClosed: "PROJECT_CLOSED",
-  disbursementUpdate: "DISBURSEMENT_UPDATE"
+  disbursementUpdate: "DISBURSEMENT_UPDATE",
+  productSubmitted: "PRODUCT_SUBMITTED",
+  productPanelFormed: "PRODUCT_PANEL_FORMED",
+  productResult: "PRODUCT_RESULT",
+  superiorRequestDue: "SUPERIOR_REQUEST_DUE",
+  superiorRequestOverdue: "SUPERIOR_REQUEST_OVERDUE",
+  superiorRequestSent: "SUPERIOR_REQUEST_SENT"
 } as const;
 
 export const RESEARCH_MANAGEMENT_ROLES = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD"];

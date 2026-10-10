@@ -1,9 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
-import { collectProjectReminders, collectProposalSupplementReminders, type ReminderProject } from "./deadline-reminders.js";
+import { collectProjectReminders, collectProposalSupplementReminders, collectSuperiorReminders, type ReminderProject } from "./deadline-reminders.js";
 import { NotificationsService } from "./notifications.service.js";
-import type { WorkflowEvent } from "./workflow-events.js";
+import { leadershipUserIds, researchManagersInScope, type WorkflowEvent } from "./workflow-events.js";
 
 /**
  * Nhắc hạn báo cáo / hạn bổ sung hằng ngày lúc 07:00 giờ Việt Nam. Chống gửi trùng bằng dedupKey nên chạy
@@ -55,6 +55,25 @@ export class DeadlineReminderService {
       select: { id: true, proposalId: true, dueDate: true, proposal: { select: { code: true, title: true, ownerId: true, status: true } } }
     });
     for (const request of supplements) events.push(...collectProposalSupplementReminders(request, now));
+
+    const superiors = await prisma.projectSuperiorAcceptance.findMany({
+      where: { status: "PREPARING" },
+      select: {
+        projectId: true, level: true, dueDate: true, facilityAcceptedOn: true, status: true,
+        project: { select: { code: true, title: true, hostOrganizationUnitId: true, managementOfficers: { where: { status: "ACTIVE" }, select: { officerUserId: true, effectiveFrom: true, effectiveUntil: true } } } }
+      }
+    });
+    if (superiors.length) {
+      const leaders = await leadershipUserIds(prisma);
+      for (const row of superiors) {
+        const officerUserId = row.project.managementOfficers.find(active)?.officerUserId ?? null;
+        // Chưa có chuyên viên phụ trách: nhắc cán bộ QLKH có phạm vi đơn vị chủ trì.
+        const fallback = officerUserId ? [] : await researchManagersInScope(prisma, row.project.hostOrganizationUnitId);
+        for (const event of collectSuperiorReminders({ projectId: row.projectId, code: row.project.code, title: row.project.title, level: row.level, dueDate: row.dueDate, facilityAcceptedOn: row.facilityAcceptedOn, status: row.status, officerUserId, leadershipUserIds: leaders }, now)) {
+          events.push({ ...event, userIds: [...event.userIds, ...fallback] });
+        }
+      }
+    }
 
     return this.notifications.dispatch(events);
   }

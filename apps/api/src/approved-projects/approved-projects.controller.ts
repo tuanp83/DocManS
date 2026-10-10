@@ -135,4 +135,26 @@ export class ApprovedProjectsController {
 
   @Post(":id/close")
   async close(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.closeProject(req.currentUser!, id, body) }; }
+
+  // ---- Sản phẩm (tổ chuyên gia) và đề nghị cấp trên nghiệm thu ----
+  @Put(":id/products")
+  async saveProducts(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.saveProducts(req.currentUser!, id, body) }; }
+
+  @Post(":id/products/:productId/submit")
+  async submitProduct(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("productId") productId: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.submitProduct(req.currentUser!, id, { ...body, productId }) }; }
+
+  @Post(":id/products/:productId/panel")
+  async formProductPanel(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("productId") productId: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.formProductPanel(req.currentUser!, id, { ...body, productId }) }; }
+
+  @Post(":id/products/:productId/review")
+  async recordProductReview(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("productId") productId: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.recordProductReview(req.currentUser!, id, { ...body, productId }) }; }
+
+  @Put(":id/superior")
+  async saveSuperior(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.saveSuperiorDossier(req.currentUser!, id, body) }; }
+
+  @Post(":id/superior/send")
+  async sendSuperior(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.sendSuperiorRequest(req.currentUser!, id, body) }; }
+
+  @Post(":id/superior/result")
+  async superiorResult(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: any) { return { project: await this.closure.recordSuperiorResult(req.currentUser!, id, body) }; }
 }

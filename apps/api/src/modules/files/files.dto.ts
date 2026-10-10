@@ -8,6 +8,12 @@ export const DISBURSEMENT_VOUCHER_PURPOSE = "disbursement_voucher";
 export const ACCEPTANCE_DOSSIER_PURPOSE = "acceptance_dossier";
 /** Biên bản thanh lý và tài liệu kèm theo do chuyên viên phụ trách tải lên. */
 export const LIQUIDATION_RECORD_PURPOSE = "liquidation_record";
+/** Minh chứng sản phẩm (nội dung công việc) do chủ nhiệm nộp để tổ chuyên gia nghiệm thu. */
+export const PRODUCT_EVIDENCE_PURPOSE = "product_evidence";
+/** Biên bản nghiệm thu sản phẩm của tổ chuyên gia (chuyên viên tải lên). */
+export const PRODUCT_REVIEW_MINUTES_PURPOSE = "product_review_minutes";
+/** Hồ sơ, công văn đề nghị và quyết định nghiệm thu của cấp trên (chuyên viên tải lên). */
+export const SUPERIOR_DOSSIER_PURPOSE = "superior_dossier";
 export const RESEARCH_PROPOSAL_ENTITY_TYPE = "research_proposal";
 
 export class ListFilesDto {

@@ -12,7 +12,7 @@ import { isRelationshipActiveAt } from "../proposals-shared/proposal-participati
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
 import { assertProposalContext } from "../proposals-shared/proposal-mutation.js";
 import { CLOSED_ACCEPTANCE_ROUND_STATUSES, projectContextVersion, projectViewerAuthorizationV1, PROJECT_STATUSES, type ProjectOfficerFact } from "./project-capability-v1.js";
-import { toAcceptanceResponse, toFinanceSummary, toLiquidationResponse } from "./project-closure-model.js";
+import { toAcceptanceResponse, toFinanceSummary, toLiquidationResponse, toProductResponse, toSuperiorResponse } from "./project-closure-model.js";
 import { baselineFromMilestones, calendarDayIndex, computeProjectProgress, HEALTH_APPLICABLE_STATUSES, HEALTH_LEVELS, localDayIndex, resolveEffectiveHealth, validateDeclaredWeights, type BaselineInput, type HealthLevel } from "./project-progress.js";
 
 const PREPARING = PROJECT_STATUSES.preparing;
@@ -41,7 +41,9 @@ const PROJECT_INCLUDE = {
   healthAssessments: { include: { assessedBy: { select: { displayName: true } } }, orderBy: { createdAt: "desc" }, take: 10 },
   acceptances: { include: { submittedBy: { select: { displayName: true } }, establishedBy: { select: { displayName: true } }, minutesRecordedBy: { select: { displayName: true } } }, orderBy: { round: "desc" } },
   finance: true,
-  liquidation: { include: { preparedBy: { select: { displayName: true } }, approvedBy: { select: { displayName: true } } } }
+  liquidation: { include: { preparedBy: { select: { displayName: true } }, approvedBy: { select: { displayName: true } } } },
+  products: { include: { reviews: { include: { formedBy: { select: { displayName: true } }, recordedBy: { select: { displayName: true } } }, orderBy: { round: "desc" } } }, orderBy: { position: "asc" } },
+  superiorAcceptance: { include: { sentBy: { select: { displayName: true } }, resultRecordedBy: { select: { displayName: true } } } }
 };
 
 export type NotifyFn = (event: WorkflowEvent) => void;
@@ -49,7 +51,7 @@ export type NotifyFn = (event: WorkflowEvent) => void;
 /** Vòng nghiệm thu gần nhất (số vòng lớn nhất) và trạng thái thanh lý: dữ kiện cho capability. */
 export function closureFacts(project: AnyRecord) {
   const latest = (project.acceptances ?? []).reduce((best: AnyRecord | null, row: AnyRecord) => (!best || row.round > best.round ? row : best), null);
-  return { acceptanceStatus: latest?.status ?? null, liquidationStatus: project.liquidation?.status ?? null, latestAcceptance: latest };
+  return { acceptanceStatus: latest?.status ?? null, liquidationStatus: project.liquidation?.status ?? null, superiorStatus: project.superiorAcceptance?.status ?? null, latestAcceptance: latest };
 }
 
 export function openAcceptanceRound(project: AnyRecord) {
@@ -155,7 +157,7 @@ export class ApprovedProjectsService {
     const participant = !!actorMember && actorMember.participationRole !== "TOPIC_PI";
     const responsibleMember = !!actorMember && project.milestones.some((milestone: AnyRecord) => milestone.responsibleMemberId === actorMember.id && milestone.status !== "completed");
     const facts = closureFacts(project);
-    const capability = projectViewerAuthorizationV1({ actor, project: { ...project, ownerId: projectPi?.userId ?? "" }, projectOfficer: officer, participant: { isParticipant: participant, role: actorMember?.participationRole, effectiveFrom: actorMember?.effectiveFrom?.toISOString?.(), effectiveUntil: actorMember?.effectiveUntil?.toISOString?.() }, responsibleMember, closure: { acceptanceStatus: facts.acceptanceStatus, liquidationStatus: facts.liquidationStatus } });
+    const capability = projectViewerAuthorizationV1({ actor, project: { ...project, ownerId: projectPi?.userId ?? "" }, projectOfficer: officer, participant: { isParticipant: participant, role: actorMember?.participationRole, effectiveFrom: actorMember?.effectiveFrom?.toISOString?.(), effectiveUntil: actorMember?.effectiveUntil?.toISOString?.() }, responsibleMember, closure: { acceptanceStatus: facts.acceptanceStatus, liquidationStatus: facts.liquidationStatus, superiorStatus: facts.superiorStatus } });
     if (!capability.allowedActions.includes("project.read")) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Không có quyền xem đề tài này." });
     return { project, officer, capability };
   }
@@ -250,6 +252,9 @@ export class ApprovedProjectsService {
       acceptances: (project.acceptances ?? []).map((row: AnyRecord) => toAcceptanceResponse(row)),
       finance: capability.allowedActions?.includes("project.finance.read") ? toFinanceSummary(project.finance) : null,
       liquidation: project.liquidation ? toLiquidationResponse(project.liquidation) : null,
+      level: (project.scopeSnapshot as AnyRecord | null)?.proposalTypeCode ?? null,
+      products: (project.products ?? []).map((row: AnyRecord) => toProductResponse(row)),
+      superiorAcceptance: project.superiorAcceptance ? toSuperiorResponse(project.superiorAcceptance, now) : null,
       viewerAuthorization: capability
     };
   }

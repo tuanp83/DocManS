@@ -345,7 +345,7 @@ export class ResearchProposalsService {
         ...item,
         project: { id: project.id, status: project.status },
         disbursementMetadata: finance ? { totalBudget: Number(finance.totalBudget), totalDisbursed: Number(finance.totalDisbursed), totalSettled: Number(finance.totalSettled), settlementStatus: finance.settlementStatus } : null,
-        acceptanceCouncilMetadata: round && round.status !== "RETURNED" ? { status: legacyStatus[round.status] ?? round.status, roundStatus: round.status, round: round.round, decisionNumber: round.decisionNumber ?? undefined, evaluationResult: round.evaluationResult ?? undefined, resolution: round.resolution ?? undefined } : null
+        acceptanceCouncilMetadata: round && round.status !== "RETURNED" ? { status: legacyStatus[round.status] ?? round.status, roundStatus: project.status === "pending_superior_acceptance" ? "PENDING_SUPERIOR" : project.status === "failed" ? "FAILED" : project.status === "accepted" || project.status === "closed" ? (round.status === "FAILED" ? "FAILED" : "PASSED") : round.status, round: round.round, decisionNumber: round.decisionNumber ?? undefined, evaluationResult: round.evaluationResult ?? undefined, resolution: round.resolution ?? undefined } : null
       };
     });
   }

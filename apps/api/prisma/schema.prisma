@@ -81,6 +81,11 @@ model User {
   preparedProjectLiquidations         ProjectLiquidation[]       @relation("ProjectLiquidationPreparer")
   approvedProjectLiquidations         ProjectLiquidation[]       @relation("ProjectLiquidationApprover")
   closedApprovedProjects              ApprovedProject[]          @relation("ApprovedProjectCloser")
+  createdProjectProducts              ProjectProduct[]           @relation("ProjectProductCreator")
+  formedProductReviews                ProjectProductReview[]     @relation("ProductReviewFormer")
+  recordedProductReviews              ProjectProductReview[]     @relation("ProductReviewRecorder")
+  sentSuperiorAcceptances             ProjectSuperiorAcceptance[] @relation("SuperiorAcceptanceSender")
+  recordedSuperiorAcceptances         ProjectSuperiorAcceptance[] @relation("SuperiorAcceptanceRecorder")
 
   supervisedStudentProjects StudentResearchProject[]  @relation("ProjectSupervisor")
   managedStudentProjects    StudentResearchProject[]  @relation("ProjectOfficer")
@@ -870,6 +875,9 @@ model ApprovedProject {
   disbursements                 ProjectDisbursement[]
   costItems                     ProjectCostItem[]
   liquidation                   ProjectLiquidation?
+  products                      ProjectProduct[]
+  productReviews                ProjectProductReview[]
+  superiorAcceptance            ProjectSuperiorAcceptance?
 
   @@index([hostOrganizationUnitId, status])
   @@index([status, endDate])
@@ -944,6 +952,7 @@ model ProjectMilestone {
   checkpoints         ProjectCheckpoint[]
   progressUpdates     ProjectMilestoneProgressUpdate[]
   disbursements      ProjectDisbursement[]
+  products           ProjectProduct[]
 
   @@index([projectId, dueDate])
   @@index([responsibleMemberId])
@@ -1209,6 +1218,8 @@ model ProjectAcceptance {
   createdAt            DateTime        @default(now()) @map("created_at")
   updatedAt            DateTime        @updatedAt @map("updated_at")
 
+  superiorAcceptances  ProjectSuperiorAcceptance[]
+
   @@unique([projectId, round])
   @@map("project_acceptances")
 }
@@ -1300,6 +1311,91 @@ model ProjectLiquidation {
   updatedAt          DateTime        @updatedAt @map("updated_at")
 
   @@map("project_liquidations")
+}
+
+/// Sản phẩm của đề tài: mỗi nội dung công việc trong thuyết minh (dạng 1–6), nghiệm thu bởi tổ chuyên gia.
+model ProjectProduct {
+  id           String                 @id @default(uuid())
+  projectId    String                 @map("project_id")
+  project      ApprovedProject        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  position     Int
+  title        String
+  productForm  Int                    @map("product_form")
+  requirements String?
+  milestoneId  String?                @map("milestone_id")
+  milestone    ProjectMilestone?      @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  status       String                 @default("PLANNED")
+  submission   Json?
+  createdById  String                 @map("created_by_id")
+  createdBy    User                   @relation("ProjectProductCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+  reviews      ProjectProductReview[]
+
+  @@index([projectId, position])
+  @@map("project_products")
+}
+
+/// Một lần tổ chuyên gia (3–5 người) nghiệm thu một sản phẩm.
+model ProjectProductReview {
+  id                 String          @id @default(uuid())
+  productId          String          @map("product_id")
+  product            ProjectProduct  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  projectId          String          @map("project_id")
+  project            ApprovedProject @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  round              Int
+  status             String          @default("PANEL_FORMED")
+  panelMembers       Json            @map("panel_members")
+  reviewDate         DateTime?       @map("review_date") @db.Date
+  location           String?
+  submissionSnapshot Json            @map("submission_snapshot")
+  result             String?
+  conclusion         String?
+  minutesFileIds     Json            @default("[]") @map("minutes_file_ids")
+  formedById         String          @map("formed_by_id")
+  formedBy           User            @relation("ProductReviewFormer", fields: [formedById], references: [id], onDelete: Restrict)
+  recordedById       String?         @map("recorded_by_id")
+  recordedBy         User?           @relation("ProductReviewRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  formedAt           DateTime        @map("formed_at")
+  concludedAt        DateTime?       @map("concluded_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  @@unique([productId, round])
+  @@index([projectId])
+  @@map("project_product_reviews")
+}
+
+/// Đề nghị cấp trên nghiệm thu (đề tài cấp Bộ / Nhà nước): hạn 30 ngày từ ngày nghiệm thu cơ sở xong.
+model ProjectSuperiorAcceptance {
+  projectId            String            @id @map("project_id")
+  project              ApprovedProject   @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  level                String
+  acceptanceId         String            @map("acceptance_id")
+  acceptance           ProjectAcceptance @relation(fields: [acceptanceId], references: [id], onDelete: Restrict)
+  facilityAcceptedOn   DateTime          @map("facility_accepted_on") @db.Date
+  dueDate              DateTime          @map("due_date") @db.Date
+  status               String            @default("PREPARING")
+  checklist            Json              @default("[]")
+  letterNumber         String?           @map("letter_number")
+  letterDate           DateTime?         @map("letter_date") @db.Date
+  recipient            String?
+  letterFileIds        Json              @default("[]") @map("letter_file_ids")
+  sentAt               DateTime?         @map("sent_at")
+  sentById             String?           @map("sent_by_id")
+  sentBy               User?             @relation("SuperiorAcceptanceSender", fields: [sentById], references: [id], onDelete: Restrict)
+  result               String?
+  resultDecisionNumber String?           @map("result_decision_number")
+  resultDate           DateTime?         @map("result_date") @db.Date
+  resultNote           String?           @map("result_note")
+  resultFileIds        Json              @default("[]") @map("result_file_ids")
+  resultRecordedById   String?           @map("result_recorded_by_id")
+  resultRecordedBy     User?             @relation("SuperiorAcceptanceRecorder", fields: [resultRecordedById], references: [id], onDelete: Restrict)
+  resultRecordedAt     DateTime?         @map("result_recorded_at")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+
+  @@map("project_superior_acceptances")
 }
 
 // ==========================================
