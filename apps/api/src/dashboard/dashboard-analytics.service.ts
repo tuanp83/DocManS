@@ -38,6 +38,7 @@ export type DashboardProject = {
   level: string | null;
   field: string | null;
   year: number | null;
+  startDate: string | null;
   endDate: string | null;
   overdue: boolean;
   health: "green" | "amber" | "red" | "none";
@@ -80,6 +81,7 @@ export function toDashboardProject(response: AnyRecord, now = new Date()): Dashb
     level: text(response.level ?? scope.proposalTypeCode),
     field: text(scope.researchFieldCode),
     year: vnYear(response.startDate),
+    startDate: response.startDate ?? null,
     endDate: response.endDate ?? null,
     overdue: response.overdue === true,
     health: summary.level === "green" || summary.level === "amber" || summary.level === "red" ? summary.level : "none",
@@ -205,7 +207,13 @@ export class DashboardAnalyticsService {
         byLevel: countBy(rows, (project) => project.level, undefined, money),
         byField: countBy(rows, (project) => project.field, undefined, money),
         byStatus: countBy(rows, (project) => project.status),
-        byHealth: HEALTH_KEYS.map((key) => ({ key, label: key, count: rows.filter((project) => project.health === key).length }))
+        byYear: countBy(rows, (project) => (project.year === null ? null : String(project.year))).sort((left, right) => left.key.localeCompare(right.key)),
+        byHealth: HEALTH_KEYS.map((key) => ({ key, label: key, count: rows.filter((project) => project.health === key).length })),
+        // Bản đồ nhiệt đơn vị × sức khoẻ.
+        byUnitHealth: countBy(rows, (project) => project.unitId, (project) => project.unitName, (bucket, project) => {
+          for (const key of HEALTH_KEYS) bucket[key] = bucket[key] ?? 0;
+          bucket[project.health] += 1;
+        })
       };
     }
     const rows = (await this.readableProposals(actor, now)).filter((proposal) => matchesProposal(proposal, query, now));
@@ -364,7 +372,7 @@ export class DashboardAnalyticsService {
           id: project.id, code: project.code, title: project.title, unit: { id: project.unitId, name: project.unitName }, piName: project.piName,
           status: project.status, level: project.level, field: project.field, health: project.health, spi: project.spi,
           plannedPercent: project.plannedPercent, actualPercent: project.actualPercent, daysOverdue: project.maxDaysOverdue, lateReports: project.lateReports,
-          overdue: project.overdue, endDate: project.endDate, totalBudget: project.finance?.totalBudget ?? null, totalDisbursed: project.finance?.totalDisbursed ?? null,
+          overdue: project.overdue, startDate: project.startDate, endDate: project.endDate, totalBudget: project.finance?.totalBudget ?? null, totalDisbursed: project.finance?.totalDisbursed ?? null,
           link: `/projects/${encodeURIComponent(project.id)}`
         }));
       return { metric, filters, ...paginate(rows, page, pageSize) };

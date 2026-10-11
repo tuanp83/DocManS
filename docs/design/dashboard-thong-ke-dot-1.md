@@ -81,7 +81,9 @@ tại chỉ có khi khoảng `from`–`to` chứa hôm nay.
 Tham số: `subject=projects|proposals` (bắt buộc), `unitId`, `level`, `field`, `year`, `status`.
 
 - `projects`: `totals` (số đề tài, số đề tài được xem kinh phí, tổng kinh phí / đã giải ngân / đã quyết toán, số
-  quá hạn), `byUnit`, `byLevel`, `byField` (kèm `totalBudget`, `totalDisbursed`), `byStatus`, `byHealth`.
+  quá hạn), `byUnit`, `byLevel`, `byField` (kèm `totalBudget`, `totalDisbursed`), `byStatus`, `byHealth`,
+  `byUnitHealth` (mỗi đơn vị kèm số đề tài `green` / `amber` / `red` / `none` — cho bản đồ nhiệt ở Đợt 2),
+  `byYear` (năm bắt đầu).
   `year` = năm bắt đầu (giờ Việt Nam).
 - `proposals`: `totals` (số hồ sơ, chờ xử lý, đã duyệt, quá hạn, kinh phí đã duyệt), `byUnit`, `byLevel`,
   `byField` (kèm `approvedBudget`), `byStatus`, `byYear`. `year` = năm nộp (chưa nộp: năm tạo).
@@ -103,7 +105,7 @@ bộ lọc không thuộc metric là 400:
 
 | metric | Bộ lọc | Sắp xếp | Trường mỗi dòng |
 |---|---|---|---|
-| `projects` | `unitId level field year status health overdue` | trễ nhiều nhất, Đỏ → Vàng → Xanh, mã | `id code title unit piName status level field health spi plannedPercent actualPercent daysOverdue lateReports overdue endDate totalBudget totalDisbursed link` |
+| `projects` | `unitId level field year status health overdue` | trễ nhiều nhất, Đỏ → Vàng → Xanh, mã | `id code title unit piName status level field health spi plannedPercent actualPercent daysOverdue lateReports overdue startDate endDate totalBudget totalDisbursed link` |
 | `proposals` | `unitId level field year status overdue` | mới nộp trước | `id code title unit ownerName status level field submittedAt endDate overdue link` |
 | `products` | `unitId level field year form productStatus` | mã đề tài, thứ tự nội dung | `id title productForm status position project unit link` |
 | `deliverables` | `unitId level field year type deliverableStatus` | mã hồ sơ | `id type title status publishedAt proposal unit link` |

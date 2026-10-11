@@ -13,6 +13,8 @@ import { actor, createClosureDb, seedExecutingProject } from "./helpers/project-
 
 const DAY = 86_400_000;
 const ago = (days) => new Date(Date.now() - days * DAY);
+// Ngày lịch (cột DATE, 00:00Z) cách hôm nay — theo giờ Việt Nam — đúng `days` ngày; không phụ thuộc giờ chạy test.
+const calendarDaysAgo = (days) => new Date((Math.floor((Date.now() + 7 * 3_600_000) / DAY) - days) * DAY);
 
 /**
  * Hai đơn vị:
@@ -47,7 +49,7 @@ function seed() {
   t.members.push({ id: "m-pi2", projectId: "project-2", userId: "pi2", name: "Chủ nhiệm 2", role: "TOPIC_PI", participationRole: "TOPIC_PI", status: "ACTIVE", effectiveFrom: past, effectiveUntil: null, createdAt: past });
   t.members.push({ id: "m-pi3", projectId: "project-3", userId: "pi", name: "Chủ nhiệm", role: "TOPIC_PI", participationRole: "TOPIC_PI", status: "ACTIVE", effectiveFrom: past, effectiveUntil: null, createdAt: past });
   t.officers.push({ id: "o-2", projectId: "project-2", officerUserId: "staff-u2", assignedById: "leader", status: "ACTIVE", effectiveFrom: past, effectiveUntil: null, createdAt: past });
-  t.milestones.push({ id: "ms-2", projectId: "project-2", title: "Thử nghiệm", dueDate: ago(40), status: "in_progress", position: 0, weightPercent: 100, progressPercent: 20 });
+  t.milestones.push({ id: "ms-2", projectId: "project-2", title: "Thử nghiệm", dueDate: calendarDaysAgo(40), status: "in_progress", position: 0, weightPercent: 100, progressPercent: 20 });
   t.products.push({ id: "prod-2", projectId: "project-2", position: 0, title: "Nội dung 1 cấp Bộ", productForm: 2, requirements: null, milestoneId: null, status: "SUBMITTED", submission: null, createdById: "staff-u2", createdAt: past, updatedAt: past });
   t.finances.push({ projectId: "project-1", totalBudget: 100_000_000n, totalDisbursed: 40_000_000n, totalSettled: 10_000_000n, settlementStatus: "PENDING", version: 1 });
   t.finances.push({ projectId: "project-2", totalBudget: 200_000_000n, totalDisbursed: 150_000_000n, totalSettled: 0n, settlementStatus: "PENDING", version: 1 });
@@ -122,7 +124,7 @@ describe("Dashboard: drill-down không lọt dữ liệu", () => {
     assert.equal(row.overdue, true);
     assert.equal(row.link, "/projects/project-2");
     assert.equal(row.totalBudget, 200_000_000);
-    assert.deepEqual(Object.keys(row).sort(), ["actualPercent", "code", "daysOverdue", "endDate", "field", "health", "id", "lateReports", "level", "link", "overdue", "piName", "plannedPercent", "spi", "status", "title", "totalBudget", "totalDisbursed", "unit"].sort());
+    assert.deepEqual(Object.keys(row).sort(), ["actualPercent", "code", "daysOverdue", "startDate", "endDate", "field", "health", "id", "lateReports", "level", "link", "overdue", "piName", "plannedPercent", "spi", "status", "title", "totalBudget", "totalDisbursed", "unit"].sort());
     for (const forbidden of ["members", "reports", "requests", "history", "viewerAuthorization", "finance", "acceptances"]) assert.ok(!(forbidden in row), forbidden);
   });
 
@@ -180,6 +182,8 @@ describe("Dashboard: phân bố và sản phẩm", () => {
     assert.deepEqual(all.byUnit.map((row) => [row.key, row.count]), [["unit-1", 2], ["unit-2", 1]]);
     assert.equal(all.byUnit.find((row) => row.key === "unit-2").label, "Khoa Ngoại");
     assert.deepEqual(Object.fromEntries(all.byHealth.map((row) => [row.key, row.count])), { green: 1, amber: 0, red: 1, none: 1 });
+    assert.equal(all.byYear.reduce((sum, row) => sum + row.count, 0), 3);
+    assert.deepEqual(all.byUnitHealth.map((row) => [row.key, row.green, row.amber, row.red, row.none]), [["unit-1", 1, 0, 0, 1], ["unit-2", 0, 0, 1, 0]]);
     assert.deepEqual(Object.fromEntries(all.byLevel.map((row) => [row.key, row.count])), { "academy-level": 1, "ministry-level": 1, "national-level": 1 });
     const unit1 = await analytics.distribution(actor(db, "staff2"), { subject: "projects" });
     assert.equal(unit1.totals.count, 2);
@@ -287,8 +291,8 @@ describe("Ảnh chụp sức khoẻ hằng tuần và xu hướng", () => {
   it("đề tài đã nghiệm thu còn mốc chưa đóng: không tính trễ, không đẩy lên đầu danh sách, không vào xu hướng", async () => {
     const db = seed();
     const { analytics, snapshots } = services(db);
-    db.tables.milestones.push({ id: "ms-3", projectId: "project-3", title: "Mốc cũ", dueDate: ago(90), status: "in_progress", position: 0, weightPercent: 100, progressPercent: 50 });
-    db.tables.checkpoints.push({ id: "c-3", projectId: "project-3", title: "Báo cáo cũ", dueDate: ago(60), status: "open" });
+    db.tables.milestones.push({ id: "ms-3", projectId: "project-3", title: "Mốc cũ", dueDate: calendarDaysAgo(90), status: "in_progress", position: 0, weightPercent: 100, progressPercent: 50 });
+    db.tables.checkpoints.push({ id: "c-3", projectId: "project-3", title: "Báo cáo cũ", dueDate: calendarDaysAgo(60), status: "open" });
     const list = await analytics.drillDown(actor(db, "leader"), { metric: "projects" });
     assert.equal(list.items[0].id, "project-2");
     const accepted = list.items.find((row) => row.id === "project-3");
