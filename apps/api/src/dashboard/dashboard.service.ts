@@ -8,6 +8,7 @@ import { ProposalParticipationService } from "../research-proposals/proposal-par
 
 export type DashboardProposalRecord = {
   id: string;
+  code?: string | null;
   ownerId: string;
   createdAt: Date;
   hostOrganizationUnitId: string;
@@ -16,14 +17,16 @@ export type DashboardProposalRecord = {
   endDate: Date | null;
   submittedAt: Date | null;
   budgetMetadata: unknown;
+  researchFieldCode?: string | null;
+  proposalTypeCode?: string | null;
   owner: { displayName: string | null; username: string | null } | null;
   hostOrganizationUnit: { id: string; name: string } | null;
 };
 
-const PENDING_STATUSES = ["submitted", "under_review", "checked", "review_in_progress"];
-const CLOSED_STATUSES = ["approved", "rejected", "completed", "draft"];
+export const PENDING_STATUSES = ["submitted", "under_review", "checked", "review_in_progress"];
+export const CLOSED_STATUSES = ["approved", "rejected", "completed", "draft"];
 
-function approvedBudget(record: DashboardProposalRecord) {
+export function approvedBudget(record: DashboardProposalRecord) {
   const meta = record.budgetMetadata as { amount?: unknown } | null;
   return meta && typeof meta.amount === "number" ? meta.amount : 0;
 }
@@ -51,6 +54,7 @@ export class DashboardService {
       orderBy: { submittedAt: "desc" },
       select: {
         id: true,
+        code: true,
         ownerId: true,
         createdAt: true,
         hostOrganizationUnitId: true,
@@ -59,6 +63,8 @@ export class DashboardService {
         endDate: true,
         submittedAt: true,
         budgetMetadata: true,
+        researchFieldCode: true,
+        proposalTypeCode: true,
         owner: { select: { displayName: true, username: true } },
         hostOrganizationUnit: { select: { id: true, name: true } }
       }

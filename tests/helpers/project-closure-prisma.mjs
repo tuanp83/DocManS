@@ -12,7 +12,11 @@ function matchValue(actual, condition) {
   }
   if ("in" in condition) return condition.in.includes(actual);
   if ("not" in condition) return !matchValue(actual, condition.not);
-  if ("lte" in condition) return actual <= condition.lte;
+  if ("lte" in condition || "gte" in condition) {
+    const value = actual instanceof Date ? actual.getTime() : actual;
+    const bound = (item) => (item instanceof Date ? item.getTime() : item);
+    return ("lte" in condition ? value <= bound(condition.lte) : true) && ("gte" in condition ? value >= bound(condition.gte) : true);
+  }
   throw new Error(`Unsupported condition ${JSON.stringify(condition)}`);
 }
 
@@ -20,6 +24,11 @@ function matches(row, where = {}, related = {}) {
   for (const [key, condition] of Object.entries(where)) {
     if (key === "NOT") { if (matches(row, condition, related)) return false; continue; }
     if (key === "OR") { if (!condition.some((item) => matches(row, item, related))) return false; continue; }
+    if (related[key] && condition && typeof condition === "object" && !("some" in condition)) {
+      const target = related[key](row);
+      if (!target || !matches(target, condition)) return false;
+      continue;
+    }
     if (condition && typeof condition === "object" && "some" in condition) {
       const rows = related[key]?.(row) ?? [];
       if (!rows.some((item) => matches(item, condition.some))) return false;
@@ -50,7 +59,8 @@ export function createClosureDb(options = {}) {
     users: [], scopes: [], units: [{ id: "unit-1", code: "U1", name: "Khoa Nội", status: "active" }],
     proposals: [], projects: [], members: [], officers: [], milestones: [], checkpoints: [], reports: [], requests: [],
     history: [], acceptances: [], finances: [], disbursements: [], costItems: [], liquidations: [], files: [], profiles: [],
-    auditLogs: [], notifications: [], counters: new Map(), supplementRequests: [], products: [], productReviews: [], superiors: []
+    auditLogs: [], notifications: [], counters: new Map(), supplementRequests: [], products: [], productReviews: [], superiors: [],
+    snapshots: [], deliverables: [], proposalMembers: [], proposalOfficers: []
   };
   const userName = (id) => t.users.find((user) => user.id === id) ?? null;
   const displayOf = (id) => (id ? { displayName: userName(id)?.displayName ?? id } : null);
@@ -120,7 +130,7 @@ export function createClosureDb(options = {}) {
     },
     approvedProject: {
       findUnique: async ({ where, include }) => projectView(t.projects.find((row) => row.id === where.id || (where.proposalId && row.proposalId === where.proposalId)), include),
-      findMany: async ({ where, include } = {}) => t.projects.filter((row) => matches(row, where)).map((row) => projectView(row, include)),
+      findMany: async ({ where, include } = {}) => t.projects.filter((row) => matches(row, where, { members: (project) => t.members.filter((member) => member.projectId === project.id), proposal: (project) => t.proposals.find((proposal) => proposal.id === project.proposalId) })).map((row) => projectView(row, include)),
       update: async ({ where, data }) => { const row = t.projects.find((item) => item.id === where.id); return clone(applyData(row, clone(data))); }
     },
     researchProposal: table(t.proposals),
@@ -147,7 +157,28 @@ export function createClosureDb(options = {}) {
     userNotification: table(t.notifications),
     proposalSupplementRequest: table(t.supplementRequests),
     proposalReviewAssignment: { findMany: async () => [] },
-    proposalReview: { findFirst: async () => null },
+    proposalReview: { findFirst: async () => null, findMany: async () => [] },
+    proposalMember: table(t.proposalMembers),
+    proposalManagementOfficer: table(t.proposalOfficers),
+    proposalDeliverable: table(t.deliverables),
+    projectHealthSnapshot: {
+      ...table(t.snapshots),
+      findFirst: async ({ orderBy } = {}) => {
+        const rows = [...t.snapshots].sort((a, b) => (orderBy?.snapshotDate === "desc" ? b.snapshotDate - a.snapshotDate : a.snapshotDate - b.snapshotDate));
+        return clone(rows[0] ?? null);
+      },
+      // Mô phỏng ràng buộc unique (project_id, snapshot_date) + skipDuplicates.
+      createMany: async ({ data, skipDuplicates }) => {
+        let count = 0;
+        for (const item of data) {
+          const duplicate = t.snapshots.some((row) => row.projectId === item.projectId && row.snapshotDate.getTime() === item.snapshotDate.getTime());
+          if (duplicate) { if (skipDuplicates) continue; throw Object.assign(new Error("unique"), { code: "P2002" }); }
+          t.snapshots.push({ id: randomUUID(), createdAt: new Date(), ...clone(item) });
+          count += 1;
+        }
+        return { count };
+      }
+    },
     async $transaction(work) { return work(db); },
     async $executeRaw() { return 1; },
     async $queryRaw(strings, ...values) {

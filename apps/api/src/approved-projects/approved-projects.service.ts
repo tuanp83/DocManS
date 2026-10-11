@@ -13,7 +13,8 @@ import { ProposalReviewAccessService } from "../proposals-shared/proposal-review
 import { assertProposalContext } from "../proposals-shared/proposal-mutation.js";
 import { CLOSED_ACCEPTANCE_ROUND_STATUSES, projectContextVersion, projectViewerAuthorizationV1, PROJECT_STATUSES, type ProjectOfficerFact } from "./project-capability-v1.js";
 import { toAcceptanceResponse, toFinanceSummary, toLiquidationResponse, toProductResponse, toSuperiorResponse } from "./project-closure-model.js";
-import { baselineFromMilestones, calendarDayIndex, computeProjectProgress, HEALTH_APPLICABLE_STATUSES, HEALTH_LEVELS, localDayIndex, resolveEffectiveHealth, validateDeclaredWeights, type BaselineInput, type HealthLevel } from "./project-progress.js";
+import { baselineFromMilestones, calendarDayIndex, HEALTH_APPLICABLE_STATUSES, HEALTH_LEVELS, localDayIndex, resolveEffectiveHealth, validateDeclaredWeights, type HealthLevel } from "./project-progress.js";
+import { computeProgressForProject, summarizeProjectProgress } from "./project-progress-summary.js";
 
 const PREPARING = PROJECT_STATUSES.preparing;
 const EXECUTING = PROJECT_STATUSES.executing;
@@ -262,37 +263,11 @@ export class ApprovedProjectsService {
   // ---- Tiến độ (docs/design/quan-ly-tien-do-nhiem-vu.md) -------------------------------------------------
 
   private computeProgress(project: AnyRecord, now = new Date()) {
-    const baselines = (project.baselines ?? []) as AnyRecord[];
-    const toBaseline = (row: AnyRecord | undefined): BaselineInput | null => row ? { version: row.version, startDate: row.startDate, endDate: row.endDate, milestones: Array.isArray(row.milestones) ? row.milestones : [] } : null;
-    return computeProjectProgress({
-      today: now,
-      status: project.status,
-      startDate: project.startDate,
-      endDate: project.endDate,
-      milestones: project.milestones ?? [],
-      baseline: toBaseline(baselines[baselines.length - 1]),
-      originalBaseline: toBaseline(baselines[0]),
-      checkpoints: project.checkpoints ?? [],
-      reports: project.reports ?? []
-    });
+    return computeProgressForProject(project, now);
   }
 
   private progressSummary(project: AnyRecord, now = new Date()) {
-    const progress = this.computeProgress(project, now);
-    const effective = resolveEffectiveHealth(progress.level, (project.healthAssessments ?? [])[0]);
-    return {
-      plannedPercent: progress.plannedPercent,
-      actualPercent: progress.actualPercent,
-      spi: progress.spi,
-      maxDaysOverdue: progress.maxDaysOverdue,
-      overdueMilestones: progress.overdueMilestones,
-      lateReports: progress.lateReports,
-      computedLevel: progress.level,
-      level: effective.level,
-      levelSource: effective.source,
-      needsReassessment: effective.needsReassessment,
-      reasons: progress.reasons
-    };
+    return summarizeProjectProgress(project, now);
   }
 
   /** Mốc mà người xem được cập nhật tiến độ: chủ nhiệm mọi mốc đang mở, thành viên mốc mình phụ trách. */

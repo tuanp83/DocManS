@@ -9,6 +9,18 @@ const VALID_DELIVERABLE_TYPES = [
   "Sách chuyên khảo"
 ] as const;
 
+/**
+ * Quyền xem sản phẩm đầu ra của hồ sơ: chủ nhiệm, hoặc cán bộ quản lý KH / lãnh đạo có phạm vi đơn vị chủ trì.
+ * Dashboard dùng đúng hàm này để số đếm sản phẩm đầu ra không rộng hơn màn hình chi tiết.
+ */
+export function canReadProposalDeliverables(actor: SafeUserContext | undefined, proposal: { ownerId: string; hostOrganizationUnitId: string }) {
+  if (!actor?.id) return false;
+  const hasOrgScope = (actor.organizationScopes ?? []).some((scope: { id: string }) => scope.id === proposal.hostOrganizationUnitId);
+  const isOwner = proposal.ownerId === actor.id;
+  const isStaff = actor.systemRole === "RESEARCH_MANAGEMENT_STAFF" || actor.systemRole === "RESEARCH_MANAGEMENT_HEAD" || actor.systemRole === "SYSTEM_ADMIN" || actor.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY";
+  return isOwner || (isStaff && hasOrgScope);
+}
+
 @Injectable()
 export class ProposalDeliverablesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -27,15 +39,7 @@ export class ProposalDeliverablesService {
       throw new NotFoundException({ message: "Không tìm thấy đề tài." });
     }
 
-    // Owner or scientific-management staff with matching org scope can access
-    const hasOrgScope = actor.organizationScopes?.some(
-      (scope: { id: string }) => scope.id === proposal.hostOrganizationUnitId
-    );
-
-    const isOwner = proposal.ownerId === actor.id;
-    const isStaff = actor.systemRole === "RESEARCH_MANAGEMENT_STAFF" || actor.systemRole === "RESEARCH_MANAGEMENT_HEAD" || actor.systemRole === "SYSTEM_ADMIN" || actor.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY";
-
-    if (!isOwner && !(isStaff && hasOrgScope)) {
+    if (!canReadProposalDeliverables(actor, proposal)) {
       throw new ForbiddenException({ message: "Không có quyền truy cập sản phẩm đầu ra của đề tài này." });
     }
 

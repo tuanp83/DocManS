@@ -143,6 +143,7 @@ describe("workspace smoke checks", () => {
       "ProjectProduct",
       "ProjectProductReview",
       "ProjectSuperiorAcceptance",
+      "ProjectHealthSnapshot",
       "StudentResearchProject",
       "StudentResearchEvent",
       "StudentResearchDocument"

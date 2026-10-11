@@ -123,6 +123,7 @@ model OrganizationUnit {
   researcherProfiles      ResearcherProfile[]
 
   approvedProjects ApprovedProject[]
+  projectHealthSnapshots  ProjectHealthSnapshot[]
   studentResearchProjects StudentResearchProject[] @relation("StudentResearchUnit")
 
   @@index([parentId])
@@ -878,6 +879,7 @@ model ApprovedProject {
   products                      ProjectProduct[]
   productReviews                ProjectProductReview[]
   superiorAcceptance            ProjectSuperiorAcceptance?
+  healthSnapshots               ProjectHealthSnapshot[]
 
   @@index([hostOrganizationUnitId, status])
   @@index([status, endDate])
@@ -1396,6 +1398,36 @@ model ProjectSuperiorAcceptance {
   updatedAt            DateTime          @updatedAt @map("updated_at")
 
   @@map("project_superior_acceptances")
+}
+
+/// Ảnh chụp sức khoẻ đề tài hằng tuần (docs/design/dashboard-thong-ke-dot-1.md). Chỉ ghi thêm, không sửa.
+model ProjectHealthSnapshot {
+  id                     String           @id @default(uuid())
+  snapshotDate           DateTime         @map("snapshot_date") @db.Date
+  projectId              String           @map("project_id")
+  project                ApprovedProject  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  hostOrganizationUnitId String           @map("host_organization_unit_id")
+  hostOrganizationUnit   OrganizationUnit @relation(fields: [hostOrganizationUnitId], references: [id], onDelete: Restrict)
+  status                 String
+  level                  String?
+  researchFieldCode      String?          @map("research_field_code")
+  healthLevel            String?          @map("health_level")
+  computedLevel          String?          @map("computed_level")
+  healthSource           String           @map("health_source")
+  plannedPercent         Float            @map("planned_percent")
+  actualPercent          Float            @map("actual_percent")
+  spi                    Float?
+  maxDaysOverdue         Int              @default(0) @map("max_days_overdue")
+  overdueMilestones      Int              @default(0) @map("overdue_milestones")
+  lateReports            Int              @default(0) @map("late_reports")
+  totalBudget            BigInt?          @map("total_budget")
+  totalDisbursed         BigInt?          @map("total_disbursed")
+  totalSettled           BigInt?          @map("total_settled")
+  createdAt              DateTime         @default(now()) @map("created_at")
+
+  @@unique([projectId, snapshotDate])
+  @@index([snapshotDate])
+  @@map("project_health_snapshots")
 }
 
 // ==========================================

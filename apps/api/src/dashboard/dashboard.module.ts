@@ -6,11 +6,14 @@ import { ResearchProposalsModule } from "../research-proposals/research-proposal
 import { DashboardController } from "./dashboard.controller.js";
 import { DashboardService } from "./dashboard.service.js";
 import { DashboardExportService } from "./dashboard-export.service.js";
+import { DashboardAnalyticsService } from "./dashboard-analytics.service.js";
+import { ProjectHealthSnapshotService } from "./project-health-snapshot.service.js";
+import { ApprovedProjectsModule } from "../approved-projects/approved-projects.module.js";
 
 @Module({
-  imports: [AuthModule, ResearchProposalsModule],
+  imports: [AuthModule, ResearchProposalsModule, ApprovedProjectsModule],
   controllers: [DashboardController],
-  providers: [DashboardService, DashboardExportService, AuditLogService, PrismaService],
-  exports: [DashboardService, DashboardExportService]
+  providers: [DashboardService, DashboardExportService, DashboardAnalyticsService, ProjectHealthSnapshotService, AuditLogService, PrismaService],
+  exports: [DashboardService, DashboardExportService, DashboardAnalyticsService]
 })
 export class DashboardModule {}
