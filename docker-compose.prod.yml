@@ -59,8 +59,10 @@ services:
     networks: [internal]
 
   minio:
-    # Phiên bản đã kiểm thử; chỉ nâng sau khi thử trên môi trường staging.
-    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z}
+    # MinIO đã ngừng phát hành image công khai. Bản đã kiểm thử được nạp sẵn trên máy chủ bằng
+    # scripts/minio-image.sh load (hoặc kéo từ registry nội bộ qua MINIO_IMAGE). Tiền tố docmans.local không
+    # bao giờ trỏ ra Docker Hub nên không thể kéo nhầm một image trùng tên.
+    image: ${MINIO_IMAGE:-docmans.local/minio:RELEASE.2025-09-07T16-13-09Z}
     logging: *default-logging
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -81,7 +83,7 @@ services:
 
   # One-shot, idempotent: bucket, chính sách giới hạn trong bucket và tài khoản MinIO riêng cho API.
   minio-init:
-    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z}
+    image: ${MINIO_IMAGE:-docmans.local/minio:RELEASE.2025-09-07T16-13-09Z}
     logging: *default-logging
     restart: "no"
     entrypoint: ["sh", "/minio-init.sh"]
