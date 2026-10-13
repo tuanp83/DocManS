@@ -150,6 +150,36 @@ export function canReadProposal(
   return proposal.ownerId === user.id;
 }
 
+/**
+ * Nhật ký hành động của hồ sơ ghi danh tính người thực hiện (chủ nhiệm, phản biện, người chấm).
+ * Chỉ người đọc hồ sơ với tư cách quản lý được xem, và không phải chủ nhiệm, thành viên hay phản biện
+ * của chính hồ sơ đó (giữ ẩn danh hai chiều giữa chủ nhiệm và phản biện).
+ */
+export function canReadProposalAuditTrail(
+  user: SafeUserContext | undefined,
+  proposal: ProposalLike,
+  participation?: ProposalParticipation,
+  reviewAccess?: ProposalReviewAccess,
+  managementOfficer?: ProposalManagementOfficerResolution
+) {
+  if (!user || proposal.ownerId === user.id || participation?.isParticipant || reviewAccess?.isAssignedReviewer) {
+    return false;
+  }
+  if (!getOrganizationScopeIds(user).includes(proposal.hostOrganizationUnitId)) {
+    return false;
+  }
+  if (isResearchManagementHead(user) || isResearchOversightAuthority(user)) {
+    return true;
+  }
+  if (isLeadership(user)) {
+    return isWorkflowVisibleStatus(proposal.status);
+  }
+  if (isResearchManagementStaff(user)) {
+    return managementOfficer?.resolved === true && managementOfficer.officer?.officerUserId === user.id;
+  }
+  return false;
+}
+
 export function assertCanReadProposal(
   user: SafeUserContext | undefined,
   proposal: ProposalLike,

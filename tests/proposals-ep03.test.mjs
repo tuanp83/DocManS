@@ -431,6 +431,9 @@ function createPrisma() {
         const record = { id: nextId("audit", store.auditLogs), timestamp: new Date(), ...data };
         store.auditLogs.push(record);
         return record;
+      },
+      async findMany({ where, take }) {
+        return store.auditLogs.filter((item) => item.targetEntityId === where.targetEntityId).reverse().slice(0, take ?? Infinity);
       }
     },
     proposalManagementOfficer: {
@@ -1586,6 +1589,17 @@ describe("Evidence binding (mang từ thanhdotien278/DocManS): submission round 
     store.proposals.find((item) => item.id === proposal.id).councilMetadata.status = "submitted";
     await assert.rejects(() => services.decisions.approveCouncil(leadershipUser, proposal.id, {}), /đã chốt hoặc đã trình/);
     assert.equal(store.reviewAssignments.length, 6);
+  });
+
+  it("the proposal action log is for managers only: the PI and assigned reviewers cannot read who did what", async () => {
+    const services = createServices();
+    const { proposal } = await createFullyAssignedProposalUnderReview(services);
+    for (const user of [piUser, reviewerUser, councilMemberUser]) {
+      await assert.rejects(() => services.proposalService.getProposalAuditLogs(user, proposal.id), ForbiddenException, user.id);
+    }
+    const logs = await services.proposalService.getProposalAuditLogs(leadershipUser, proposal.id);
+    assert.ok(logs.length > 0);
+    assert.ok(logs.every((log) => !("actorEmail" in log) && !("credentialEmail" in log)));
   });
 
   it("a council proposal cannot set its own status (e.g. approved) and cannot overwrite a council leadership already approved", async () => {

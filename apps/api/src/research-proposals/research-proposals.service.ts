@@ -21,6 +21,7 @@ import {
   isResearchManagementHead,
   isResearchManagementStaff,
   isSystemAdmin,
+  canReadProposalAuditTrail,
   readableProposalCandidatesWhere
 } from "../proposals-shared/proposal-access.js";
 import {
@@ -1601,6 +1602,9 @@ export class ResearchProposalsService {
       this.managementOfficers.resolveForProposal(proposalId, asOf)
     ]);
     assertCanReadProposal(actor, proposal, participation, reviewAccess, managementOfficer);
+    if (!canReadProposalAuditTrail(actor, proposal, participation, reviewAccess, managementOfficer)) {
+      throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chỉ cán bộ quản lý hồ sơ được xem nhật ký hành động." });
+    }
 
     // 2. Fetch logs from Prisma
     const logs = await (this.prisma as any).auditLog.findMany({
@@ -1610,11 +1614,11 @@ export class ResearchProposalsService {
       orderBy: {
         timestamp: "desc",
       },
+      take: 500,
       include: {
         actor: {
           select: {
-            displayName: true,
-            credentialEmail: true,
+            displayName: true
           }
         }
       }
