@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import { PasswordService } from "../auth/password.service.js";
 import { AuthService } from "../auth/auth.service.js";
@@ -100,22 +100,39 @@ export class AdminUsersService {
     }));
   }
 
-  async listOrganizationUnits() {
+  /** Mặc định chỉ đơn vị đang hoạt động (dùng khi gán phạm vi); trang quản trị đơn vị lấy cả đơn vị đã tắt để bật lại. */
+  async listOrganizationUnits(options: { includeInactive?: boolean } = {}) {
     return this.prisma.organizationUnit.findMany({
-      where: { status: "active" },
-      orderBy: { name: "asc" }
+      where: options.includeInactive ? {} : { status: "active" },
+      orderBy: [{ status: "asc" }, { name: "asc" }]
     });
   }
 
+  /**
+   * Ảnh hưởng của việc tắt đơn vị: tài khoản đang hoạt động có phạm vi ở đơn vị này, và số tài khoản sẽ không
+   * còn phạm vi hoạt động nào khác (phiên của họ bị từ chối ngay khi đơn vị tắt).
+   */
+  async organizationUnitImpact(unitId: string) {
+    const unit = await this.prisma.organizationUnit.findUnique({ where: { id: unitId } });
+    if (!unit) throw new NotFoundException({ message: "Không tìm thấy đơn vị." });
+    const users = (await this.prisma.user.findMany({
+      where: { status: "active", organizationScopes: { some: { organizationUnitId: unitId } } },
+      select: { id: true, organizationScopes: { select: { organizationUnitId: true, organizationUnit: { select: { status: true } } } } }
+    } as never)) as unknown as Array<{ id: string; organizationScopes: Array<{ organizationUnitId: string; organizationUnit: { status: string } }> }>;
+    const usersLosingAccess = users.filter((user) => !user.organizationScopes.some((scope) => scope.organizationUnitId !== unitId && scope.organizationUnit.status === "active")).length;
+    return { unitId, scopedUsers: users.length, usersLosingAccess };
+  }
+
   async createOrganizationUnit(actor: SafeUserContext, input: OrganizationUnitInput) {
-    const unit = await this.prisma.organizationUnit.create({
+    const parentId = input.parentId === undefined ? undefined : await this.readParentId(input.parentId);
+    const unit = await this.writeOrganizationUnit(() => this.prisma.organizationUnit.create({
       data: {
         code: readCode(input.code, "code"),
         name: readText(input.name, "name"),
-        parentId: input.parentId === undefined ? undefined : readOptionalDescription(input.parentId, 80),
+        parentId: parentId ?? undefined,
         status: input.status === undefined ? "active" : this.readActiveStatus(input.status)
       }
-    });
+    }));
 
     await this.auditLog.record({
       action: "create-organization-unit",
@@ -144,16 +161,16 @@ export class AdminUsersService {
       data.name = readText(input.name, "name");
     }
     if (input.parentId !== undefined) {
-      data.parentId = readOptionalDescription(input.parentId, 80) ?? null;
+      data.parentId = await this.readParentId(input.parentId, unitId);
     }
     if (input.status !== undefined) {
       data.status = this.readActiveStatus(input.status);
     }
 
-    const unit = await this.prisma.organizationUnit.update({
+    const unit = await this.writeOrganizationUnit(() => this.prisma.organizationUnit.update({
       where: { id: unitId },
       data
-    });
+    }));
 
     await this.auditLog.record({
       action: "update-organization-unit",
@@ -165,6 +182,27 @@ export class AdminUsersService {
     });
 
     return unit;
+  }
+
+  private writeOrganizationUnit<T>(write: () => Promise<T>) {
+    return mapOrganizationUnitWriteError(write);
+  }
+
+  /** Cấp cha phải tồn tại, khác chính nó và không tạo vòng lặp trong cây đơn vị. Rỗng = không có cấp cha. */
+  private async readParentId(value: unknown, unitId?: string) {
+    const parentId = readOptionalDescription(value, 80) ?? null;
+    if (!parentId) return null;
+    const seen = new Set<string>();
+    for (let cursor: string | null = parentId; cursor; ) {
+      if (cursor === unitId || seen.has(cursor)) {
+        throw new BadRequestException({ message: "Cấp cha này tạo thành vòng lặp trong cây đơn vị." });
+      }
+      seen.add(cursor);
+      const parent = (await this.prisma.organizationUnit.findUnique({ where: { id: cursor } })) as { parentId?: string | null } | null;
+      if (!parent) throw new BadRequestException({ message: "Đơn vị cấp cha không tồn tại." });
+      cursor = parent.parentId ?? null;
+    }
+    return parentId;
   }
 
   async createUser(actor: SafeUserContext, input: CreateUserInput) {
@@ -412,6 +450,18 @@ export class AdminUsersService {
       unit: user.unit,
       organizationUnitId: organizationScope?.organizationUnit.id
     };
+  }
+}
+
+/** Lỗi ràng buộc của Prisma khi ghi đơn vị → thông báo rõ ràng thay vì lỗi 500. */
+async function mapOrganizationUnitWriteError<T>(write: () => Promise<T>) {
+  try {
+    return await write();
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "P2002") throw new ConflictException({ code: "ORGANIZATION_UNIT_CODE_TAKEN", message: "Mã đơn vị đã tồn tại." });
+    if (code === "P2025") throw new NotFoundException({ message: "Không tìm thấy đơn vị." });
+    throw error;
   }
 }
 

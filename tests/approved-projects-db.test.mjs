@@ -169,6 +169,11 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     await projects.decideRequest(staff, id, "adjustment", "approve", { contextVersion: await context(staff, id), requestId: adjustment.id, reason: "Hợp lý" });
     assert.equal((await db.projectRequest.findUnique({ where: { id: adjustment.id } })).status, "approved");
 
+    // "Đề tài của tôi": chủ nhiệm thấy đề tài; chuyên viên phụ trách (không tham gia) thấy ở danh sách theo dõi nhưng không ở "của tôi".
+    assert.ok((await projects.listProjects(pi, { mine: true })).some((project) => project.id === id));
+    assert.ok((await projects.listProjects(staff)).some((project) => project.id === id));
+    assert.equal((await projects.listProjects(staff, { mine: true })).some((project) => project.id === id), false);
+
     const history = await db.projectHistory.findMany({ where: { projectId: id } });
     for (const action of ["project.created", "project.setup.configure", "project.report.submit", "project.extension.approve", "project.adjustment.approve"]) {
       assert.ok(history.some((item) => item.action === action), action);

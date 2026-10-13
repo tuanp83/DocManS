@@ -18,6 +18,8 @@ type NotificationTemplateInput = {
 
 const SYSTEM_PARAMETER_RULES = {
   session_timeout_minutes: {
+    label: "Thời gian phiên đăng nhập (phút)",
+    hint: "Từ 15 đến 1440 phút; áp dụng cho các lần đăng nhập sau khi lưu.",
     validate(value: string) {
       const parsed = Number(value);
       if (!Number.isInteger(parsed) || parsed < 15 || parsed > 1440) {
@@ -29,11 +31,11 @@ const SYSTEM_PARAMETER_RULES = {
   }
 } as const;
 
+// Chỉ các mẫu thật sự được gửi. Admin tạo tài khoản thì trao mật khẩu tạm trực tiếp, không gửi email,
+// nên không còn mẫu "user_created".
 const NOTIFICATION_TEMPLATE_RULES = {
-  user_created: {
-    placeholders: new Set(["username", "displayName"])
-  },
   researcher_account_activation: {
+    label: "Email kích hoạt tài khoản nhà khoa học",
     placeholders: new Set(["displayName", "activationUrl", "expiresAt"])
   }
 } as const;
@@ -44,6 +46,14 @@ export class AdminConfigService {
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService
   ) {}
+
+  /** Tham số và mẫu được hỗ trợ, để giao diện chọn từ danh sách thay vì gõ mã. */
+  definitions() {
+    return {
+      parameters: Object.entries(SYSTEM_PARAMETER_RULES).map(([key, rule]) => ({ key, label: rule.label, hint: rule.hint })),
+      templates: Object.entries(NOTIFICATION_TEMPLATE_RULES).map(([key, rule]) => ({ key, label: rule.label, placeholders: [...rule.placeholders] }))
+    };
+  }
 
   async listSystemParameters() {
     return this.prisma.systemParameter.findMany({

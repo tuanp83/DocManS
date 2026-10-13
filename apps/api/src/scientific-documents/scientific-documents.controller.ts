@@ -18,11 +18,14 @@ import { uploadInterceptorOptions } from "../modules/files/upload-limits.js";
 import { sendObjectContent } from "../modules/files/send-object-content.js";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
-import type {
-  CreateScientificDocumentDto,
-  QueryScientificDocumentsDto,
-  UpdateScientificDocumentDto,
-  UploadedDocumentFile
+import {
+  createScientificDocumentPipe,
+  queryScientificDocumentsPipe,
+  updateScientificDocumentPipe,
+  type CreateScientificDocumentDto,
+  type QueryScientificDocumentsDto,
+  type UpdateScientificDocumentDto,
+  type UploadedDocumentFile
 } from "./scientific-documents.dto.js";
 import { ScientificDocumentsService } from "./scientific-documents.service.js";
 
@@ -59,7 +62,7 @@ export class ScientificDocumentsController {
   @Get()
   async listDocuments(
     @Req() request: RequestWithCurrentUser,
-    @Query() query: QueryScientificDocumentsDto
+    @Query(queryScientificDocumentsPipe) query: QueryScientificDocumentsDto
   ) {
     const documents = await this.service.listDocuments(request.currentUser!, query);
     return { documents };
@@ -78,7 +81,7 @@ export class ScientificDocumentsController {
   @UseInterceptors(FileInterceptor("file", uploadInterceptorOptions()))
   async createDocument(
     @Req() request: RequestWithCurrentUser,
-    @Body() body: CreateScientificDocumentDto,
+    @Body(createScientificDocumentPipe) body: CreateScientificDocumentDto,
     @UploadedFile() file?: UploadedDocumentFile
   ) {
     const document = await this.service.createDocument(request.currentUser!, body, file);
@@ -90,7 +93,7 @@ export class ScientificDocumentsController {
   async updateDocument(
     @Req() request: RequestWithCurrentUser,
     @Param("id") id: string,
-    @Body() body: UpdateScientificDocumentDto,
+    @Body(updateScientificDocumentPipe) body: UpdateScientificDocumentDto,
     @UploadedFile() file?: UploadedDocumentFile
   ) {
     const document = await this.service.updateDocument(request.currentUser!, id, body, file);

@@ -7,7 +7,7 @@ import { ProjectClosureService } from "./project-closure.service.js";
 
 function filters(value: Record<string, string>) {
   const parse = (input?: string) => input === undefined ? undefined : input === "true" ? true : input === "false" ? false : (() => { throw new BadRequestException({ message: "Bộ lọc không hợp lệ." }); })();
-  return { overdue: parse(value.overdue), approaching: parse(value.approaching), health: readHealthFilter(value.health) };
+  return { overdue: parse(value.overdue), approaching: parse(value.approaching), health: readHealthFilter(value.health), mine: parse(value.mine) };
 }
 
 @Controller("api/v1/projects")

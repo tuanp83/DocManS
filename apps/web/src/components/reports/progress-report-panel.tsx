@@ -24,6 +24,7 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { loadResearchProposals, type ResearchProposal } from "@/lib/research-proposals-api";
+import { HEALTH_LABELS, listProjects, type ProjectRecord } from "@/lib/projects-api";
 import { useSession } from "@/components/auth/session-provider";
 import {
   PROPOSAL_LEVEL_LABELS,
@@ -61,6 +62,7 @@ export function ProgressReportPanel() {
   const { account } = useSession();
   const [state, setState] = useState<LoadState>("loading");
   const [proposals, setProposals] = useState<ResearchProposal[]>([]);
+  const [projectsByProposal, setProjectsByProposal] = useState<Map<string, ProjectRecord>>(new Map());
   const [keyword, setKeyword] = useState("");
   const [selectedUnit, setSelectedUnit] = useState("");
   const [progressFilter, setProgressFilter] = useState("");
@@ -74,18 +76,20 @@ export function ProgressReportPanel() {
   async function loadData() {
     setState("loading");
     try {
-      const data = await loadResearchProposals({
+      // Tiến độ lấy từ đề tài đang thực hiện (tiến độ theo mốc, SPI, hạn sau gia hạn), nên lọc tiến độ ở đây
+      // thay vì gửi bộ lọc theo ngày của hồ sơ đề xuất lên máy chủ.
+      const [data, projects] = await Promise.all([loadResearchProposals({
         keyword,
         unit: selectedUnit,
-        progress: progressFilter,
         status: statusFilter,
         level: selectedLevel,
         military: selectedMilitaryScope,
         disbursement: disbursementFilter,
         irb: irbFilter,
         acceptance: acceptanceFilter
-      });
+      }), listProjects().catch(() => [] as ProjectRecord[])]);
       setProposals(data);
+      setProjectsByProposal(new Map(projects.map((project) => [project.proposalId, project])));
       setState("ready");
     } catch {
       setState("error");
@@ -119,14 +123,20 @@ export function ProgressReportPanel() {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     return proposals.map((proposal) => {
-      const start = proposal.startDate ? new Date(proposal.startDate) : null;
-      const end = proposal.endDate ? new Date(proposal.endDate) : null;
+      const project = projectsByProposal.get(proposal.id) ?? null;
+      const summary = project?.progressSummary ?? null;
+      // Đã lập đề tài: dùng ngày của đề tài (đã gồm gia hạn được duyệt), không dùng ngày dự kiến của đề xuất.
+      const startDate = project ? project.startDate : proposal.startDate;
+      const endDate = project ? project.endDate : proposal.endDate;
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
 
       let assessment: ProgressAssessment = "unknown";
       let remainingDays = 0;
       let totalDays = 0;
       let elapsedDays = 0;
-      let progressPercent = 0;
+      // Tiến độ thực tế theo mốc của đề tài; hồ sơ chưa lập đề tài thì chưa có tiến độ.
+      const progressPercent: number | null = summary ? summary.actualPercent : null;
 
       if (start && end && !isNaN(start.getTime()) && !isNaN(end.getTime())) {
         const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
@@ -138,17 +148,22 @@ export function ProgressReportPanel() {
 
         if (today < startDay) {
           assessment = "not_started";
-          progressPercent = 0;
         } else if (remainingDays < 0) {
           assessment = "overdue";
-          progressPercent = 100;
         } else if (remainingDays <= 60) {
           assessment = "ending_soon";
-          progressPercent = Math.min(100, Math.max(0, Math.round((elapsedDays / totalDays) * 100)));
         } else {
           assessment = "on_track";
-          progressPercent = Math.min(100, Math.max(0, Math.round((elapsedDays / totalDays) * 100)));
         }
+      }
+
+      if (!project) {
+        // Chưa lập đề tài: chưa thực hiện, không đánh giá tiến độ theo thời gian.
+        assessment = start ? "not_started" : "unknown";
+      } else if (summary?.level === "red" || (summary?.maxDaysOverdue ?? 0) > 0 || project.overdue) {
+        assessment = "overdue";
+      } else if (project.approaching && assessment === "on_track") {
+        assessment = "ending_soon";
       }
 
       // Dữ liệu Tài chính & Giải ngân
@@ -174,6 +189,12 @@ export function ProgressReportPanel() {
 
       return {
         ...proposal,
+        startDate,
+        endDate,
+        hasProject: Boolean(project),
+        plannedPercent: summary?.plannedPercent ?? null,
+        spi: summary?.spi ?? null,
+        healthLevel: summary?.level ?? null,
         start,
         end,
         totalDays,
@@ -194,10 +215,13 @@ export function ProgressReportPanel() {
         isAcceptanceInProgress
       };
     });
-  }, [proposals]);
+  }, [proposals, projectsByProposal]);
 
   // Server đã lọc dữ liệu, ta chỉ cần sử dụng danh sách enhancedProposals
-  const filteredProposals = enhancedProposals;
+  const filteredProposals = useMemo(
+    () => (progressFilter ? enhancedProposals.filter((p) => p.assessment === progressFilter) : enhancedProposals),
+    [enhancedProposals, progressFilter]
+  );
 
   // Thống kê KPIs
   const metrics = useMemo(() => {
@@ -282,7 +306,9 @@ export function ProgressReportPanel() {
       "Trạng thái hồ sơ",
       "Tình trạng tiến độ",
       "Thời hạn còn lại / Quá hạn",
-      "Tiến độ thời gian (%)"
+      "Tiến độ thực tế theo mốc (%)",
+      "Tiến độ kế hoạch (%)",
+      "SPI"
     ];
 
     const rows = filteredProposals.map((p, idx) => {
@@ -299,8 +325,8 @@ export function ProgressReportPanel() {
         assessLabel = "Chậm tiến độ / Quá hạn";
         timeNote = `Quá hạn ${Math.abs(p.remainingDays)} ngày`;
       } else if (p.assessment === "not_started") {
-        assessLabel = "Chưa đến thời gian bắt đầu";
-        timeNote = `Bắt đầu sau ${Math.abs(p.elapsedDays)} ngày`;
+        assessLabel = p.hasProject ? "Chưa đến thời gian bắt đầu" : "Chưa lập đề tài";
+        timeNote = p.hasProject ? `Bắt đầu sau ${Math.abs(p.elapsedDays)} ngày` : "—";
       }
 
       const irbText = p.irbStatus === "APPROVED" ? `Đã cấp (${p.irbCert || "IRB-HVQY"})` : "Chưa phê duyệt";
@@ -332,7 +358,9 @@ export function ProgressReportPanel() {
         `"${(STATUS_LABELS[p.status] ?? p.status).replace(/"/g, '""')}"`,
         `"${assessLabel}"`,
         `"${timeNote}"`,
-        `${p.progressPercent}%`
+        p.progressPercent === null ? "" : `${p.progressPercent}%`,
+        p.plannedPercent === null ? "" : `${p.plannedPercent}%`,
+        p.spi === null ? "" : p.spi.toFixed(2)
       ].join(",");
     });
 
@@ -922,24 +950,30 @@ export function ProgressReportPanel() {
                           </span>
                         ) : p.assessment === "not_started" ? (
                           <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-                            Bắt đầu sau {Math.abs(p.elapsedDays)} ngày
+                            {p.hasProject ? `Bắt đầu sau ${Math.abs(p.elapsedDays)} ngày` : "Chưa lập đề tài"}
                           </span>
                         ) : (
                           <span style={{ color: "var(--text-secondary)", fontStyle: "italic", fontSize: "12px" }}>
                             Chưa có ngày kết thúc
                           </span>
                         )}
-                        {p.totalDays > 0 && p.assessment !== "not_started" && (
+                        {p.progressPercent !== null && (
                           <div style={{ height: "4px", background: "var(--surface-muted, #f1f5f9)", borderRadius: "2px", overflow: "hidden", marginTop: "4px" }}>
                             <div
                               style={{
                                 height: "100%",
-                                width: `${p.progressPercent}%`,
+                                width: `${Math.min(100, Math.max(0, p.progressPercent))}%`,
                                 background: p.assessment === "overdue" ? "var(--danger, #dc2626)" : p.assessment === "ending_soon" ? "var(--warning, #d97706)" : "var(--institutional-green, #15803d)"
                               }}
                             />
                           </div>
                         )}
+                        {p.progressPercent !== null ? (
+                          <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                            Thực tế {p.progressPercent}%{p.plannedPercent !== null ? ` · kế hoạch ${p.plannedPercent}%` : ""}
+                            {p.healthLevel ? ` · ${HEALTH_LABELS[p.healthLevel]}` : ""}
+                          </div>
+                        ) : null}
                       </td>
                       <td style={{ textAlign: "center" }}>
                         {p.assessment === "on_track" ? (

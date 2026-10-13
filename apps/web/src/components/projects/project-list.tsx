@@ -34,7 +34,7 @@ export function ProjectList({ mine = false }: { mine?: boolean }) {
   async function refresh() {
     setState("loading");
     try {
-      const [items, proposals] = await Promise.all([listProjects(), mine || !canCreateProjects ? Promise.resolve([]) : loadResearchProposals().catch(() => [])]);
+      const [items, proposals] = await Promise.all([listProjects(mine ? { mine: true } : undefined), mine || !canCreateProjects ? Promise.resolve([]) : loadResearchProposals().catch(() => [])]);
       setProjects(items);
       setApproved(proposals.filter((item) => item.status === "approved" && !items.some((project) => project.proposalId === item.id)));
       setState("ready");

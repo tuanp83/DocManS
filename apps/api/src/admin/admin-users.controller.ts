@@ -93,9 +93,15 @@ export class AdminOrganizationUnitsController {
   constructor(private readonly usersService: AdminUsersService) {}
 
   @Get()
-  async listOrganizationUnits(@Req() request: RequestWithCurrentUser) {
+  async listOrganizationUnits(@Req() request: RequestWithCurrentUser, @Query("includeInactive") includeInactive?: string) {
     assertSystemAdmin(request.currentUser);
-    return { organizationUnits: await this.usersService.listOrganizationUnits() };
+    return { organizationUnits: await this.usersService.listOrganizationUnits({ includeInactive: includeInactive === "true" }) };
+  }
+
+  @Get(":id/impact")
+  async organizationUnitImpact(@Req() request: RequestWithCurrentUser, @Param("id") id: string) {
+    assertSystemAdmin(request.currentUser);
+    return { impact: await this.usersService.organizationUnitImpact(id) };
   }
 
   @Post()

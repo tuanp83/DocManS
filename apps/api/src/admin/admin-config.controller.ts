@@ -20,6 +20,12 @@ const notificationTemplatePipe = adminRequestPipe({
 export class AdminConfigController {
   constructor(private readonly configService: AdminConfigService) {}
 
+  @Get("definitions")
+  definitions(@Req() request: RequestWithCurrentUser) {
+    assertSystemAdmin(request.currentUser);
+    return this.configService.definitions();
+  }
+
   @Get("system-parameters")
   async listSystemParameters(@Req() request: RequestWithCurrentUser) {
     assertSystemAdmin(request.currentUser);

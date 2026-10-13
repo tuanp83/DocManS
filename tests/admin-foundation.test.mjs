@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException } from "@nestjs/common";
 import { AdminCatalogsController } from "../dist/apps/api/admin/admin-catalogs.controller.js";
 import { AdminCatalogsService } from "../dist/apps/api/admin/admin-catalogs.service.js";
 import { AdminConfigController } from "../dist/apps/api/admin/admin-config.controller.js";
@@ -692,9 +692,9 @@ describe("admin foundation API behavior", () => {
     await configController.updateNotificationTemplate(
       { currentUser: adminUser },
       {
-        key: "user_created",
-        subject: "Tài khoản {{username}} đã được tạo",
-        body: "Xin chào {{displayName}}, tài khoản {{username}} đã sẵn sàng."
+        key: "researcher_account_activation",
+        subject: "Kích hoạt tài khoản {{displayName}}",
+        body: "Xin chào {{displayName}}, mở {{activationUrl}} trước {{expiresAt}}."
       }
     );
     await assert.rejects(
@@ -702,7 +702,7 @@ describe("admin foundation API behavior", () => {
         configController.updateNotificationTemplate(
           { currentUser: adminUser },
           {
-            key: "user_created",
+            key: "researcher_account_activation",
             subject: "Tài khoản {{rawPassword}}",
             body: "Nội dung {{unknown}}"
           }
@@ -714,7 +714,7 @@ describe("admin foundation API behavior", () => {
         configController.updateNotificationTemplate(
           { currentUser: adminUser },
           {
-            key: "login_notice",
+            key: "user_created",
             subject: "Thông báo",
             body: "Nội dung"
           }
@@ -726,9 +726,9 @@ describe("admin foundation API behavior", () => {
     await configController.updateNotificationTemplate(
       { currentUser: adminUser },
       {
-        key: "user_created",
-        subject: "Tài khoản {{username}} đã cập nhật",
-        body: "Xin chào {{displayName}}, tài khoản {{username}} đã cập nhật."
+        key: "researcher_account_activation",
+        subject: "Kích hoạt lại tài khoản {{displayName}}",
+        body: "Xin chào {{displayName}}, mở {{activationUrl}}."
       }
     );
     assert.equal(prisma.store.notificationTemplates[0].status, "inactive");
@@ -739,7 +739,7 @@ describe("admin foundation API behavior", () => {
     );
     assert.deepEqual(
       prisma.store.notificationTemplates.map((record) => `${record.key}:${record.subject}`),
-      ["user_created:Tài khoản {{username}} đã cập nhật"]
+      ["researcher_account_activation:Kích hoạt lại tài khoản {{displayName}}"]
     );
   });
 
@@ -766,6 +766,49 @@ describe("admin foundation API behavior", () => {
       auditLog.records.map((record) => record.action),
       ["create-organization-unit", "update-organization-unit"]
     );
+  });
+
+  it("organization units: inactive units stay listable, parents must exist without cycles, duplicate codes are 409", async () => {
+    const units = [
+      { id: "u-root", code: "HVQY", name: "Học viện", status: "active", parentId: null },
+      { id: "u-khoa", code: "KHOA", name: "Khoa", status: "active", parentId: "u-root" },
+      { id: "u-off", code: "OFF", name: "Đã tắt", status: "inactive", parentId: null }
+    ];
+    const seen = [];
+    const prisma = {
+      organizationUnit: {
+        findMany: async ({ where }) => { seen.push(where); return units.filter((unit) => !where.status || unit.status === where.status); },
+        findUnique: async ({ where }) => units.find((unit) => unit.id === where.id) ?? null,
+        create: async () => { throw Object.assign(new Error("Unique constraint"), { code: "P2002" }); },
+        update: async ({ where, data }) => ({ ...units.find((unit) => unit.id === where.id), ...data })
+      }
+    };
+    const service = new AdminUsersService(prisma, createAuditLog(), createPasswordService());
+
+    assert.equal((await service.listOrganizationUnits()).length, 2, "assignment pickers still see active units only");
+    assert.equal((await service.listOrganizationUnits({ includeInactive: true })).length, 3);
+
+    await assert.rejects(() => service.createOrganizationUnit(adminUser, { code: "HVQY", name: "Trùng mã" }), ConflictException);
+    await assert.rejects(() => service.updateOrganizationUnit(adminUser, "u-root", { parentId: "u-khoa" }), /vòng lặp/);
+    await assert.rejects(() => service.updateOrganizationUnit(adminUser, "u-khoa", { parentId: "u-khoa" }), /vòng lặp/);
+    await assert.rejects(() => service.updateOrganizationUnit(adminUser, "u-khoa", { parentId: "khong-co" }), BadRequestException);
+    assert.equal((await service.updateOrganizationUnit(adminUser, "u-off", { parentId: "u-khoa" })).parentId, "u-khoa");
+    assert.equal((await service.updateOrganizationUnit(adminUser, "u-khoa", { parentId: "" })).parentId, null);
+  });
+
+  it("organization unit impact counts the active accounts that would lose every active scope", async () => {
+    const prisma = {
+      organizationUnit: { findUnique: async ({ where }) => ({ id: where.id, status: "active" }) },
+      user: {
+        findMany: async () => [
+          { id: "only-here", organizationScopes: [{ organizationUnitId: "u-a", organizationUnit: { status: "active" } }] },
+          { id: "also-elsewhere", organizationScopes: [{ organizationUnitId: "u-a", organizationUnit: { status: "active" } }, { organizationUnitId: "u-b", organizationUnit: { status: "active" } }] },
+          { id: "other-inactive", organizationScopes: [{ organizationUnitId: "u-a", organizationUnit: { status: "active" } }, { organizationUnitId: "u-c", organizationUnit: { status: "inactive" } }] }
+        ]
+      }
+    };
+    const service = new AdminUsersService(prisma, createAuditLog(), createPasswordService());
+    assert.deepEqual(await service.organizationUnitImpact("u-a"), { unitId: "u-a", scopedUsers: 3, usersLosingAccess: 2 });
   });
 
   it("does not expose role creation or role updates", () => {

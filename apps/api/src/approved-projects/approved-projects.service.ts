@@ -163,11 +163,13 @@ export class ApprovedProjectsService {
     return { project, officer, capability };
   }
 
-  async listProjects(actor: SafeUserContext, options: { overdue?: boolean; approaching?: boolean; health?: HealthLevel; skipUnresolved?: boolean } = {}) {
+  async listProjects(actor: SafeUserContext, options: { overdue?: boolean; approaching?: boolean; health?: HealthLevel; skipUnresolved?: boolean; mine?: boolean } = {}) {
     const scopeIds = getOrganizationScopeIds(actor);
+    // "Đề tài của tôi": chỉ đề tài người dùng làm chủ nhiệm hoặc đang là thành viên, với mọi vai trò.
+    const participating = { OR: [{ members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] };
     // Lãnh đạo xem toàn Học viện; các vai trò khác lọc theo phạm vi đơn vị hoặc quan hệ với đề tài.
     const where = isProjectLeadership(actor) ? {} : scopeIds.length ? { OR: [{ hostOrganizationUnitId: { in: scopeIds } }, { members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] } : { OR: [{ members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] };
-    const records = await (this.prisma as any).approvedProject.findMany({ where, include: PROJECT_INCLUDE, orderBy: { createdAt: "desc" } });
+    const records = await (this.prisma as any).approvedProject.findMany({ where: options.mine ? { AND: [where, participating] } : where, include: PROJECT_INCLUDE, orderBy: { createdAt: "desc" } });
     const visible = [];
     for (const project of records) {
       try {

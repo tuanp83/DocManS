@@ -6,6 +6,7 @@ import {
   loadAdminConfig,
   updateNotificationTemplate,
   updateSystemParameter,
+  type ConfigDefinitions,
   type NotificationTemplate,
   type SystemParameter
 } from "@/lib/admin-api";
@@ -20,6 +21,9 @@ export function AdminConfigPanel() {
   const [message, setMessage] = useState("");
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [definitions, setDefinitions] = useState<ConfigDefinitions>({ parameters: [], templates: [] });
+  const [paramKey, setParamKey] = useState("");
+  const [templateKey, setTemplateKey] = useState("");
 
   async function refresh() {
     setState("loading");
@@ -27,6 +31,9 @@ export function AdminConfigPanel() {
       const data = await loadAdminConfig();
       setParameters(data.parameters);
       setTemplates(data.templates);
+      setDefinitions(data.definitions);
+      setParamKey((current) => current || data.definitions.parameters[0]?.key || "");
+      setTemplateKey((current) => current || data.definitions.templates[0]?.key || "");
       setState("ready");
     } catch {
       setState("error");
@@ -43,14 +50,15 @@ export function AdminConfigPanel() {
     setFormError("");
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const definition = definitions.parameters.find((item) => item.key === paramKey);
     const input = {
-      key: String(form.get("key") ?? "").trim(),
+      key: paramKey,
       value: String(form.get("value") ?? "").trim(),
-      label: String(form.get("label") ?? "").trim()
+      label: definition?.label ?? paramKey
     };
 
-    if (!input.key || !input.value || !input.label) {
-      setFormError("Vui lòng nhập đủ khóa, giá trị và nhãn tham số.");
+    if (!input.key || !input.value) {
+      setFormError("Vui lòng chọn tham số và nhập giá trị.");
       return;
     }
 
@@ -76,13 +84,13 @@ export function AdminConfigPanel() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const input = {
-      key: String(form.get("templateKey") ?? "").trim(),
+      key: templateKey,
       subject: String(form.get("subject") ?? "").trim(),
       body: String(form.get("body") ?? "").trim()
     };
 
     if (!input.key || !input.subject || !input.body) {
-      setFormError("Vui lòng nhập đủ khóa, tiêu đề và nội dung thông báo.");
+      setFormError("Vui lòng chọn mẫu và nhập đủ tiêu đề, nội dung.");
       return;
     }
 
@@ -125,18 +133,17 @@ export function AdminConfigPanel() {
       </SectionCard>
 
       <SectionCard title="Cập nhật tham số" subtitle="Thay đổi được ghi audit log">
-        <form className="admin-form" onSubmit={(event) => void handleParameterSubmit(event)}>
+        <form className="admin-form" key={`param-${paramKey}`} onSubmit={(event) => void handleParameterSubmit(event)}>
           <label className="field">
-            <span>Khóa tham số</span>
-            <input name="key" />
-          </label>
-          <label className="field">
-            <span>Nhãn hiển thị</span>
-            <input name="label" />
+            <span>Tham số</span>
+            <select value={paramKey} onChange={(event) => setParamKey(event.target.value)}>
+              {definitions.parameters.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+            </select>
           </label>
           <label className="field">
             <span>Giá trị</span>
-            <input name="value" />
+            <input name="value" defaultValue={parameters.find((item) => item.key === paramKey)?.value ?? ""} />
+            <small>{definitions.parameters.find((item) => item.key === paramKey)?.hint}</small>
           </label>
           <button className="button primary" type="submit" disabled={isSubmitting}>
             <Save size={16} aria-hidden="true" />
@@ -165,18 +172,21 @@ export function AdminConfigPanel() {
       </SectionCard>
 
       <SectionCard title="Cập nhật mẫu thông báo" subtitle="Dùng cho các trigger nền ở các story sau">
-        <form className="admin-form" onSubmit={(event) => void handleTemplateSubmit(event)}>
+        <form className="admin-form" key={`template-${templateKey}-${templates.length}`} onSubmit={(event) => void handleTemplateSubmit(event)}>
           <label className="field">
-            <span>Khóa mẫu</span>
-            <input name="templateKey" />
+            <span>Mẫu</span>
+            <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)}>
+              {definitions.templates.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+            </select>
+            <small>Biến dùng được: {definitions.templates.find((item) => item.key === templateKey)?.placeholders.map((name) => `{{${name}}}`).join(", ")}</small>
           </label>
           <label className="field">
             <span>Tiêu đề</span>
-            <input name="subject" />
+            <input name="subject" defaultValue={templates.find((item) => item.key === templateKey)?.subject ?? ""} />
           </label>
           <label className="field">
             <span>Nội dung</span>
-            <textarea name="body" rows={5} />
+            <textarea name="body" rows={5} defaultValue={templates.find((item) => item.key === templateKey)?.body ?? ""} />
           </label>
           {formError ? <p className="form-error">{formError}</p> : null}
           {message ? <p className="state-message success">{message}</p> : null}

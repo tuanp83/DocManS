@@ -22,7 +22,10 @@ export type OrganizationUnit = {
   code: string;
   name: string;
   status: string;
+  parentId?: string | null;
 };
+
+export type OrganizationUnitImpact = { unitId: string; scopedUsers: number; usersLosingAccess: number };
 
 export type CatalogItem = {
   id: string;
@@ -38,6 +41,11 @@ export type SystemParameter = {
   key: string;
   value: string;
   label: string;
+};
+
+export type ConfigDefinitions = {
+  parameters: Array<{ key: string; label: string; hint: string }>;
+  templates: Array<{ key: string; label: string; placeholders: string[] }>;
 };
 
 export type NotificationTemplate = {
@@ -199,14 +207,16 @@ export async function softDeleteCatalogItem(itemId: string) {
 }
 
 export async function loadAdminConfig() {
-  const [parameters, templates] = await Promise.all([
+  const [parameters, templates, definitions] = await Promise.all([
     requestJson<{ parameters: SystemParameter[] }>("/config/system-parameters"),
-    requestJson<{ templates: NotificationTemplate[] }>("/config/notification-templates")
+    requestJson<{ templates: NotificationTemplate[] }>("/config/notification-templates"),
+    requestJson<ConfigDefinitions>("/config/definitions")
   ]);
 
   return {
     parameters: parameters.parameters,
-    templates: templates.templates
+    templates: templates.templates,
+    definitions
   };
 }
 
@@ -227,6 +237,22 @@ export async function updateNotificationTemplate(input: { key: string; subject: 
 export async function createOrganizationUnit(input: { code: string; name: string }) {
   return requestJson<{ organizationUnit: OrganizationUnit }>("/organization-units", {
     method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+/** Trang quản trị đơn vị: cả đơn vị đã tắt, để bật lại được. */
+export async function loadAllOrganizationUnits() {
+  return (await requestJson<{ organizationUnits: OrganizationUnit[] }>("/organization-units?includeInactive=true")).organizationUnits;
+}
+
+export async function loadOrganizationUnitImpact(unitId: string) {
+  return (await requestJson<{ impact: OrganizationUnitImpact }>(`/organization-units/${unitId}/impact`)).impact;
+}
+
+export async function updateOrganizationUnit(unitId: string, input: { name: string; parentId: string }) {
+  return requestJson<{ organizationUnit: OrganizationUnit }>(`/organization-units/${unitId}`, {
+    method: "PATCH",
     body: JSON.stringify(input)
   });
 }
