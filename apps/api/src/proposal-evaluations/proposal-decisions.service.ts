@@ -407,6 +407,12 @@ export class ProposalDecisionsService {
       throw new BadRequestException({ message: conflict.viewerMessage, reasonCode: conflict.reasonCode });
     }
 
+    const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
+    // Hội đồng đã được lãnh đạo duyệt (đã tạo phân công) thì không sửa tờ trình được nữa.
+    if (currentCouncil.status === "approved") {
+      throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Hội đồng đã được lãnh đạo duyệt, không thể sửa tờ trình." });
+    }
+
     const members = Array.isArray(input.members) ? (input.members as Array<Record<string, unknown>>) : [];
     // Validate COI for each member
     for (const member of members) {
@@ -421,7 +427,6 @@ export class ProposalDecisionsService {
       }
     }
 
-    const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
     const isDirectSubmit = input.submitToLeadership === true || input.status === "submitted";
     // Thành phần hội đồng: 2–3 phản biện, 3–5 thành viên (chủ tịch, phó chủ tịch, uỷ viên), 1 thư ký.
     // Bản nháp chỉ bị chặn khi vượt mức; khi trình lãnh đạo phải đủ.
@@ -431,7 +436,8 @@ export class ProposalDecisionsService {
     }
     const updatedCouncil = {
       ...currentCouncil,
-      status: isDirectSubmit ? "submitted" : (input.status as string) || "draft",
+      // Chỉ nháp hoặc trình lãnh đạo; không nhận trạng thái tuỳ ý từ client (ví dụ "approved").
+      status: isDirectSubmit ? "submitted" : "draft",
       proposedAt: new Date().toISOString(),
       proposedById: actor.id,
       proposedByName: actor.displayName,

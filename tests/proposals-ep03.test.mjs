@@ -1587,6 +1587,32 @@ describe("Evidence binding (mang từ thanhdotien278/DocManS): submission round 
     await assert.rejects(() => services.decisions.approveCouncil(leadershipUser, proposal.id, {}), /đã chốt hoặc đã trình/);
     assert.equal(store.reviewAssignments.length, 6);
   });
+
+  it("a council proposal cannot set its own status (e.g. approved) and cannot overwrite a council leadership already approved", async () => {
+    const services = createServices();
+    const store = services.prisma.store;
+    const proposal = await createSubmittedProposal(services);
+    const members = [
+      { role: "reviewer_1", userId: reviewerUser.id, displayName: reviewerUser.displayName },
+      { role: "reviewer_2", userId: secondReviewerUser.id, displayName: secondReviewerUser.displayName },
+      { role: "chair", userId: councilMemberUser.id, displayName: councilMemberUser.displayName },
+      { role: "member", userId: councilMemberUser2.id, displayName: councilMemberUser2.displayName },
+      { role: "member", userId: councilMemberUser3.id, displayName: councilMemberUser3.displayName },
+      { role: "secretary", userId: councilSecretaryUser.id, displayName: councilSecretaryUser.displayName }
+    ];
+    const council = () => store.proposals.find((item) => item.id === proposal.id).councilMetadata;
+
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, status: "approved" });
+    assert.equal(council().status, "draft", "client-supplied status is ignored");
+    assert.equal(store.reviewAssignments.length, 0);
+
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, submitToLeadership: true });
+    await services.decisions.approveCouncil(leadershipUser, proposal.id, {});
+    assert.equal(council().status, "approved");
+    await assert.rejects(() => services.decisions.proposeCouncil(staffUser, proposal.id, { members: members.slice(0, 3) }), /đã được lãnh đạo duyệt/);
+    assert.equal(council().status, "approved");
+    assert.equal(council().members.length, 6);
+  });
 });
 
 describe("Thông báo các sự kiện chính của hồ sơ đề xuất", () => {
