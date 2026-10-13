@@ -6,6 +6,14 @@
 # Only nginx publishes ports; postgres, minio, api and web stay on the internal network.
 # Mỗi service có giới hạn RAM/CPU để một thành phần quá tải không kéo sập cả máy (cỡ cho máy 4 vCPU / 8 GB).
 
+# Log Docker có giới hạn: mỗi container tối đa 5 file × 20 MB (~100 MB), log cũ tự xoay vòng thay vì làm đầy đĩa.
+# Chỉ áp dụng cho container được tạo mới: sau khi đổi, chạy lại `up -d` để Docker tạo lại container.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 x-app-image: &app-image
   image: docmans-app:${APP_VERSION:-latest}
   build:
@@ -14,6 +22,7 @@ x-app-image: &app-image
     args:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api/v1}
   restart: unless-stopped
+  logging: *default-logging
   networks: [internal]
 
 x-api-env: &api-env
@@ -30,6 +39,7 @@ x-api-env: &api-env
 services:
   postgres:
     image: postgres:16-alpine
+    logging: *default-logging
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -50,6 +60,7 @@ services:
   minio:
     # Phiên bản đã kiểm thử; chỉ nâng sau khi thử trên môi trường staging.
     image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z}
+    logging: *default-logging
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -142,6 +153,7 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    logging: *default-logging
     restart: unless-stopped
     ports:
       - "${HTTP_PORT:-80}:80"
