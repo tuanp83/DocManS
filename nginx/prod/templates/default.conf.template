@@ -1,6 +1,33 @@
 # Production reverse proxy. Rendered by the official nginx image (envsubst on /etc/nginx/templates):
 # only variables defined in the container environment (SERVER_NAME) are substituted; nginx's own
 # $host, $scheme, ... are left untouched.
+
+# Giới hạn tốc độ: quá ngưỡng thì xếp hàng (tăng độ trễ) trước, chỉ trả 429 khi vượt cả hàng đợi.
+# API tính theo cookie phiên vì nhiều người dùng nội bộ có thể đi chung một IP qua NAT; chưa đăng nhập thì theo IP.
+map $cookie_rtms_session $api_limit_key {
+    ""      $binary_remote_addr;
+    default $cookie_rtms_session;
+}
+limit_req_zone $api_limit_key       zone=api_per_client:10m rate=20r/s;
+limit_req_zone $binary_remote_addr  zone=login_per_ip:10m   rate=60r/m;
+limit_req_status 429;
+
+upstream docmans_api {
+    server api:4000;
+    keepalive 32;
+}
+
+# Chỉ gửi "Connection: upgrade" khi trình duyệt thật sự nâng cấp WebSocket, để giữ được keepalive tới web.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ""      "";
+}
+
+upstream docmans_web {
+    server web:3000;
+    keepalive 16;
+}
+
 server {
     listen 80;
     server_name ${SERVER_NAME};
@@ -30,10 +57,31 @@ server {
     # Raise both together (backend remains authoritative).
     client_max_body_size 11m;
 
+    gzip on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_types application/json application/javascript text/css text/plain image/svg+xml;
+
+    # Chống dò mật khẩu ở tầng proxy (API còn khoá theo số lần sai). Ngưỡng rộng vì nhiều người có thể chung IP.
+    location = /api/v1/auth/login {
+        limit_req zone=login_per_ip burst=30 nodelay;
+        proxy_pass http://docmans_api;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     # NestJS API: controllers already carry the /api/v1 prefix, so the full URI is forwarded unchanged.
     location /api/ {
-        proxy_pass http://api:4000;
+        limit_req zone=api_per_client burst=60 delay=20;
+        proxy_pass http://docmans_api;
         proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -43,11 +91,11 @@ server {
 
     # Next.js web
     location / {
-        proxy_pass http://web:3000;
+        proxy_pass http://docmans_web;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection $connection_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
