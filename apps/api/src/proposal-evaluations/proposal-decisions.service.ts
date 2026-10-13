@@ -52,6 +52,36 @@ const DECISION_LABELS: Record<string, string> = {
  * conflict check reuses the ST-3.0 primitive and additionally blocks an authority who reviewed the
  * proposal, which is a conflict the participation primitive alone cannot see.
  */
+/** Hồ sơ được duyệt/điều chỉnh kinh phí ở các trạng thái này (đã duyệt: chỉ khi chưa lập đề tài). */
+const BUDGET_APPROVABLE_STATUSES: string[] = [PROPOSAL_STATUS.readyForApproval, PROPOSAL_STATUS.approved];
+/** Trần hạn mức kinh phí một đề tài (VND), chặn số nhập nhầm. */
+const MAX_APPROVED_BUDGET_VND = 1_000_000_000_000;
+const IRB_RISK_LEVELS = ["MINIMAL", "LOW", "HIGH"];
+
+function readApprovedBudget(value: unknown) {
+  const amount = typeof value === "string" ? Number(value.trim()) : Number(value);
+  if (!Number.isSafeInteger(amount) || amount < 0 || amount > MAX_APPROVED_BUDGET_VND) {
+    throw new BadRequestException({ message: "Mức kinh phí phê duyệt phải là số nguyên VND từ 0 đến 1.000 tỷ." });
+  }
+  return amount;
+}
+
+function readIsoDate(value: unknown, field: string) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
+    throw new BadRequestException({ message: `${field} không phải ngày hợp lệ.` });
+  }
+  return new Date(value).toISOString();
+}
+
+function readOptionalText(value: unknown, field: string, maxLength: number) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.length > maxLength) {
+    throw new BadRequestException({ message: `${field} phải là văn bản tối đa ${maxLength} ký tự.` });
+  }
+  return value.trim() || null;
+}
+
 @Injectable()
 export class ProposalDecisionsService {
   constructor(
@@ -212,6 +242,8 @@ export class ProposalDecisionsService {
       throw new BadRequestException({ code: "PACKAGE_CONTEXT_MISMATCH", message: "Thiếu phiên bản gói đánh giá. Vui lòng tải lại trước khi quyết định." });
     }
     const note = this.readNote(input.note, { required: decision === PROPOSAL_DECISIONS.rejected });
+    const hasBudget = decision === PROPOSAL_DECISIONS.approved && input.approvedBudget !== undefined && input.approvedBudget !== null && input.approvedBudget !== "";
+    const decidedBudget = hasBudget ? readApprovedBudget(input.approvedBudget) : null;
     const toStatus = DECISION_TARGET_STATUS[decision];
     const decidedAt = new Date();
 
@@ -224,21 +256,18 @@ export class ProposalDecisionsService {
       await updateProposalStatusGuarded(tx, proposalId, proposal.status, toStatus);
 
       // If approved, leadership can specify or adjust the approved budget
-      if (decision === PROPOSAL_DECISIONS.approved && input.approvedBudget !== undefined && input.approvedBudget !== null && input.approvedBudget !== "") {
-        const approvedAmount = Number(input.approvedBudget);
-        if (!isNaN(approvedAmount) && approvedAmount >= 0) {
-          const currentBudget = (proposal.budgetMetadata as Record<string, unknown>) || {};
-          const updatedBudget = {
-            ...currentBudget,
-            amount: approvedAmount,
-            approvedAmount,
-            note: typeof input.budgetNote === "string" && input.budgetNote.trim() ? input.budgetNote.trim() : (currentBudget.note as string)
-          };
-          await tx.researchProposal.update({
-            where: { id: proposalId },
-            data: { budgetMetadata: updatedBudget }
-          });
-        }
+      if (decidedBudget !== null) {
+        const currentBudget = (proposal.budgetMetadata as Record<string, unknown>) || {};
+        const updatedBudget = {
+          ...currentBudget,
+          amount: decidedBudget,
+          approvedAmount: decidedBudget,
+          note: typeof input.budgetNote === "string" && input.budgetNote.trim() ? input.budgetNote.trim() : (currentBudget.note as string)
+        };
+        await tx.researchProposal.update({
+          where: { id: proposalId },
+          data: { budgetMetadata: updatedBudget }
+        });
       }
 
       const record = (await tx.proposalDecision.create({
@@ -349,49 +378,61 @@ export class ProposalDecisionsService {
     })) as ProposalDecisionRecord[];
   }
 
-  /** Leadership specifically approves or updates the proposal budget allocation */
+  /**
+   * Lãnh đạo duyệt hoặc điều chỉnh hạn mức kinh phí. Chỉ khi hồ sơ đang chờ phê duyệt, hoặc đã được phê
+   * duyệt nhưng chưa lập đề tài (sau đó kinh phí quản lý trong mục Kinh phí của đề tài). Ghi trong giao dịch
+   * có khoá hồ sơ (kiểm tra contextVersion nếu gửi kèm); người có xung đột lợi ích không được duyệt.
+   */
   async approveBudget(
     actor: SafeUserContext,
     proposalId: string,
-    input: { approvedBudget: number; budgetNote?: string }
+    input: { approvedBudget: number; budgetNote?: string; contextVersion?: unknown }
   ) {
-    const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertApprovalAuthority(actor);
+    const approvedAmount = readApprovedBudget(input.approvedBudget);
+    return this.mutateEvaluationMetadata(actor, proposalId, input as Record<string, unknown>, async ({ tx, actor, proposal, auditLog }) => {
+      assertApprovalAuthority(actor);
+      if (!BUDGET_APPROVABLE_STATUSES.includes(proposal.status)) {
+        throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ duyệt kinh phí khi hồ sơ đang chờ phê duyệt hoặc đã được phê duyệt." });
+      }
+      const projects = (tx as unknown as { approvedProject?: { findFirst: (args: unknown) => Promise<unknown> } }).approvedProject;
+      if (proposal.status === PROPOSAL_STATUS.approved && projects && (await projects.findFirst({ where: { proposalId }, select: { id: true } }))) {
+        throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Đề tài đã được lập; kinh phí được quản lý trong mục Kinh phí của đề tài." });
+      }
+      const conflict = await this.resolveDecisionConflict(actor, proposal);
+      if (conflict.conflicted) {
+        throw new BadRequestException({ message: conflict.viewerMessage, reasonCode: conflict.reasonCode });
+      }
 
-    const approvedAmount = Number(input.approvedBudget);
-    if (isNaN(approvedAmount) || approvedAmount < 0) {
-      throw new BadRequestException({ message: "Mức kinh phí phê duyệt không hợp lệ." });
-    }
+      const currentBudget = (proposal.budgetMetadata as Record<string, unknown>) || {};
+      const updatedBudget = {
+        ...currentBudget,
+        amount: approvedAmount,
+        approvedAmount,
+        note: typeof input.budgetNote === "string" && input.budgetNote.trim() ? input.budgetNote.trim() : (currentBudget.note as string)
+      };
 
-    const currentBudget = (proposal.budgetMetadata as Record<string, unknown>) || {};
-    const updatedBudget = {
-      ...currentBudget,
-      amount: approvedAmount,
-      approvedAmount,
-      note: typeof input.budgetNote === "string" && input.budgetNote.trim() ? input.budgetNote.trim() : (currentBudget.note as string)
-    };
+      await tx.researchProposal.update({
+        where: { id: proposalId },
+        data: { budgetMetadata: updatedBudget }
+      });
 
-    await this.prisma.researchProposal.update({
-      where: { id: proposalId },
-      data: { budgetMetadata: updatedBudget }
+      await auditLog.record({
+        action: "approve-proposal-budget",
+        result: "success",
+        actorId: actor.id,
+        targetEntity: "research-proposal",
+        targetEntityId: proposalId,
+        username: actor.username,
+        reason: JSON.stringify({ proposalId, approvedAmount, previousAmount: currentBudget.approvedAmount ?? currentBudget.amount ?? null, budgetNote: input.budgetNote })
+      });
+
+      return {
+        success: true,
+        proposalId,
+        approvedAmount,
+        budgetMetadata: updatedBudget
+      };
     });
-
-    await this.auditLog.record({
-      action: "approve-proposal-budget",
-      result: "success",
-      actorId: actor.id,
-      targetEntity: "research-proposal",
-      targetEntityId: proposalId,
-      username: actor.username,
-      reason: JSON.stringify({ proposalId, approvedAmount, budgetNote: input.budgetNote })
-    });
-
-    return {
-      success: true,
-      proposalId,
-      approvedAmount,
-      budgetMetadata: updatedBudget
-    };
   }
 
   /**
@@ -845,6 +886,14 @@ export class ProposalDecisionsService {
     return resolveActorConflict({ participation: this.participation, reviewAccess: this.reviewAccess }, actor?.id, proposal.id);
   }
 
+  /** Người tham gia hoặc phản biện hồ sơ không được tự quyết định kinh phí, hội đồng hay kết luận IRB của hồ sơ đó. */
+  private async assertNoDecisionConflict(actor: SafeUserContext, proposal: EvaluationProposalRecord) {
+    const conflict = await this.resolveDecisionConflict(actor, proposal);
+    if (conflict.conflicted) {
+      throw new BadRequestException({ message: conflict.viewerMessage, reasonCode: conflict.reasonCode });
+    }
+  }
+
   private readNote(value: unknown, options: { required: boolean }) {
     const note = typeof value === "string" ? value.trim() : "";
 
@@ -908,6 +957,11 @@ export class ProposalDecisionsService {
   async proposeIrbCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
     return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertScientificManagementScope(actor, proposal);
+    await this.assertNoDecisionConflict(actor, proposal);
+    const existingIrb = (proposal.irbMetadata as Record<string, unknown>) || {};
+    if (existingIrb.certificate) {
+      throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Hồ sơ đã có kết luận IRB, không thể đề xuất lại hội đồng." });
+    }
 
     const members = Array.isArray(input.members) ? (input.members as Array<Record<string, unknown>>) : [];
     
@@ -959,6 +1013,7 @@ export class ProposalDecisionsService {
   async approveIrbCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
     return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
     assertApprovalAuthority(actor);
+    await this.assertNoDecisionConflict(actor, proposal);
 
     const current = (proposal.irbMetadata as Record<string, unknown>) || {};
     const currentCouncil = (current.council as Record<string, unknown>) || {};
@@ -1062,6 +1117,17 @@ export class ProposalDecisionsService {
     if (requestedNumber.length > 100) {
       throw new BadRequestException({ message: "Số giấy chứng nhận IRB không được vượt quá 100 ký tự." });
     }
+    const decisionDate = readIsoDate(input.decisionDate, "decisionDate") ?? new Date().toISOString();
+    const validUntil = readIsoDate(input.validUntil, "validUntil") ?? new Date(Date.parse(decisionDate) + 365 * 24 * 3600 * 1000).toISOString();
+    if (Date.parse(validUntil) <= Date.parse(decisionDate)) {
+      throw new BadRequestException({ message: "Ngày hết hiệu lực phải sau ngày quyết định." });
+    }
+    const riskLevel = input.riskLevel === undefined || input.riskLevel === null || input.riskLevel === "" ? "LOW" : input.riskLevel;
+    if (typeof riskLevel !== "string" || !IRB_RISK_LEVELS.includes(riskLevel)) {
+      throw new BadRequestException({ message: "Mức độ rủi ro IRB không hợp lệ." });
+    }
+    const targetSubjects = readOptionalText(input.targetSubjects, "targetSubjects", 2000) ?? "Bệnh nhân và đối tượng can thiệp y học";
+    const ethicsNotes = readOptionalText(input.ethicsNotes, "ethicsNotes", 5000) ?? "Hội đồng Đạo đức trong nghiên cứu Y sinh học thông qua đề cương nghiên cứu.";
 
     let notice: { ownerId: string; label: string; certificateNumber: string | null } | null = null;
     let result;
@@ -1069,10 +1135,19 @@ export class ProposalDecisionsService {
       result = await this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
         // Lãnh đạo Học viện, hoặc cán bộ QLKH có phạm vi đơn vị chủ trì của hồ sơ.
         assertCanManageIRB(actor, proposal);
+        await this.assertNoDecisionConflict(actor, proposal);
 
         const current = (proposal.irbMetadata as Record<string, unknown>) || {};
+        // Kết luận IRB chỉ ghi được sau khi hội đồng đã được lãnh đạo duyệt và có nhận xét của thành viên.
+        const council = (current.council as Record<string, unknown> | undefined) ?? {};
+        const reviews = (current.reviews as Array<Record<string, unknown>> | undefined) ?? [];
+        if (council.status !== "approved") {
+          throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Hội đồng IRB chưa được phê duyệt, chưa thể ghi kết luận." });
+        }
+        if (!reviews.some((review) => review.status === "submitted")) {
+          throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chưa có nhận xét nào của thành viên Hội đồng IRB." });
+        }
         const previous = (current.certificate as Record<string, unknown> | null | undefined) ?? null;
-        const decisionDate = (input.decisionDate as string) || new Date().toISOString();
         // Re-issuing an approval keeps the proposal's number; a rejection without a number stores none.
         const certificateNumber = await this.resolveDocumentNumber(tx, IRB_CERTIFICATE_NUMBER, proposalId, {
           requested: requestedNumber,
@@ -1085,10 +1160,10 @@ export class ProposalDecisionsService {
           status,
           certificateNumber,
           decisionDate,
-          validUntil: (input.validUntil as string) || new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
-          riskLevel: (input.riskLevel as string) || "CONTROLLED",
-          targetSubjects: (input.targetSubjects as string) || "Bệnh nhân và đối tượng can thiệp y học",
-          ethicsNotes: (input.ethicsNotes as string) || "Hội đồng Đạo đức trong nghiên cứu Y sinh học thông qua đề cương nghiên cứu.",
+          validUntil,
+          riskLevel,
+          targetSubjects,
+          ethicsNotes,
           approvedById: actor.id,
           approvedByName: actor.displayName || actor.username,
           updatedAt: new Date().toISOString()
