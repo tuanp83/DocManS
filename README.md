@@ -49,11 +49,11 @@ The authorization model is intentionally record-aware: a broad platform role alo
 
 | Area | Technology |
 | --- | --- |
-| Frontend | Next.js 15, React 19, TypeScript |
+| Frontend | Next.js 16, React 19, TypeScript |
 | Backend | NestJS 11, TypeScript |
 | Database | PostgreSQL 16, Prisma |
 | Object storage | MinIO (S3-compatible) |
-| Infrastructure | Docker Compose, Nginx, Node.js 22 |
+| Infrastructure | Docker Compose, Nginx, Node.js 24 |
 | Workspace | Nx, npm |
 
 ## Screenshots
@@ -64,7 +64,7 @@ Screenshots and workflow examples are welcome. Add images here that show the das
 
 ### Prerequisites
 
-- Node.js 22 or later
+- Node.js 24 or later
 - npm 10 or later
 - Docker Desktop or Docker Engine
 
