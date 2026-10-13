@@ -100,6 +100,8 @@ jobs:
           POSTGRES_DB=ci
           MINIO_ROOT_USER=ci
           MINIO_ROOT_PASSWORD=ci-secret-ci
+          MINIO_APP_ACCESS_KEY=ci-app
+          MINIO_APP_SECRET_KEY=ci-app-secret
           SMTP_HOST=smtp.example.invalid
           SMTP_FROM=ci@example.invalid
           EOF
