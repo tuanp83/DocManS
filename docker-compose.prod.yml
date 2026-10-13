@@ -179,6 +179,10 @@ services:
     image: nginx:1.27-alpine
     logging: *default-logging
     restart: unless-stopped
+    # Reload nhẹ (không ngắt kết nối) mỗi 6 giờ để nhận chứng chỉ TLS mới, dù do certbot gia hạn hay chép tay
+    # từ CA nội bộ; chứng chỉ mới lỗi thì reload thất bại và nginx giữ cấu hình cũ. Vẫn gọi docker-entrypoint.sh
+    # để dựng file cấu hình từ templates.
+    command: ["/bin/sh", "-c", "(while true; do sleep 21600; nginx -s reload; done) & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
@@ -187,6 +191,7 @@ services:
     volumes:
       - ./nginx/prod/templates:/etc/nginx/templates:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./certbot/www:/var/www/certbot:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
       interval: 30s
@@ -199,6 +204,25 @@ services:
     depends_on:
       web:
         condition: service_healthy
+    networks: [internal]
+
+  # Tuỳ chọn, chỉ khi tên miền truy cập được từ Internet: docker compose --profile letsencrypt up -d certbot
+  # (cấp lần đầu bằng scripts/letsencrypt-init.sh). Kiểm tra 12 giờ một lần, chỉ gia hạn khi còn < 30 ngày,
+  # chép chứng chỉ mới vào nginx/ssl; nginx nhận trong lần reload kế tiếp (≤ 6 giờ).
+  certbot:
+    image: certbot/certbot:v5.8.0
+    profiles: ["letsencrypt"]
+    logging: *default-logging
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["trap 'exit 0' TERM; while true; do certbot renew --webroot -w /var/www/certbot --quiet --deploy-hook 'cp -L \"$$RENEWED_LINEAGE/fullchain.pem\" \"$$RENEWED_LINEAGE/privkey.pem\" /ssl/'; sleep 43200 & wait $$!; done"]
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+      - ./nginx/ssl:/ssl
+    deploy:
+      resources:
+        limits: { memory: 256m, cpus: "0.5" }
     networks: [internal]
 
 volumes:

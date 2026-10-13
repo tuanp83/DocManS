@@ -20,6 +20,7 @@ _bmad/
 # Production secrets and runtime artifacts
 .env.production
 nginx/ssl/
+certbot/
 backups/
 # Tài liệu nội bộ, báo cáo, ảnh chụp màn hình và file tạm: không đưa lên repo công khai
 reports/

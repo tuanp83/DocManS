@@ -39,6 +39,11 @@ server {
         return 200 "ok\n";
     }
 
+    # Xác thực tên miền cho Let's Encrypt (service certbot, profile letsencrypt); thư mục rỗng nếu không dùng.
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
     location / {
         return 301 https://$host$request_uri;
     }
