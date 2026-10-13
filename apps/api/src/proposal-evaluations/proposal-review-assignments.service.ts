@@ -35,7 +35,8 @@ type ReviewerCandidate = {
   displayName: string;
   status: string;
   unit: string;
-  researcherProfileId: string;
+  /** Hồ sơ nhà khoa học liên kết với tài khoản; null khi tài khoản chưa có hồ sơ. */
+  researcherProfileId: string | null;
 };
 
 type ReviewerProfileCandidate = {
@@ -695,7 +696,6 @@ export class ProposalReviewAssignmentsService {
     });
     
     if (!candidate) {
-      console.error("Candidate not found for id:", reviewerUserId);
       throw new BadRequestException({ message: "Không tìm thấy người đánh giá." });
     }
 
@@ -708,6 +708,10 @@ export class ProposalReviewAssignmentsService {
     }
 
     await this.prisma.$queryRaw`SELECT id FROM users WHERE id = ${candidate.id} FOR SHARE`;
+    // Hồ sơ nhà khoa học liên kết với tài khoản (nếu có). Trước đây gán nhầm ID tài khoản vào trường này,
+    // vi phạm khoá ngoại tới researcher_profiles nên mọi phân công cho người có hồ sơ đều thất bại.
+    const profiles = (this.prisma as unknown as { researcherProfile?: { findFirst: (args: unknown) => Promise<{ id: string } | null> } }).researcherProfile;
+    const profile = profiles ? await profiles.findFirst({ where: { linkedUserId: candidate.id }, select: { id: true } }) : null;
 
     return {
       id: candidate.id,
@@ -715,7 +719,7 @@ export class ProposalReviewAssignmentsService {
       displayName: candidate.displayName,
       status: candidate.status,
       unit: candidate.unit ?? "",
-      researcherProfileId: candidate.id
+      researcherProfileId: profile?.id ?? null
     };
   }
 
