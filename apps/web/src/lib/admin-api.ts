@@ -22,7 +22,10 @@ export type OrganizationUnit = {
   code: string;
   name: string;
   status: string;
+  parentId?: string | null;
 };
+
+export type OrganizationUnitImpact = { unitId: string; scopedUsers: number; usersLosingAccess: number };
 
 export type CatalogItem = {
   id: string;
@@ -227,6 +230,22 @@ export async function updateNotificationTemplate(input: { key: string; subject: 
 export async function createOrganizationUnit(input: { code: string; name: string }) {
   return requestJson<{ organizationUnit: OrganizationUnit }>("/organization-units", {
     method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+/** Trang quản trị đơn vị: cả đơn vị đã tắt, để bật lại được. */
+export async function loadAllOrganizationUnits() {
+  return (await requestJson<{ organizationUnits: OrganizationUnit[] }>("/organization-units?includeInactive=true")).organizationUnits;
+}
+
+export async function loadOrganizationUnitImpact(unitId: string) {
+  return (await requestJson<{ impact: OrganizationUnitImpact }>(`/organization-units/${unitId}/impact`)).impact;
+}
+
+export async function updateOrganizationUnit(unitId: string, input: { name: string; parentId: string }) {
+  return requestJson<{ organizationUnit: OrganizationUnit }>(`/organization-units/${unitId}`, {
+    method: "PATCH",
     body: JSON.stringify(input)
   });
 }
