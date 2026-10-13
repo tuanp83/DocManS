@@ -910,7 +910,9 @@ export class ResearchProposalsService {
     return JSON.parse(JSON.stringify({ id, ownerId, title, researchFieldCode, proposalTypeCode, objectives, summary, startDate, endDate, budgetMetadata, hostOrganizationUnitId,
       members: (await this.findMembers(proposal.id)).filter((m) => isRelationshipActiveAt(m, new Date())).map((m) => this.toMemberResponse(m)),
       // Bằng chứng lần nộp chỉ gồm tệp hiện hành; bản đã bị thay vẫn xem được trong lịch sử tệp.
-      attachments: await this.findActiveAttachments(proposal.id), requiredPackage: await this.getRequiredPackageForProposal(proposal) }));
+      attachments: await this.findActiveAttachments(proposal.id), requiredPackage: await this.getRequiredPackageForProposal(proposal),
+      // Sản phẩm dự kiến chủ nhiệm cam kết tại lần nộp này.
+      deliverables: await this.findPlannedDeliverables(proposal.id) }));
   }
 
   async completeCheck(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>): Promise<any> {
@@ -1204,6 +1206,12 @@ export class ResearchProposalsService {
       where: { proposalId },
       orderBy: { createdAt: "asc" }
     })) as ProposalMemberRecord[];
+  }
+
+  private async findPlannedDeliverables(proposalId: string) {
+    const client = this.prisma as unknown as { proposalDeliverable?: { findMany: (args: unknown) => Promise<Array<Record<string, unknown>>> } };
+    if (typeof client.proposalDeliverable?.findMany !== "function") return [];
+    return client.proposalDeliverable.findMany({ where: { proposalId }, orderBy: { createdAt: "asc" }, select: { id: true, type: true, title: true, description: true } });
   }
 
   private async findActiveAttachments(proposalId: string) {

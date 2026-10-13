@@ -1,120 +1,157 @@
-import { useEffect, useState } from "react";
-import { ProposalDeliverable, getProposalDeliverables, createProposalDeliverable } from "@/lib/research-proposals-api";
+import { useCallback, useEffect, useState } from "react";
+import {
+  DELIVERABLE_TYPES,
+  createProposalDeliverable,
+  deleteProposalDeliverable,
+  getProposalDeliverables,
+  updateProposalDeliverable,
+  type ProposalDeliverable
+} from "@/lib/research-proposals-api";
 import { SectionCard } from "@/components/ui/section-card";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { FileText, PlusCircle } from "lucide-react";
+import { FileText, Pencil, PlusCircle, Trash2 } from "lucide-react";
 
 interface ProposalDeliverablesPanelProps {
   proposalId: string;
 }
 
+type Draft = { id: string | null; type: string; title: string; description: string };
+
+const EMPTY_DRAFT: Draft = { id: null, type: DELIVERABLE_TYPES[0], title: "", description: "" };
+
+/**
+ * Sản phẩm dự kiến chủ nhiệm cam kết trong hồ sơ đề xuất. Chủ nhiệm/thư ký sửa được khi hồ sơ còn nháp hoặc
+ * đang bổ sung; sản phẩm hoàn thành và nghiệm thu từng sản phẩm được quản lý trong đề tài sau khi hồ sơ được duyệt.
+ */
 export function ProposalDeliverablesPanel({ proposalId }: ProposalDeliverablesPanelProps) {
   const [deliverables, setDeliverables] = useState<ProposalDeliverable[]>([]);
-  const [isAdding, setIsAdding] = useState(false);
-  const [newType, setNewType] = useState("Bài báo khoa học");
-  const [newTitle, setNewTitle] = useState("");
-  const [newDesc, setNewDesc] = useState("");
+  const [canEdit, setCanEdit] = useState(false);
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadError, setLoadError] = useState("");
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [formError, setFormError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    getProposalDeliverables(proposalId).then(setDeliverables).catch(console.error);
+  const refresh = useCallback(async () => {
+    setState("loading");
+    try {
+      const result = await getProposalDeliverables(proposalId);
+      setDeliverables(result.deliverables);
+      setCanEdit(result.canEdit);
+      setState("ready");
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Không tải được sản phẩm dự kiến.");
+      setState("error");
+    }
   }, [proposalId]);
 
-  const handleAdd = async () => {
-    if (!newTitle) return;
-    try {
-      const added = await createProposalDeliverable(proposalId, {
-        type: newType,
-        title: newTitle,
-        description: newDesc,
-        publishedAt: new Date().toISOString()
-      });
-      setDeliverables([added, ...deliverables]);
-      setIsAdding(false);
-      setNewTitle("");
-      setNewDesc("");
-    } catch (err) {
-      console.error(err);
-      alert("Lỗi khi khai báo sản phẩm");
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  async function save() {
+    if (!draft) return;
+    if (!draft.title.trim()) {
+      setFormError("Vui lòng nhập tên sản phẩm.");
+      return;
     }
-  };
+    setBusy(true);
+    setFormError("");
+    const input = { type: draft.type, title: draft.title.trim(), description: draft.description.trim() || null };
+    try {
+      if (draft.id) await updateProposalDeliverable(proposalId, draft.id, input);
+      else await createProposalDeliverable(proposalId, input);
+      setDraft(null);
+      await refresh();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Không lưu được sản phẩm dự kiến.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(item: ProposalDeliverable) {
+    if (!window.confirm(`Xoá sản phẩm dự kiến "${item.title}"?`)) return;
+    setBusy(true);
+    setFormError("");
+    try {
+      await deleteProposalDeliverable(proposalId, item.id);
+      await refresh();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Không xoá được sản phẩm dự kiến.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ fontSize: "1.125rem", fontWeight: 600, margin: 0 }}>Sản phẩm đầu ra của đề tài</h3>
-        <button type="button" className="button" onClick={() => setIsAdding(!isAdding)}>
-          <PlusCircle size={16} style={{ marginRight: 8 }} />
-          Khai báo sản phẩm mới
-        </button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div>
+          <h3 style={{ fontSize: "1.125rem", fontWeight: 600, margin: 0 }}>Sản phẩm dự kiến</h3>
+          <p style={{ margin: "4px 0 0", fontSize: "0.8125rem", color: "var(--text-secondary)" }}>
+            Sản phẩm chủ nhiệm cam kết khi đề xuất. Sản phẩm hoàn thành và nghiệm thu từng sản phẩm được quản lý trong đề tài sau khi hồ sơ được duyệt.
+          </p>
+        </div>
+        {canEdit && !draft ? (
+          <button type="button" className="button" onClick={() => { setFormError(""); setDraft({ ...EMPTY_DRAFT }); }}>
+            <PlusCircle size={16} style={{ marginRight: 8 }} aria-hidden="true" />
+            Thêm sản phẩm dự kiến
+          </button>
+        ) : null}
       </div>
 
-      {isAdding && (
-        <SectionCard title="Khai báo sản phẩm mới" subtitle="Nhập thông tin sản phẩm khoa học/công nghệ">
+      {draft ? (
+        <SectionCard title={draft.id ? "Sửa sản phẩm dự kiến" : "Thêm sản phẩm dự kiến"} subtitle="Loại, tên và mô tả sản phẩm cam kết">
           <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
-            <div>
-              <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>Loại sản phẩm</label>
-              <select 
-                value={newType} 
-                onChange={e => setNewType(e.target.value)}
-                style={{ width: "100%", padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 6 }}
-              >
-                <option value="Bài báo khoa học">Bài báo khoa học (Tạp chí/Hội nghị)</option>
-                <option value="Bằng sáng chế">Bằng sáng chế / Giải pháp hữu ích</option>
-                <option value="Sản phẩm công nghệ">Sản phẩm công nghệ (Phần mềm, Mô hình)</option>
-                <option value="Sách chuyên khảo">Sách chuyên khảo / Giáo trình</option>
+            <label className="field">
+              <span>Loại sản phẩm</span>
+              <select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })}>
+                {DELIVERABLE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>Tên sản phẩm *</label>
-              <input 
-                type="text" 
-                value={newTitle} 
-                onChange={e => setNewTitle(e.target.value)}
-                style={{ width: "100%", padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 6 }}
-                placeholder="VD: Bài báo nghiên cứu ứng dụng AI..."
-              />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: 4, fontWeight: 500 }}>Mô tả / Nơi công bố</label>
-              <textarea 
-                value={newDesc} 
-                onChange={e => setNewDesc(e.target.value)}
-                style={{ width: "100%", padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 6, minHeight: 80 }}
-                placeholder="VD: Tạp chí Y dược lâm sàng 108..."
-              />
-            </div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
-              <button type="button" className="button" onClick={() => setIsAdding(false)}>Hủy</button>
-              <button type="button" className="button primary" onClick={handleAdd}>Lưu khai báo</button>
+            </label>
+            <label className="field">
+              <span>Tên sản phẩm *</span>
+              <input type="text" maxLength={300} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder="VD: 02 bài báo trên tạp chí trong nước" />
+            </label>
+            <label className="field">
+              <span>Mô tả, yêu cầu khoa học</span>
+              <textarea maxLength={2000} rows={3} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="VD: Tạp chí Y dược lâm sàng 108 hoặc tương đương" />
+            </label>
+            {formError ? <p className="form-error">{formError}</p> : null}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button type="button" className="button" onClick={() => setDraft(null)} disabled={busy}>Huỷ</button>
+              <button type="button" className="button primary" onClick={() => void save()} disabled={busy}>{busy ? "Đang lưu…" : "Lưu"}</button>
             </div>
           </div>
         </SectionCard>
-      )}
+      ) : null}
 
-      {deliverables.length === 0 && !isAdding && (
-        <div style={{ padding: 32, textAlign: "center", color: "#64748b", background: "#f8fafc", borderRadius: 8 }}>
-          Đề tài này chưa có khai báo sản phẩm đầu ra nào.
-        </div>
-      )}
+      {!draft && formError ? <p className="form-error">{formError}</p> : null}
+      {state === "loading" ? <p className="state-message">Đang tải sản phẩm dự kiến…</p> : null}
+      {state === "error" ? <p className="state-message error">{loadError}</p> : null}
+      {state === "ready" && deliverables.length === 0 && !draft ? (
+        <p className="state-message">Hồ sơ chưa khai báo sản phẩm dự kiến.</p>
+      ) : null}
 
-      {deliverables.map(d => (
-        <div key={d.id} style={{ padding: 16, border: "1px solid #e2e8f0", borderRadius: 8, background: "#fff", display: "flex", gap: 16 }}>
-          <div style={{ padding: 12, background: "#f1f5f9", borderRadius: 8, height: "fit-content" }}>
-            <FileText size={24} color="#64748b" />
-          </div>
+      {deliverables.map((item) => (
+        <div key={item.id} style={{ padding: 16, border: "1px solid var(--border, #e2e8f0)", borderRadius: 8, display: "flex", gap: 16 }}>
+          <FileText size={22} aria-hidden="true" style={{ flexShrink: 0, color: "var(--text-secondary)" }} />
           <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <h4 style={{ margin: "0 0 4px 0", fontSize: "1rem", color: "#0f172a" }}>{d.title}</h4>
-              <StatusBadge status={d.status} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              <h4 style={{ margin: "0 0 4px 0", fontSize: "1rem" }}>{item.title}</h4>
+              {canEdit ? (
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button type="button" className="button" disabled={busy} aria-label={`Sửa ${item.title}`} onClick={() => { setFormError(""); setDraft({ id: item.id, type: item.type, title: item.title, description: item.description ?? "" }); }}>
+                    <Pencil size={14} aria-hidden="true" />
+                  </button>
+                  <button type="button" className="button" disabled={busy} aria-label={`Xoá ${item.title}`} onClick={() => void remove(item)}>
+                    <Trash2 size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              ) : null}
             </div>
-            <div style={{ fontSize: "0.875rem", color: "#64748b", marginBottom: 8 }}>
-              <span style={{ fontWeight: 500, color: "#334155" }}>{d.type}</span> • Khai báo ngày {new Date(d.createdAt).toLocaleDateString("vi-VN")}
-            </div>
-            {d.description && (
-              <p style={{ fontSize: "0.875rem", color: "#475569", margin: 0, padding: "8px 12px", background: "#f8fafc", borderRadius: 6 }}>
-                {d.description}
-              </p>
-            )}
+            <div style={{ fontSize: "0.875rem", color: "var(--text-secondary)" }}>{item.type}</div>
+            {item.description ? <p style={{ fontSize: "0.875rem", margin: "8px 0 0" }}>{item.description}</p> : null}
           </div>
         </div>
       ))}
