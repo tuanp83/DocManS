@@ -86,7 +86,7 @@ type RoundReview = { id: string; assignmentId: string; status: string; submissio
 
 /** Phân công thuộc vòng hiện tại (không tính phân công đã thu hồi và phân công của lần nộp cũ). */
 export function currentRoundAssignments<T extends RoundAssignment>(assignments: T[], submissionEventId: string) {
-  return assignments.filter((assignment) => assignment.reviewedSubmissionEventId === submissionEventId && assignment.status !== "revoked");
+  return assignments.filter((assignment) => assignment.reviewedSubmissionEventId === submissionEventId && assignment.status !== "revoked" && assignment.status !== "declined");
 }
 
 /** Phiếu của vòng hiện tại: ghi cho đúng lần nộp và thuộc một phân công của vòng. */

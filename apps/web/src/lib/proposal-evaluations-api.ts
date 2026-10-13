@@ -23,8 +23,13 @@ export type ProposalReviewAssignment = {
   reviewerUnit: string;
   assignmentRole: ReviewAssignmentRole;
   assignmentRoleLabel: string;
-  status: "assigned" | "revoked" | "completed";
+  status: "assigned" | "revoked" | "completed" | "declined";
   statusLabel: string;
+  /** Lời mời chưa được người phản biện đồng ý hoặc từ chối. */
+  invitationPending: boolean;
+  acceptedAt: string;
+  declinedAt: string;
+  declineReason: string;
   assignedById: string;
   assignedByDisplayName: string;
   assignedAt: string;
@@ -135,6 +140,8 @@ export type ProposalReviewProgress = ReviewProgressCounts & {
   proposalStatus: string;
   proposalStatusLabel: string;
   assignments: ProposalReviewAssignment[];
+  /** Lời mời bị từ chối trong vòng hiện tại (chỉ người điều phối nhận được). */
+  declinedAssignments?: ProposalReviewAssignment[];
   reviews: SubmittedProposalReview[];
   evaluationSummary: ProposalEvaluationSummary | null;
   recommendations: ReviewRecommendationOption[];
@@ -310,6 +317,24 @@ export async function revokeProposalReviewAssignment(proposalId: string, assignm
     `/research-proposals/${proposalId}/review-assignments/${assignmentId}/revoke`,
     { method: "POST", body: JSON.stringify({ note, contextVersion }) }
   );
+  return response.assignment;
+}
+
+/** Nhà khoa học đồng ý nhận phản biện: mở hồ sơ và phiếu chấm. */
+export async function acceptReviewInvitation(proposalId: string, assignmentId: string) {
+  const response = await requestJson<{ assignment: ProposalReviewAssignment }>(`/research-proposals/${proposalId}/review-assignments/${assignmentId}/accept`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+  return response.assignment;
+}
+
+/** Nhà khoa học từ chối phản biện, kèm lý do bắt buộc. */
+export async function declineReviewInvitation(proposalId: string, assignmentId: string, reason: string) {
+  const response = await requestJson<{ assignment: ProposalReviewAssignment }>(`/research-proposals/${proposalId}/review-assignments/${assignmentId}/decline`, {
+    method: "POST",
+    body: JSON.stringify({ reason })
+  });
   return response.assignment;
 }
 

@@ -10,6 +10,8 @@ import { useSession } from "@/components/auth/session-provider";
 import { ProposalDecisionPanel } from "@/components/research-proposals/proposal-decision-panel";
 import { ProposalEvaluationPanel } from "@/components/research-proposals/proposal-evaluation-panel";
 import { ProposalReviewForm } from "@/components/research-proposals/proposal-review-form";
+import { ReviewInvitationActions } from "@/components/research-proposals/review-invitation-actions";
+import { loadMyReviewAssignments, type ReviewerQueueItem } from "@/lib/proposal-evaluations-api";
 import { ProposalManagementOfficerPanel } from "@/components/research-proposals/proposal-management-officer-panel";
 import { ProposalDeliverablesPanel } from "@/components/research-proposals/proposal-deliverables-panel";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -112,16 +114,39 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
   const [supplementError, setSupplementError] = useState("");
   const [isRequestingSupplement, setIsRequestingSupplement] = useState(false);
   const [isResubmitting, setIsResubmitting] = useState(false);
+  const [invitation, setInvitation] = useState<ReviewerQueueItem | null>(null);
+  const [declined, setDeclined] = useState(false);
+
+  /** Lời mời phản biện hồ sơ này đang chờ người xem trả lời (chưa đồng ý thì chưa được đọc hồ sơ). */
+  async function loadInvitation() {
+    try {
+      const mine = await loadMyReviewAssignments();
+      setInvitation(mine.find((item) => item.proposal.id === proposalId && item.invitationPending) ?? null);
+    } catch {
+      setInvitation(null);
+    }
+  }
+
+  async function handleInvitationResponse(response: "accept" | "decline") {
+    setInvitation(null);
+    if (response === "decline") setDeclined(true);
+    setMessage(response === "accept" ? "Đã đồng ý nhận phản biện. Bạn có thể xem hồ sơ và chấm phiếu đánh giá." : "");
+    await refresh();
+  }
 
   async function refresh() {
     setState("loading");
+    // Tải song song; chờ xong trước khi báo lỗi để người chưa nhận lời thấy ngay lời mời thay vì thông báo không có quyền.
+    const invitationLoaded = loadInvitation();
     try {
       const [proposalData, readinessData] = await Promise.all([loadResearchProposal(proposalId), loadProposalReadiness(proposalId)]);
       setProposal(proposalData);
       setReadiness(readinessData);
       setForm(toDraftInput(proposalData));
+      await invitationLoaded;
       setState("ready");
     } catch {
+      await invitationLoaded;
       setState("error");
     }
   }
@@ -435,13 +460,36 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
     return <p className="state-message">Đang tải chi tiết hồ sơ...</p>;
   }
 
+  const invitationCard = invitation ? (
+    <SectionCard title="Lời mời phản biện" subtitle="Bạn cần đồng ý nhận phản biện trước khi xem hồ sơ và chấm phiếu đánh giá">
+      <div className="grid" style={{ gap: "6px" }}>
+        <span className="record-title">{invitation.proposal.title}</span>
+        <span className="record-meta">Mã hồ sơ: {invitation.proposal.code || "Chưa cấp mã"}</span>
+        <span className="record-meta">Vai trò: {invitation.assignmentRoleLabel}</span>
+        <span className="record-meta">Hạn đánh giá: {invitation.dueDate ? formatIntakeDate(invitation.dueDate) : "Không đặt hạn"}</span>
+        <span className="record-meta">Người mời: {invitation.assignedByDisplayName}</span>
+        <div style={{ marginTop: "8px" }}>
+          <ReviewInvitationActions
+            proposalId={proposalId}
+            assignmentId={invitation.id}
+            proposalTitle={invitation.proposal.title}
+            onResponded={handleInvitationResponse}
+          />
+        </div>
+      </div>
+    </SectionCard>
+  ) : null;
+
   if (state === "error" || !proposal || !form) {
+    if (invitationCard) return invitationCard;
+    if (declined) return <p className="state-message">Bạn đã từ chối lời mời phản biện hồ sơ này. Chuyên viên quản lý khoa học đã được thông báo.</p>;
     return <p className="state-message error">Không thể tải chi tiết hồ sơ hoặc bạn không có quyền truy cập.</p>;
   }
 
   return (
     <div className="grid detail-grid">
       <div className="grid">
+        {invitationCard}
         <button className="button" type="button" disabled={isSaving || isUploading || isSubmitting || isResubmitting} onClick={() => { if (!unsaved || window.confirm("Bỏ thay đổi chưa lưu và tải lại hồ sơ?")) void refresh(); }}>Tải lại hồ sơ</button>
         {unsaved ? <p role="status" className="state-message">Có thay đổi chưa lưu. Lưu bản nháp trước khi nộp.</p> : null}
         {message ? <p className="state-message success" role="status">{message}</p> : null}

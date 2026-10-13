@@ -42,7 +42,7 @@ function createPrisma() {
     { proposalId: "p1", userId: "r2", participationRole: "TOPIC_MEMBER", createdAt: past, status: "ACTIVE", effectiveFrom: past, effectiveUntil: null }
   ];
   const assignments = [
-    { id: "a1", proposalId: "p2", reviewerUserId: "reviewer", status: "assigned", assignmentRole: "reviewer", assignedAt: past, effectiveFrom: past, effectiveUntil: null }
+    { id: "a1", proposalId: "p2", reviewerUserId: "reviewer", status: "assigned", assignmentRole: "reviewer", assignedAt: past, effectiveFrom: past, effectiveUntil: null, acceptedAt: past }
   ];
   const auditLogs = [];
   const inScope = (rows, where) => rows.filter((row) => where.proposalId.in.includes(row.proposalId));

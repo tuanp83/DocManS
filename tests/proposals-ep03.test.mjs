@@ -486,6 +486,16 @@ function createServices(options = {}) {
   const objectStorage = createObjectStorage();
 
   const assignments = new ProposalReviewAssignmentsService(prisma, auditLog, participation, reviewAccess, notifications);
+  // Các bộ test phía sau phân công kiểm tra chấm phiếu, tổng hợp, phê duyệt: mặc định người được mời
+  // đồng ý ngay. Bước đồng ý/từ chối có bộ test riêng (requireAcceptance: true).
+  if (!options.requireAcceptance) {
+    const assignReviewer = assignments.assignReviewer.bind(assignments);
+    assignments.assignReviewer = async (...args) => {
+      const assignment = await assignReviewer(...args);
+      await prisma.proposalReviewAssignment.update({ where: { id: assignment.id }, data: { acceptedAt: new Date() } });
+      return { ...assignment, invitationPending: false };
+    };
+  }
   const reviews = new ProposalReviewsService(prisma, auditLog, reviewAccess, participation);
   const summaries = new ProposalEvaluationSummaryService(prisma, auditLog, assignments, reviews, participation, reviewAccess);
   const decisions = new ProposalDecisionsService(prisma, auditLog, participation, reviewAccess, assignments, reviews, summaries, notifications);
@@ -812,6 +822,53 @@ describe("ST-3.2 reviewer assignment and assignment-scoped proposal access", () 
     );
 
     assert.equal(services.prisma.store.reviewAssignments.length, 0);
+  });
+});
+
+describe("Nhà khoa học đồng ý / từ chối lời mời phản biện", () => {
+  const reviewData = { scoreData: FULL_SCORES, comment: "Nhận xét", recommendation: "approve" };
+
+  it("lời mời chưa đồng ý không cho xem hồ sơ, gói phản biện hay chấm phiếu; đồng ý xong mới được", async () => {
+    const services = createServices({ requireAcceptance: true });
+    const proposal = await createSubmittedProposal(services);
+    const invitation = await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: reviewerUser.id });
+    assert.equal(invitation.invitationPending, true);
+    assert.equal(invitation.statusLabel, "Chờ xác nhận");
+
+    const [queued] = await services.assignments.listMyAssignments(reviewerUser);
+    assert.equal(queued.invitationPending, true);
+    await assert.rejects(() => services.proposalService.getProposal(reviewerUser, proposal.id));
+    await assert.rejects(() => services.assignments.getReviewPackage(reviewerUser, proposal.id), ForbiddenException);
+    await assert.rejects(() => services.reviews.submitMyReview(reviewerUser, proposal.id, reviewData), /đồng ý nhận phản biện/);
+
+    await services.assignments.respondToInvitation(reviewerUser, proposal.id, invitation.id, { response: "accept" });
+    assert.equal((await services.assignments.getReviewPackage(reviewerUser, proposal.id)).assignmentId, invitation.id);
+    await services.reviews.submitMyReview(reviewerUser, proposal.id, reviewData);
+    assert.ok(services.prisma.store.auditLogs.some((record) => record.action === "accept-review-invitation"));
+  });
+
+  it("từ chối cần lý do, rời khỏi tiến độ vòng đánh giá và hiện cho người điều phối kèm lý do", async () => {
+    const notifications = { events: [], async dispatch(events) { this.events.push(...events); return events.length; } };
+    const services = createServices({ requireAcceptance: true, notifications });
+    const proposal = await createSubmittedProposal(services);
+    const invitation = await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: reviewerUser.id });
+    await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: secondReviewerUser.id });
+
+    await assert.rejects(() => services.assignments.respondToInvitation(secondReviewerUser, proposal.id, invitation.id, { response: "decline", reason: "x" }), ForbiddenException);
+    await assert.rejects(() => services.assignments.respondToInvitation(reviewerUser, proposal.id, invitation.id, { response: "decline", reason: " " }), /lý do/);
+    await services.assignments.respondToInvitation(reviewerUser, proposal.id, invitation.id, { response: "decline", reason: "Đang đi công tác" });
+    await assert.rejects(() => services.assignments.respondToInvitation(reviewerUser, proposal.id, invitation.id, { response: "accept" }), /đã được trả lời/);
+
+    const progress = await services.summaries.getReviewProgress(staffUser, proposal.id);
+    assert.equal(progress.activeAssignmentCount, 1);
+    assert.deepEqual(progress.assignments.map((item) => item.reviewerUserId), [secondReviewerUser.id]);
+    assert.equal(progress.declinedAssignments.length, 1);
+    assert.equal(progress.declinedAssignments[0].declineReason, "Đang đi công tác");
+    assert.deepEqual(await services.assignments.listMyAssignments(reviewerUser), []);
+
+    const declinedEvent = notifications.events.find((event) => event.type === "REVIEW_INVITATION_DECLINED");
+    assert.ok(declinedEvent.userIds.includes(staffUser.id));
+    assert.match(declinedEvent.message, /Đang đi công tác/);
   });
 });
 
@@ -1606,6 +1663,12 @@ describe("Evidence binding (mang từ thanhdotien278/DocManS): submission round 
     const round = store.submissionEvents.find((event) => event.snapshot?.kind === "completeness_check").snapshot.submissionEventId;
     assert.equal(store.reviewAssignments.length, 6);
     assert.ok(store.reviewAssignments.every((assignment) => assignment.reviewedSubmissionEventId === round));
+    // Phân công tạo từ hội đồng cũng là lời mời: từng người phải đồng ý trước khi chấm.
+    assert.ok(store.reviewAssignments.every((assignment) => assignment.acceptedAt === null || assignment.acceptedAt === undefined));
+    for (const user of [reviewerUser, secondReviewerUser, councilMemberUser, councilMemberUser2, councilMemberUser3, councilSecretaryUser]) {
+      const invitation = store.reviewAssignments.find((assignment) => assignment.reviewerUserId === user.id);
+      await services.assignments.respondToInvitation(user, proposal.id, invitation.id, { response: "accept" });
+    }
 
     const reviewData = { scoreData: FULL_SCORES, comment: "Nhận xét", recommendation: "approve" };
     for (const user of [reviewerUser, secondReviewerUser, councilMemberUser, councilMemberUser2, councilMemberUser3]) await services.reviews.submitMyReview(user, proposal.id, reviewData);

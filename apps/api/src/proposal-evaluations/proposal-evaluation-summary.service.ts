@@ -137,6 +137,12 @@ export class ProposalEvaluationSummaryService {
       submissionEventId: round.evidence?.eventId ?? null,
       ...progress,
       assignments: round.assignments.map((assignment) => this.assignments.toAssignmentResponse(assignment, round.reviews)),
+      // Lời mời bị từ chối trong vòng này: không tính vào tiến độ nhưng người điều phối cần thấy lý do để mời người khác.
+      declinedAssignments: round.evidence
+        ? round.allAssignments
+            .filter((assignment) => assignment.status === REVIEW_ASSIGNMENT_STATUS.declined && assignment.reviewedSubmissionEventId === round.evidence?.eventId)
+            .map((assignment) => this.assignments.toAssignmentResponse(assignment, []))
+        : [],
       reviews: round.reviews
         .filter((review) => review.status === REVIEW_STATUS.submitted && (!scoringPending || review.assignmentId === access?.assignmentId))
         .map((review) => this.reviews.toSubmittedReviewResponse(review)),
@@ -261,6 +267,11 @@ export class ProposalEvaluationSummaryService {
       include: { updatedBy: { select: { displayName: true } } }
     })) as EvaluationSummaryRecord;
     // Phân công còn mở của vòng được đóng cùng vòng: người được phân công không giữ quyền ghi khi hồ sơ đã rời bước đánh giá.
+    // Lời mời chưa được trả lời thì thu hồi, không chuyển thành "đã hoàn thành" (sẽ mở quyền xem hồ sơ cho người chưa nhận lời).
+    await this.prisma.proposalReviewAssignment.updateMany({
+      where: { proposalId, reviewedSubmissionEventId: round.evidence.eventId, status: REVIEW_ASSIGNMENT_STATUS.assigned, acceptedAt: null },
+      data: { status: REVIEW_ASSIGNMENT_STATUS.revoked, revokedAt: now, effectiveUntil: now } as never
+    });
     await this.prisma.proposalReviewAssignment.updateMany({
       where: { proposalId, reviewedSubmissionEventId: round.evidence.eventId, status: REVIEW_ASSIGNMENT_STATUS.assigned },
       data: { status: REVIEW_ASSIGNMENT_STATUS.completed, completedAt: now } as never
@@ -317,11 +328,11 @@ export class ProposalEvaluationSummaryService {
   }
 
   /**
-   * Completion is measured against assignments that are still part of the round: a revoked
-   * assignment must not hold the proposal back, and a completed one counts as done.
+   * Completion is measured against assignments that are still part of the round: a revoked or
+   * declined assignment must not hold the proposal back, and a completed one counts as done.
    */
   summarizeProgress(assignments: ReviewAssignmentRecord[], reviews: ProposalReviewRecord[]) {
-    const active = assignments.filter((assignment) => assignment.status !== REVIEW_ASSIGNMENT_STATUS.revoked);
+    const active = assignments.filter((assignment) => assignment.status !== REVIEW_ASSIGNMENT_STATUS.revoked && assignment.status !== REVIEW_ASSIGNMENT_STATUS.declined);
     const submitted = reviews.filter((review) => review.status === REVIEW_STATUS.submitted && active.some((assignment) => assignment.id === review.assignmentId));
     const submittedAssignmentIds = new Set(submitted.map((review) => review.assignmentId));
     // Thư ký hội đồng không chấm phiếu, nên không bao giờ "chờ phiếu".

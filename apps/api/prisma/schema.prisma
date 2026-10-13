@@ -684,6 +684,11 @@ model ProposalReviewAssignment {
   dueDate             DateTime?          @map("due_date")
   revokedAt           DateTime?          @map("revoked_at")
   completedAt         DateTime?          @map("completed_at")
+  /// Người được phân công đồng ý nhận phản biện; null = chưa trả lời (chưa được xem hồ sơ, chưa chấm).
+  acceptedAt          DateTime?          @map("accepted_at")
+  /// Người được phân công từ chối (trạng thái "declined"), kèm lý do bắt buộc.
+  declinedAt          DateTime?          @map("declined_at")
+  declineReason       String?            @map("decline_reason")
   createdAt           DateTime           @default(now()) @map("created_at")
   updatedAt           DateTime           @updatedAt @map("updated_at")
   review              ProposalReview?

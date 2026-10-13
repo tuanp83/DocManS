@@ -41,6 +41,9 @@ export type ReviewAssignmentRecord = {
   dueDate: Date | null;
   revokedAt: Date | null;
   completedAt: Date | null;
+  acceptedAt?: Date | null;
+  declinedAt?: Date | null;
+  declineReason?: string | null;
   reviewedSubmissionEventId?: string | null;
   reviewer?: { displayName: string; username: string; unit: string } | null;
   assignedBy?: { displayName: string } | null;
@@ -289,4 +292,5 @@ export function assertCanManageDisbursement(actor: SafeUserContext | undefined, 
 export function assertCanManageIRB(actor: SafeUserContext | undefined, proposal: Pick<EvaluationProposalRecord, "hostOrganizationUnitId">): SafeUserContext {
   return assertProposalGovernanceAuthority(actor, proposal, "Chỉ lãnh đạo Học viện hoặc cán bộ quản lý khoa học phụ trách đơn vị của hồ sơ mới có quyền cấp Giấy chứng nhận Đạo đức Y sinh (IRB).");
 }
+
 

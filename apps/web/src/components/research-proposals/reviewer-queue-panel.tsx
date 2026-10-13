@@ -15,6 +15,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ReviewInvitationActions } from "@/components/research-proposals/review-invitation-actions";
 import { loadMyReviewAssignments, type ReviewerQueueItem } from "@/lib/proposal-evaluations-api";
 
 function formatDate(value?: string | null) {
@@ -46,6 +47,16 @@ export function ReviewerQueuePanel() {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [filterTab, setFilterTab] = useState<"all" | "pending" | "submitted">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function reloadAfterResponse(response: "accept" | "decline") {
+    setNotice(
+      response === "accept"
+        ? "Đã đồng ý nhận phản biện. Bấm \"Vào đánh giá\" để xem hồ sơ và chấm phiếu."
+        : "Đã từ chối lời mời phản biện. Chuyên viên quản lý khoa học đã được thông báo."
+    );
+    setAssignments(await loadMyReviewAssignments());
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -213,6 +224,12 @@ export function ReviewerQueuePanel() {
           </div>
         </div>
       </div>
+
+      {notice ? (
+        <p className="state-message success" role="status">
+          {notice}
+        </p>
+      ) : null}
 
       <SectionCard
         title="Danh sách nhiệm vụ KH&CN được mời phản biện"
@@ -406,7 +423,12 @@ export function ReviewerQueuePanel() {
                           <StatusBadge status={assignment.proposal.status} />
                         </td>
                         <td>
-                          {isSubmitted ? (
+                          {assignment.invitationPending ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: "600", color: "#1d4ed8" }}>
+                              <Clock size={14} />
+                              Chờ xác nhận lời mời
+                            </span>
+                          ) : isSubmitted ? (
                             <div>
                               <span
                                 style={{
@@ -442,24 +464,34 @@ export function ReviewerQueuePanel() {
                           )}
                         </td>
                         <td style={{ textAlign: "right" }}>
-                          <div style={{ display: "inline-flex", gap: "8px" }}>
-                            <Link
-                              href={`/proposals/${assignment.proposal.id}`}
-                              className="button primary"
-                              style={{
-                                padding: "6px 12px",
-                                fontSize: "12px",
-                                fontWeight: "600",
-                                textDecoration: "none",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px"
-                              }}
-                            >
-                              <FileText size={14} />
-                              {isSubmitted ? "Xem lại phiếu" : "Vào đánh giá"}
-                            </Link>
-                          </div>
+                          {assignment.invitationPending ? (
+                            <ReviewInvitationActions
+                              proposalId={assignment.proposal.id}
+                              assignmentId={assignment.id}
+                              proposalTitle={assignment.proposal.title}
+                              compact
+                              onResponded={reloadAfterResponse}
+                            />
+                          ) : (
+                            <div style={{ display: "inline-flex", gap: "8px" }}>
+                              <Link
+                                href={`/proposals/${assignment.proposal.id}`}
+                                className="button primary"
+                                style={{
+                                  padding: "6px 12px",
+                                  fontSize: "12px",
+                                  fontWeight: "600",
+                                  textDecoration: "none",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px"
+                                }}
+                              >
+                                <FileText size={14} />
+                                {isSubmitted ? "Xem lại phiếu" : "Vào đánh giá"}
+                              </Link>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -488,15 +520,25 @@ export function ReviewerQueuePanel() {
                     </span>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
                       <span className="record-meta">
-                        Phiếu: {isSubmitted ? "Đã gửi" : "Chưa gửi"}
+                        {assignment.invitationPending ? "Chờ xác nhận lời mời" : `Phiếu: ${isSubmitted ? "Đã gửi" : "Chưa gửi"}`}
                       </span>
-                      <Link
-                        href={`/proposals/${assignment.proposal.id}`}
-                        className="button primary"
-                        style={{ padding: "4px 10px", fontSize: "12px" }}
-                      >
-                        {isSubmitted ? "Xem lại" : "Đánh giá"}
-                      </Link>
+                      {assignment.invitationPending ? (
+                        <ReviewInvitationActions
+                          proposalId={assignment.proposal.id}
+                          assignmentId={assignment.id}
+                          proposalTitle={assignment.proposal.title}
+                          compact
+                          onResponded={reloadAfterResponse}
+                        />
+                      ) : (
+                        <Link
+                          href={`/proposals/${assignment.proposal.id}`}
+                          className="button primary"
+                          style={{ padding: "4px 10px", fontSize: "12px" }}
+                        >
+                          {isSubmitted ? "Xem lại" : "Đánh giá"}
+                        </Link>
+                      )}
                     </div>
                   </article>
                 );

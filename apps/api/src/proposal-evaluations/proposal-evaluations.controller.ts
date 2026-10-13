@@ -4,6 +4,9 @@ import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.
 import { PROPOSAL_DECISIONS, ProposalDecisionsService } from "./proposal-decisions.service.js";
 import { ProposalEvaluationSummaryService } from "./proposal-evaluation-summary.service.js";
 import {
+  acceptReviewInvitationPipe,
+  declineReviewInvitationPipe,
+  type RespondReviewInvitationDto,
   approveProposalBudgetPipe,
   evaluationSummaryLifecyclePipe,
   type EvaluationSummaryLifecycleDto,
@@ -72,6 +75,28 @@ export class ProposalEvaluationsController {
     @Body(revokeReviewAssignmentPipe) body: RevokeReviewAssignmentDto
   ) {
     return { assignment: await this.assignments.revokeAssignment(request.currentUser!, id, assignmentId, { reason: body.note, contextVersion: body.contextVersion }) };
+  }
+
+  /** Nhà khoa học đồng ý nhận phản biện: mở quyền xem hồ sơ và chấm phiếu. */
+  @Post(":id/review-assignments/:assignmentId/accept")
+  async acceptInvitation(
+    @Req() request: RequestWithCurrentUser,
+    @Param("id") id: string,
+    @Param("assignmentId") assignmentId: string,
+    @Body(acceptReviewInvitationPipe) body: RespondReviewInvitationDto
+  ) {
+    return { assignment: await this.assignments.respondToInvitation(request.currentUser!, id, assignmentId, { response: "accept", contextVersion: body.contextVersion }) };
+  }
+
+  /** Nhà khoa học từ chối phản biện (bắt buộc lý do). */
+  @Post(":id/review-assignments/:assignmentId/decline")
+  async declineInvitation(
+    @Req() request: RequestWithCurrentUser,
+    @Param("id") id: string,
+    @Param("assignmentId") assignmentId: string,
+    @Body(declineReviewInvitationPipe) body: RespondReviewInvitationDto
+  ) {
+    return { assignment: await this.assignments.respondToInvitation(request.currentUser!, id, assignmentId, { response: "decline", reason: body.reason, contextVersion: body.contextVersion }) };
   }
 
   @Get(":id/review-package")

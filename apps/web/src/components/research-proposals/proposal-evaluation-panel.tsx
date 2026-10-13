@@ -1768,6 +1768,7 @@ export function ProposalEvaluationPanel({
                       {assignment.effectiveUntil ? <span className="record-meta">Đến {formatIntakeDate(assignment.effectiveUntil)}</span> : null}
                       {assignment.completedAt ? <span className="record-meta">Hoàn thành {formatDate(assignment.completedAt)}</span> : null}
                       {assignment.revokedAt ? <span className="record-meta">Thu hồi {formatDate(assignment.revokedAt)}</span> : null}
+                      {assignment.acceptedAt ? <span className="record-meta">Nhận lời {formatDate(assignment.acceptedAt)}</span> : null}
                     </td>
                     <td>
                       {assignment.reviewStatus === "submitted" ? (
@@ -1828,6 +1829,18 @@ export function ProposalEvaluationPanel({
             message="Lập tờ trình đề xuất Hội đồng ở mục trên để Lãnh đạo phê duyệt và tự động kích hoạt người đánh giá."
           />
         )}
+        {progress?.declinedAssignments?.length ? (
+          <div className="state-message warning" role="status" style={{ marginTop: "12px" }}>
+            <strong>Lời mời bị từ chối trong vòng đánh giá này:</strong>
+            <ul style={{ margin: "6px 0 0", paddingLeft: "18px" }}>
+              {progress.declinedAssignments.map((assignment) => (
+                <li key={assignment.id}>
+                  {assignment.reviewerDisplayName} ({assignment.assignmentRoleLabel}) · từ chối {formatDate(assignment.declinedAt)}: {assignment.declineReason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {canAssign && (
           <form className="form-grid" onSubmit={handleAssign} style={{ marginTop: "16px", borderTop: "1px dashed var(--border)", paddingTop: "14px" }}>
             <span style={{ fontSize: "13px", fontWeight: 700 }}>Phân công bổ sung người đánh giá độc lập / chuyên gia:</span>

@@ -170,6 +170,26 @@ export const evaluationSummaryLifecyclePipe: PipeTransform<unknown, EvaluationSu
   }
 };
 
+/** Trả lời lời mời phản biện. contextVersion tuỳ chọn: người chưa nhận lời chưa được đọc hồ sơ nên không có nó. */
+export type RespondReviewInvitationDto = { reason?: string; contextVersion?: ContextVersionTokenV1 };
+
+function respondPipe(requireReason: boolean): PipeTransform<unknown, RespondReviewInvitationDto> {
+  return {
+    transform(value: unknown) {
+      const input = value === undefined || value === null || value === "" ? {} : assertRecord(value);
+      if (requireReason) {
+        if (typeof input.reason !== "string" || !input.reason.trim()) throw new BadRequestException({ message: "Nhập lý do từ chối phản biện." });
+        if (input.reason.trim().length > 2000) throw new BadRequestException({ message: "Lý do từ chối tối đa 2000 ký tự." });
+      }
+      if (input.contextVersion !== undefined && !isContextVersionTokenV1(input.contextVersion)) throw new BadRequestException({ message: "contextVersion của hồ sơ không hợp lệ." });
+      return { reason: requireReason ? (input.reason as string).trim() : undefined, contextVersion: input.contextVersion as ContextVersionTokenV1 | undefined };
+    }
+  };
+}
+
+export const acceptReviewInvitationPipe = respondPipe(false);
+export const declineReviewInvitationPipe = respondPipe(true);
+
 /** Named separately from the decision pipe so the revoke route does not read as a decision. */
 export const revokeReviewAssignmentPipe: PipeTransform<unknown, RevokeReviewAssignmentDto> = {
   transform(value: unknown) {
