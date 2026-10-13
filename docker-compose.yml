@@ -16,7 +16,8 @@ services:
       retries: 5
 
   minio:
-    image: quay.io/minio/minio:latest
+    # MinIO không còn phát hành image công khai: nạp bản đã kiểm thử bằng scripts/minio-image.sh load.
+    image: ${MINIO_IMAGE:-docmans.local/minio:RELEASE.2025-09-07T16-13-09Z}
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"

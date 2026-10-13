@@ -20,6 +20,9 @@ _bmad/
 # Production secrets and runtime artifacts
 .env.production
 nginx/ssl/
+certbot/
+# Image đóng gói (scripts/minio-image.sh export): lưu ngoài git
+artifacts/
 backups/
 # Tài liệu nội bộ, báo cáo, ảnh chụp màn hình và file tạm: không đưa lên repo công khai
 reports/

@@ -6,6 +6,14 @@
 # Only nginx publishes ports; postgres, minio, api and web stay on the internal network.
 # Mỗi service có giới hạn RAM/CPU để một thành phần quá tải không kéo sập cả máy (cỡ cho máy 4 vCPU / 8 GB).
 
+# Log Docker có giới hạn: mỗi container tối đa 5 file × 20 MB (~100 MB), log cũ tự xoay vòng thay vì làm đầy đĩa.
+# Chỉ áp dụng cho container được tạo mới: sau khi đổi, chạy lại `up -d` để Docker tạo lại container.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 x-app-image: &app-image
   image: docmans-app:${APP_VERSION:-latest}
   build:
@@ -14,6 +22,7 @@ x-app-image: &app-image
     args:
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api/v1}
   restart: unless-stopped
+  logging: *default-logging
   networks: [internal]
 
 x-api-env: &api-env
@@ -22,14 +31,16 @@ x-api-env: &api-env
   MINIO_ENDPOINT: minio
   MINIO_PORT: "9000"
   MINIO_USE_SSL: "false"
-  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+  # Tài khoản ứng dụng chỉ có quyền trên bucket của hệ thống (do minio-init tạo), không dùng tài khoản root.
+  MINIO_ACCESS_KEY: ${MINIO_APP_ACCESS_KEY:?MINIO_APP_ACCESS_KEY is required}
+  MINIO_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?MINIO_APP_SECRET_KEY is required}
   MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-docmans-files}
   MINIO_REGION: ${MINIO_REGION:-us-east-1}
 
 services:
   postgres:
     image: postgres:16-alpine
+    logging: *default-logging
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -48,8 +59,11 @@ services:
     networks: [internal]
 
   minio:
-    # Phiên bản đã kiểm thử; chỉ nâng sau khi thử trên môi trường staging.
-    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z}
+    # MinIO đã ngừng phát hành image công khai. Bản đã kiểm thử được nạp sẵn trên máy chủ bằng
+    # scripts/minio-image.sh load (hoặc kéo từ registry nội bộ qua MINIO_IMAGE). Tiền tố docmans.local không
+    # bao giờ trỏ ra Docker Hub nên không thể kéo nhầm một image trùng tên.
+    image: ${MINIO_IMAGE:-docmans.local/minio:RELEASE.2025-09-07T16-13-09Z}
+    logging: *default-logging
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -67,6 +81,28 @@ services:
         limits: { memory: 1g, cpus: "1" }
     networks: [internal]
 
+  # One-shot, idempotent: bucket, chính sách giới hạn trong bucket và tài khoản MinIO riêng cho API.
+  minio-init:
+    image: ${MINIO_IMAGE:-docmans.local/minio:RELEASE.2025-09-07T16-13-09Z}
+    logging: *default-logging
+    restart: "no"
+    entrypoint: ["sh", "/minio-init.sh"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-docmans-files}
+      MINIO_APP_ACCESS_KEY: ${MINIO_APP_ACCESS_KEY:?MINIO_APP_ACCESS_KEY is required}
+      MINIO_APP_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?MINIO_APP_SECRET_KEY is required}
+    volumes:
+      - ./scripts/minio-init.sh:/minio-init.sh:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits: { memory: 128m, cpus: "0.5" }
+    networks: [internal]
+
   # One-shot: apply migrations, then the production seed (catalogs + bootstrap admin only).
   migrate:
     <<: *app-image
@@ -80,8 +116,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
 
   api:
     <<: *app-image
@@ -90,6 +126,7 @@ services:
       <<: *api-env
       API_PORT: "4000"
       DB_POOL_MAX: ${DB_POOL_MAX:-15}
+      LOG_REQUESTS: ${LOG_REQUESTS:-errors}
       # Heap nhỏ hơn giới hạn container để V8 dọn rác trước khi bị OOM kill.
       NODE_OPTIONS: --max-old-space-size=768
       WEB_ORIGIN: ${PUBLIC_URL:?PUBLIC_URL is required}
@@ -142,7 +179,12 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    logging: *default-logging
     restart: unless-stopped
+    # Reload nhẹ (không ngắt kết nối) mỗi 6 giờ để nhận chứng chỉ TLS mới, dù do certbot gia hạn hay chép tay
+    # từ CA nội bộ; chứng chỉ mới lỗi thì reload thất bại và nginx giữ cấu hình cũ. Vẫn gọi docker-entrypoint.sh
+    # để dựng file cấu hình từ templates.
+    command: ["/bin/sh", "-c", "(while true; do sleep 21600; nginx -s reload; done) & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
@@ -151,12 +193,38 @@ services:
     volumes:
       - ./nginx/prod/templates:/etc/nginx/templates:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./certbot/www:/var/www/certbot:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     deploy:
       resources:
         limits: { memory: 256m, cpus: "0.5" }
     depends_on:
       web:
         condition: service_healthy
+    networks: [internal]
+
+  # Tuỳ chọn, chỉ khi tên miền truy cập được từ Internet: docker compose --profile letsencrypt up -d certbot
+  # (cấp lần đầu bằng scripts/letsencrypt-init.sh). Kiểm tra 12 giờ một lần, chỉ gia hạn khi còn < 30 ngày,
+  # chép chứng chỉ mới vào nginx/ssl; nginx nhận trong lần reload kế tiếp (≤ 6 giờ).
+  certbot:
+    image: certbot/certbot:v5.8.0
+    profiles: ["letsencrypt"]
+    logging: *default-logging
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["trap 'exit 0' TERM; while true; do certbot renew --webroot -w /var/www/certbot --quiet --deploy-hook 'cp -L \"$$RENEWED_LINEAGE/fullchain.pem\" \"$$RENEWED_LINEAGE/privkey.pem\" /ssl/'; sleep 43200 & wait $$!; done"]
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+      - ./nginx/ssl:/ssl
+    deploy:
+      resources:
+        limits: { memory: 256m, cpus: "0.5" }
     networks: [internal]
 
 volumes:

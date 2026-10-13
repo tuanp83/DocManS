@@ -39,6 +39,11 @@ export class MinioObjectStorageService implements ObjectStorage {
     });
   }
 
+  /** Kiểm tra kết nối và quyền trên bucket của hệ thống (dùng cho readiness). */
+  async checkBucket() {
+    if (!(await this.getClient().bucketExists(this.getBucketName()))) throw new Error("bucket missing");
+  }
+
   async getObject(objectKey: string) {
     return this.getClient().getObject(this.getBucketName(), objectKey);
   }
