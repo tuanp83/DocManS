@@ -3,6 +3,7 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module.js";
+import { requestContextMiddleware } from "./infrastructure/observability/request-context.js";
 import helmet from "helmet";
 import express from "express";
 
@@ -15,6 +16,9 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.set("trust proxy", process.env.TRUST_PROXY ?? "loopback, linklocal, uniquelocal");
+
+  // Request id + log JSON cho request lỗi/chậm; đặt trước mọi middleware khác để luôn có mã tra cứu.
+  app.use(requestContextMiddleware());
 
   // Security headers
   app.use(helmet());

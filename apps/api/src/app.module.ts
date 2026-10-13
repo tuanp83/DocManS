@@ -1,4 +1,6 @@
 import { Module } from "@nestjs/common";
+import { APP_FILTER } from "@nestjs/core";
+import { AppExceptionFilter } from "./infrastructure/observability/app-exception.filter.js";
 import { AdminModule } from "./admin/admin.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { FilesModule } from "./modules/files/files.module.js";
@@ -40,6 +42,6 @@ import { TasksModule } from "./tasks/tasks.module.js";
     TasksModule
   ],
   controllers: [HealthController],
-  providers: [MinioObjectStorageService]
+  providers: [MinioObjectStorageService, { provide: APP_FILTER, useClass: AppExceptionFilter }]
 })
 export class AppModule {}

@@ -124,6 +124,7 @@ services:
       <<: *api-env
       API_PORT: "4000"
       DB_POOL_MAX: ${DB_POOL_MAX:-15}
+      LOG_REQUESTS: ${LOG_REQUESTS:-errors}
       # Heap nhỏ hơn giới hạn container để V8 dọn rác trước khi bị OOM kill.
       NODE_OPTIONS: --max-old-space-size=768
       WEB_ORIGIN: ${PUBLIC_URL:?PUBLIC_URL is required}
