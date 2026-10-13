@@ -28,7 +28,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: any
   ) {
     const result = await this.authService.login(body, requestContext(request));
-    response.setHeader("Set-Cookie", createSessionCookie(result.session.id, process.env.NODE_ENV === "production"));
+    response.setHeader("Set-Cookie", createSessionCookie(result.session.id, process.env.NODE_ENV === "production", new Date(result.session.expiresAt)));
 
     return { user: result.user };
   }

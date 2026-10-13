@@ -4,6 +4,13 @@ import { SYSTEM_ROLES, type AuthSession, type InternalUser, type SafeUserContext
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
+/** Thời hạn phiên theo tham số `session_timeout_minutes` (15–1440 phút); thiếu hoặc sai thì mặc định 12 giờ. */
+async function readSessionTtlMs(client: { systemParameter?: { findUnique: (args: unknown) => Promise<{ value: string } | null> } }) {
+  const parameter = await client.systemParameter?.findUnique({ where: { key: "session_timeout_minutes" } });
+  const minutes = Number(parameter?.value);
+  return Number.isInteger(minutes) && minutes >= 15 && minutes <= 1440 ? minutes * 60 * 1000 : SESSION_TTL_MS;
+}
+
 @Injectable()
 export class AuthStore {
   constructor(private readonly prisma: PrismaService) {}
@@ -51,7 +58,8 @@ export class AuthStore {
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
       const user = await tx.user.findUnique({ where: { id: userId } });
       if (!user || user.status !== "active" || user.credentialVersion !== credentialVersion) throw new UnauthorizedException();
-      const session = await tx.session.create({ data: { userId, credentialVersion, expiresAt: new Date(Date.now() + SESSION_TTL_MS) } });
+      const ttlMs = await readSessionTtlMs(tx as never);
+      const session = await tx.session.create({ data: { userId, credentialVersion, expiresAt: new Date(Date.now() + ttlMs) } });
       return this.toAuthSession(session);
     });
   }

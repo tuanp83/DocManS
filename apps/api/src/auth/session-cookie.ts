@@ -21,13 +21,15 @@ export function readSessionCookie(cookieHeader: string | undefined) {
   }
 }
 
-export function createSessionCookie(sessionId: string, isProduction: boolean) {
+/** `expiresAt` = hạn của phiên trong CSDL: cookie hết hạn cùng lúc với phiên. */
+export function createSessionCookie(sessionId: string, isProduction: boolean, expiresAt?: Date) {
+  const maxAge = expiresAt ? Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000)) : COOKIE_MAX_AGE_SECONDS;
   const parts = [
     `${AUTH_SESSION_COOKIE}=${encodeURIComponent(sessionId)}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
-    `Max-Age=${COOKIE_MAX_AGE_SECONDS}`
+    `Max-Age=${maxAge}`
   ];
 
   if (isProduction) {

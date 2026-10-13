@@ -692,9 +692,9 @@ describe("admin foundation API behavior", () => {
     await configController.updateNotificationTemplate(
       { currentUser: adminUser },
       {
-        key: "user_created",
-        subject: "Tài khoản {{username}} đã được tạo",
-        body: "Xin chào {{displayName}}, tài khoản {{username}} đã sẵn sàng."
+        key: "researcher_account_activation",
+        subject: "Kích hoạt tài khoản {{displayName}}",
+        body: "Xin chào {{displayName}}, mở {{activationUrl}} trước {{expiresAt}}."
       }
     );
     await assert.rejects(
@@ -702,7 +702,7 @@ describe("admin foundation API behavior", () => {
         configController.updateNotificationTemplate(
           { currentUser: adminUser },
           {
-            key: "user_created",
+            key: "researcher_account_activation",
             subject: "Tài khoản {{rawPassword}}",
             body: "Nội dung {{unknown}}"
           }
@@ -714,7 +714,7 @@ describe("admin foundation API behavior", () => {
         configController.updateNotificationTemplate(
           { currentUser: adminUser },
           {
-            key: "login_notice",
+            key: "user_created",
             subject: "Thông báo",
             body: "Nội dung"
           }
@@ -726,9 +726,9 @@ describe("admin foundation API behavior", () => {
     await configController.updateNotificationTemplate(
       { currentUser: adminUser },
       {
-        key: "user_created",
-        subject: "Tài khoản {{username}} đã cập nhật",
-        body: "Xin chào {{displayName}}, tài khoản {{username}} đã cập nhật."
+        key: "researcher_account_activation",
+        subject: "Kích hoạt lại tài khoản {{displayName}}",
+        body: "Xin chào {{displayName}}, mở {{activationUrl}}."
       }
     );
     assert.equal(prisma.store.notificationTemplates[0].status, "inactive");
@@ -739,7 +739,7 @@ describe("admin foundation API behavior", () => {
     );
     assert.deepEqual(
       prisma.store.notificationTemplates.map((record) => `${record.key}:${record.subject}`),
-      ["user_created:Tài khoản {{username}} đã cập nhật"]
+      ["researcher_account_activation:Kích hoạt lại tài khoản {{displayName}}"]
     );
   });
 

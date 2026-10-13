@@ -43,6 +43,11 @@ export type SystemParameter = {
   label: string;
 };
 
+export type ConfigDefinitions = {
+  parameters: Array<{ key: string; label: string; hint: string }>;
+  templates: Array<{ key: string; label: string; placeholders: string[] }>;
+};
+
 export type NotificationTemplate = {
   id: string;
   key: string;
@@ -202,14 +207,16 @@ export async function softDeleteCatalogItem(itemId: string) {
 }
 
 export async function loadAdminConfig() {
-  const [parameters, templates] = await Promise.all([
+  const [parameters, templates, definitions] = await Promise.all([
     requestJson<{ parameters: SystemParameter[] }>("/config/system-parameters"),
-    requestJson<{ templates: NotificationTemplate[] }>("/config/notification-templates")
+    requestJson<{ templates: NotificationTemplate[] }>("/config/notification-templates"),
+    requestJson<ConfigDefinitions>("/config/definitions")
   ]);
 
   return {
     parameters: parameters.parameters,
-    templates: templates.templates
+    templates: templates.templates,
+    definitions
   };
 }
 
