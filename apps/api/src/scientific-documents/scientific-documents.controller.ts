@@ -15,7 +15,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { uploadInterceptorOptions } from "../modules/files/upload-limits.js";
-import { Readable } from "node:stream";
+import { sendObjectContent } from "../modules/files/send-object-content.js";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
 import type {
@@ -49,18 +49,6 @@ function toAsciiFilename(value: string) {
 
 function buildContentDisposition(fileName: string) {
   return `attachment; filename="${toAsciiFilename(fileName)}"; filename*=UTF-8''${encodeRfc5987Value(fileName)}`;
-}
-
-async function streamToBuffer(stream: Readable | Buffer): Promise<Buffer> {
-  if (Buffer.isBuffer(stream)) {
-    return stream;
-  }
-  return new Promise<Buffer>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    stream.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    stream.on("error", reject);
-    stream.on("end", () => resolve(Buffer.concat(chunks)));
-  });
 }
 
 @Controller("api/v1/scientific-documents")
@@ -124,11 +112,8 @@ export class ScientificDocumentsController {
     @Res() response: DownloadResponse
   ) {
     const file = await this.service.downloadDocument(request.currentUser!, id);
-    const content = await streamToBuffer(file.stream);
-
     response.setHeader("Content-Type", file.mimeType);
-    response.setHeader("Content-Length", String(content.length));
     response.setHeader("Content-Disposition", buildContentDisposition(file.fileName));
-    response.send(content);
+    await sendObjectContent(response, file.stream, file.size);
   }
 }

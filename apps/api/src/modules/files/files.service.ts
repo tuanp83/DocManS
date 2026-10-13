@@ -5,7 +5,6 @@ import { ResearchProposalsService } from "../../research-proposals/research-prop
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { Readable } from "node:stream";
 import { AuditLogService } from "../../auth/audit-log.service.js";
 import type { SafeUserContext } from "../../auth/auth.types.js";
 import type { ObjectStorage } from "../../infrastructure/minio/minio-object-storage.service.js";
@@ -91,62 +90,44 @@ export class FilesService {
   ) {}
 
   private transactional = false;
-  private uploadedObjectKey?: string;
 
   private async mutate<T>(actor: SafeUserContext, proposalId: string, expected: unknown, work: (service: FilesService, actor: SafeUserContext) => Promise<T>): Promise<T> {
-    let uploadedKey: string | undefined;
-    try {
-      return await runProposalMutation(this.prisma, actor, proposalId, expected, async (tx, currentActor) => {
-        const service = new FilesService(tx, this.objectStorage, new AuditLogService(tx), new ProposalParticipationService(tx), new ProposalReviewAccessService(tx), this.config, new ProposalManagementOfficerService(tx));
-        service.transactional = true;
-        try { return await work(service, currentActor); } finally { uploadedKey = service.uploadedObjectKey; }
-      });
-    } catch (error) {
-      if (uploadedKey) await this.objectStorage.deleteObject?.(uploadedKey);
-      throw error;
-    }
+    return runProposalMutation(this.prisma, actor, proposalId, expected, async (tx, currentActor) => {
+      const service = new FilesService(tx, this.objectStorage, new AuditLogService(tx), new ProposalParticipationService(tx), new ProposalReviewAccessService(tx), this.config, new ProposalManagementOfficerService(tx));
+      service.transactional = true;
+      return work(service, currentActor);
+    });
   }
 
   /** Giao dịch cho tệp gắn với đề tài đang thực hiện (chuyển từ nhánh chính): khoá đề tài, kiểm tra contextVersion. */
   private async mutateProject<T>(actor: SafeUserContext, projectId: string, expected: unknown, work: (service: FilesService, actor: SafeUserContext) => Promise<T>): Promise<T> {
-    let uploadedKey: string | undefined;
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.id} FOR SHARE`;
-        await tx.$queryRaw`SELECT id FROM approved_projects WHERE id = ${projectId} FOR UPDATE`;
-        const user = await tx.user.findUnique({ where: { id: actor.id }, include: { organizationScopes: { include: { organizationUnit: true } } } });
-        const project = await tx.approvedProject.findUnique({ where: { id: projectId } });
-        if (!user || user.status !== "active") throw new ForbiddenException({ code: "ACCOUNT_INACTIVE" });
-        if (!project) throw new NotFoundException({ message: "Không tìm thấy đề tài." });
-        const current = projectContextVersion(project);
-        if (!expected || typeof expected !== "object" || Object.entries(current).some(([key, value]) => (expected as Record<string, unknown>)[key] !== value)) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
-        const currentActor: SafeUserContext = { id: user.id, username: user.username ?? "", displayName: user.displayName, systemRole: user.systemRole as SafeUserContext["systemRole"], unit: user.unit, organizationScopes: user.organizationScopes.filter((scope) => scope.organizationUnit.status === "active").map((scope) => ({ id: scope.organizationUnit.id, code: scope.organizationUnit.code, name: scope.organizationUnit.name })) };
-        const client = joinedTransaction(tx);
-        const scoped = new FilesService(client, this.objectStorage, new AuditLogService(client), new ProposalParticipationService(client), new ProposalReviewAccessService(client), this.config);
-        scoped.transactional = true;
-        try { return await work(scoped, currentActor); } finally { uploadedKey = scoped.uploadedObjectKey; }
-      }, { isolationLevel: "Serializable", timeout: 15000 });
-    } catch (error) {
-      if (uploadedKey) await this.objectStorage.deleteObject?.(uploadedKey);
-      throw error;
-    }
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.id} FOR SHARE`;
+      await tx.$queryRaw`SELECT id FROM approved_projects WHERE id = ${projectId} FOR UPDATE`;
+      const user = await tx.user.findUnique({ where: { id: actor.id }, include: { organizationScopes: { include: { organizationUnit: true } } } });
+      const project = await tx.approvedProject.findUnique({ where: { id: projectId } });
+      if (!user || user.status !== "active") throw new ForbiddenException({ code: "ACCOUNT_INACTIVE" });
+      if (!project) throw new NotFoundException({ message: "Không tìm thấy đề tài." });
+      const current = projectContextVersion(project);
+      if (!expected || typeof expected !== "object" || Object.entries(current).some(([key, value]) => (expected as Record<string, unknown>)[key] !== value)) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
+      const currentActor: SafeUserContext = { id: user.id, username: user.username ?? "", displayName: user.displayName, systemRole: user.systemRole as SafeUserContext["systemRole"], unit: user.unit, organizationScopes: user.organizationScopes.filter((scope) => scope.organizationUnit.status === "active").map((scope) => ({ id: scope.organizationUnit.id, code: scope.organizationUnit.code, name: scope.organizationUnit.name })) };
+      const client = joinedTransaction(tx);
+      const scoped = new FilesService(client, this.objectStorage, new AuditLogService(client), new ProposalParticipationService(client), new ProposalReviewAccessService(client), this.config);
+      scoped.transactional = true;
+      return work(scoped, currentActor);
+    }, { isolationLevel: "Serializable", timeout: 15000 });
   }
 
   async uploadFile(actor: SafeUserContext, input: FileUploadInput): Promise<any> {
-    if (!this.transactional && input.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) return this.mutateProject(actor, input.relatedEntityId, input.contextVersion, (s, a) => s.uploadFile(a, input));
-    if (!this.transactional) return this.mutate(actor, input.relatedEntityId, input.contextVersion, (s, a) => s.uploadFile(a, input));
     this.assertSupportedEntity(input.relatedEntityType);
     const originalFileName = this.readFileName(input.originalFileName ?? input.fileName);
     const description = this.readDescription(input.description);
     this.assertUploadInput({ ...input, fileName: originalFileName });
-    await this.assertCanUpload(actor, input.relatedEntityType, input.relatedEntityId, input.filePurpose);
-    if (input.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE) {
-      // Thành viên phụ trách mốc chỉ được tải tệp đóng góp; chủ nhiệm quyết định minh chứng chính thức.
-      const project = await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, input.relatedEntityId);
-      const isPi = project.viewerAuthorization.viewerRelationships.some((relationship: { type: string }) => relationship.type === "TOPIC_PI");
-      if (!isPi && input.filePurpose !== "PROJECT_CONTRIBUTION" && !MANAGER_PROJECT_FILE_PURPOSES.includes(input.filePurpose)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
-    }
+    // Kiểm tra quyền sớm, ngoài giao dịch: yêu cầu bị từ chối không tốn kết nối DB lẫn dung lượng MinIO.
+    await this.assertUploadAllowed(actor, input);
 
+    // Đẩy tệp lên MinIO NGOÀI giao dịch: giao dịch chỉ giữ kết nối và khoá hồ sơ trong vài truy vấn
+    // ghi metadata, không phụ thuộc thời gian truyền tệp (tránh cạn pool khi nhiều người tải cùng lúc).
     const fileId = randomUUID();
     const objectKey = this.createObjectKey({ ...input, fileName: originalFileName }, fileId);
     await this.objectStorage.putObject({
@@ -156,65 +137,78 @@ export class FilesService {
       sizeBytes: input.sizeBytes
     });
 
-    this.uploadedObjectKey = objectKey;
-    let record: FileRecord;
+    const prepared = { fileId, objectKey, originalFileName, description };
+    const work = (service: FilesService, currentActor: SafeUserContext) => service.recordUpload(currentActor, input, prepared);
     try {
-      record = (await this.prisma.$transaction(async (tx) => {
-        // Object storage has no transaction with Postgres. Rechecking here ensures a lifecycle
-        // change between the initial authorization and metadata write rolls back the usable file.
-        await this.assertCanUpload(actor, input.relatedEntityType, input.relatedEntityId, input.filePurpose);
-
-        // Tệp minh chứng đề tài và chứng từ giải ngân là nhiều tệp độc lập cùng một mục đích: không
-        // được "thay thế" nhau (nếu không, minh chứng đã gắn vào báo cáo hay mốc trước sẽ mất).
-        const versioned = input.relatedEntityType === RESEARCH_PROPOSAL_ENTITY_TYPE && input.filePurpose !== DISBURSEMENT_VOUCHER_PURPOSE;
-        // Find existing file for versioning
-        const existingFile = !versioned ? null : await tx.fileRecord.findFirst({
-          where: {
-            relatedEntityType: input.relatedEntityType,
-            relatedEntityId: input.relatedEntityId,
-            filePurpose: input.filePurpose,
-            status: "active",
-            deletedAt: null
-          },
-          orderBy: { version: "desc" }
-        });
-
-        const newVersion = existingFile ? existingFile.version + 1 : 1;
-
-        if (existingFile) {
-          await tx.fileRecord.update({
-            where: { id: existingFile.id },
-            data: { status: "superseded" }
-          });
-        }
-
-        return tx.fileRecord.create({
-          data: {
-            id: fileId,
-            relatedEntityType: input.relatedEntityType,
-            relatedEntityId: input.relatedEntityId,
-            filePurpose: input.filePurpose,
-            originalFileName,
-            version: newVersion,
-            description,
-            mimeType: input.mimeType,
-            sizeBytes: input.sizeBytes,
-            storageBucket: this.config.bucketName ?? "rtms-files",
-            storageObjectKey: objectKey,
-            uploadedById: actor.id,
-            status: "active"
-          } as never,
-          include: {
-            uploadedBy: {
-              select: { displayName: true }
-            }
-          }
-        });
-      })) as FileRecord;
+      return input.relatedEntityType === APPROVED_PROJECT_ENTITY_TYPE
+        ? await this.mutateProject(actor, input.relatedEntityId, input.contextVersion, work)
+        : await this.mutate(actor, input.relatedEntityId, input.contextVersion, work);
     } catch (error) {
-      await this.objectStorage.deleteObject?.(objectKey);
+      await this.objectStorage.deleteObject?.(objectKey).catch(() => undefined);
       throw error;
     }
+  }
+
+  /** Thành viên phụ trách mốc chỉ được tải tệp đóng góp; chủ nhiệm quyết định minh chứng chính thức. */
+  private async assertUploadAllowed(actor: SafeUserContext, input: FileUploadInput) {
+    await this.assertCanUpload(actor, input.relatedEntityType, input.relatedEntityId, input.filePurpose);
+    if (input.relatedEntityType !== APPROVED_PROJECT_ENTITY_TYPE) return;
+    const project = await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, input.relatedEntityId);
+    const isPi = project.viewerAuthorization.viewerRelationships.some((relationship: { type: string }) => relationship.type === "TOPIC_PI");
+    if (!isPi && input.filePurpose !== "PROJECT_CONTRIBUTION" && !MANAGER_PROJECT_FILE_PURPOSES.includes(input.filePurpose)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
+  }
+
+  /** Chạy trong giao dịch đã khoá hồ sơ/đề tài: kiểm tra lại quyền rồi ghi metadata cho tệp đã nằm trên MinIO. */
+  private async recordUpload(actor: SafeUserContext, input: FileUploadInput, prepared: { fileId: string; objectKey: string; originalFileName: string; description: string | null }) {
+    // Object storage has no transaction with Postgres. Rechecking here ensures a lifecycle
+    // change between the initial authorization and metadata write rolls back the usable file.
+    await this.assertUploadAllowed(actor, input);
+
+    // Tệp minh chứng đề tài và chứng từ giải ngân là nhiều tệp độc lập cùng một mục đích: không
+    // được "thay thế" nhau (nếu không, minh chứng đã gắn vào báo cáo hay mốc trước sẽ mất).
+    const versioned = input.relatedEntityType === RESEARCH_PROPOSAL_ENTITY_TYPE && input.filePurpose !== DISBURSEMENT_VOUCHER_PURPOSE;
+    const existingFile = !versioned ? null : await this.prisma.fileRecord.findFirst({
+      where: {
+        relatedEntityType: input.relatedEntityType,
+        relatedEntityId: input.relatedEntityId,
+        filePurpose: input.filePurpose,
+        status: "active",
+        deletedAt: null
+      },
+      orderBy: { version: "desc" }
+    });
+
+    const newVersion = existingFile ? existingFile.version + 1 : 1;
+
+    if (existingFile) {
+      await this.prisma.fileRecord.update({
+        where: { id: existingFile.id },
+        data: { status: "superseded" }
+      });
+    }
+
+    const record = (await this.prisma.fileRecord.create({
+      data: {
+        id: prepared.fileId,
+        relatedEntityType: input.relatedEntityType,
+        relatedEntityId: input.relatedEntityId,
+        filePurpose: input.filePurpose,
+        originalFileName: prepared.originalFileName,
+        version: newVersion,
+        description: prepared.description,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        storageBucket: this.config.bucketName ?? "rtms-files",
+        storageObjectKey: prepared.objectKey,
+        uploadedById: actor.id,
+        status: "active"
+      } as never,
+      include: {
+        uploadedBy: {
+          select: { displayName: true }
+        }
+      }
+    })) as FileRecord;
 
     await this.auditLog.record({
       action: "upload-file",
@@ -515,17 +509,4 @@ export class FilesService {
       canDelete: options.canMutate
     };
   }
-}
-
-export function streamToBuffer(stream: Readable | Buffer) {
-  if (Buffer.isBuffer(stream)) {
-    return Promise.resolve(stream);
-  }
-
-  return new Promise<Buffer>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    stream.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    stream.on("error", reject);
-    stream.on("end", () => resolve(Buffer.concat(chunks)));
-  });
 }

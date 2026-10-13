@@ -8,6 +8,7 @@ const controllers = [
   new URL("../apps/api/src/scientific-documents/scientific-documents.controller.ts", import.meta.url),
   new URL("../apps/api/src/student-research/student-research.controller.ts", import.meta.url)
 ];
+const multiFileControllers = [new URL("../apps/api/src/proposal-intake-periods/proposal-intake-periods.controller.ts", import.meta.url)];
 
 describe("upload size limits are enforced while streaming, before the file is buffered", () => {
   it("reads FILE_MAX_UPLOAD_BYTES and falls back to 10 MB for missing or invalid values", () => {
@@ -22,6 +23,7 @@ describe("upload size limits are enforced while streaming, before the file is bu
     assert.equal(limits.fileSize, 1234);
     assert.equal(limits.files, 1);
     assert.ok(limits.fields > 0 && limits.fieldSize > 0 && limits.parts > 0);
+    assert.equal(uploadInterceptorOptions(1234, 20).limits.files, 20);
   });
 
   it("every FileInterceptor in the API uses the shared limits", async () => {
@@ -30,6 +32,12 @@ describe("upload size limits are enforced while streaming, before the file is bu
       const interceptors = source.match(/FileInterceptor\([^)]*\)/g) ?? [];
       assert.ok(interceptors.length > 0, url.pathname);
       for (const call of interceptors) assert.match(call, /uploadInterceptorOptions\(\)/, `${url.pathname}: ${call}`);
+    }
+    for (const url of multiFileControllers) {
+      const source = await readFile(url, "utf8");
+      const interceptors = source.match(/FilesInterceptor\(.*\)\)/g) ?? [];
+      assert.ok(interceptors.length > 0, url.pathname);
+      for (const call of interceptors) assert.match(call, /uploadInterceptorOptions\(/, `${url.pathname}: ${call}`);
     }
   });
 });

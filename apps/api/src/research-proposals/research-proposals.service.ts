@@ -20,7 +20,8 @@ import {
   isInternalResearcherEligible,
   isResearchManagementHead,
   isResearchManagementStaff,
-  isSystemAdmin
+  isSystemAdmin,
+  readableProposalCandidatesWhere
 } from "../proposals-shared/proposal-access.js";
 import {
   evaluateProposalConflict,
@@ -219,8 +220,10 @@ export class ResearchProposalsService {
   }
 
   async listProposals(actor: SafeUserContext, query?: any) {
+    if (!actor?.id) return [];
     const asOf = new Date();
-    const records = (await this.prisma.researchProposal.findMany({
+    const candidates = (await this.prisma.researchProposal.findMany({
+      where: readableProposalCandidatesWhere(actor),
       orderBy: { createdAt: "desc" },
       include: {
         owner: { select: { displayName: true } },
@@ -228,14 +231,19 @@ export class ResearchProposalsService {
       }
     })) as ResearchProposalRecord[];
 
-    const [participationByProposal, reviewAccessByProposal, managementOfficerByProposal, submissionEvents, summaryRecords] = await Promise.all([
-      this.participation.resolveForProposals(actor?.id, records, asOf),
+    const [participationByProposal, reviewAccessByProposal, managementOfficerByProposal] = await Promise.all([
+      this.participation.resolveForProposals(actor.id, candidates, asOf),
       this.reviewAccess.resolveForProposals(
-        actor?.id,
-        records.map((proposal) => proposal.id),
+        actor.id,
+        candidates.map((proposal) => proposal.id),
         asOf
       ),
-      this.managementOfficers.resolveForProposals(records.map((proposal) => proposal.id), asOf),
+      this.managementOfficers.resolveForProposals(candidates.map((proposal) => proposal.id), asOf)
+    ]);
+    const records = candidates.filter((proposal) => canReadProposal(actor, proposal, participationByProposal.get(proposal.id), reviewAccessByProposal.get(proposal.id), managementOfficerByProposal.get(proposal.id)));
+
+    // Chỉ tải sự kiện nộp (snapshot JSON lớn) và tổng hợp đánh giá cho hồ sơ người dùng được xem.
+    const [submissionEvents, summaryRecords] = await Promise.all([
       // Kiểm tra đầy đủ chỉ có giá trị cho đúng lần nộp hiện tại (submission-evidence.ts); chỉ cần với hồ sơ đã nộp.
       this.prisma.proposalSubmissionEvent.findMany({
         where: { proposalId: { in: records.filter((proposal) => proposal.submittedAt && COMPLETENESS_RELEVANT_STATUSES.includes(proposal.status)).map((proposal) => proposal.id) } },
@@ -253,7 +261,6 @@ export class ResearchProposalsService {
     const summaryStatusByProposal = new Map((summaryRecords as Array<{ proposalId: string; status: string }>).map((summary) => [summary.proposalId, summary.status]));
 
     let results = records
-      .filter((proposal) => canReadProposal(actor, proposal, participationByProposal.get(proposal.id), reviewAccessByProposal.get(proposal.id), managementOfficerByProposal.get(proposal.id)))
       .map((proposal) =>
         this.toProposalResponse(proposal, actor, participationByProposal.get(proposal.id), reviewAccessByProposal.get(proposal.id), completenessChecked.has(proposal.id), managementOfficerByProposal.get(proposal.id), summaryStatusByProposal.get(proposal.id) ?? null)
       );

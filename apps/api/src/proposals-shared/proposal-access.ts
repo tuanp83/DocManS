@@ -71,6 +71,20 @@ export function getOrganizationScopeIds(user?: SafeUserContext) {
   return user?.organizationScopes?.map((scope) => scope.id).filter(Boolean) ?? [];
 }
 
+/**
+ * Điều kiện lọc thô ở DB cho danh sách hồ sơ: `canReadProposal` chỉ cho xem hồ sơ thuộc phạm vi đơn vị
+ * của người dùng, hoặc hồ sơ người dùng có dòng phân công phản biện. Điều kiện này rộng hơn (không loại
+ * hồ sơ nào `canReadProposal` cho phép); quyết định cuối cùng vẫn là `canReadProposal`.
+ */
+export function readableProposalCandidatesWhere(user: SafeUserContext) {
+  return {
+    OR: [
+      { hostOrganizationUnitId: { in: getOrganizationScopeIds(user) } },
+      { reviewAssignments: { some: { reviewerUserId: user.id } } }
+    ]
+  };
+}
+
 export function assertHasOrganizationScope(user: SafeUserContext, organizationUnitId: string) {
   if (!getOrganizationScopeIds(user).includes(organizationUnitId)) {
     throw new ForbiddenException({ message: "Không có quyền thao tác trong phạm vi đơn vị này." });

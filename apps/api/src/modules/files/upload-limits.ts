@@ -13,14 +13,14 @@ export function readMaxUploadBytes(value = process.env.FILE_MAX_UPLOAD_BYTES): n
  * yêu cầu vài GB có thể làm sập API. Với `limits`, multer dừng ngay khi vượt ngưỡng và Nest trả 413
  * (PayloadTooLargeException). Service vẫn kiểm tra lại kích thước, đuôi tệp và MIME như trước.
  */
-export function uploadInterceptorOptions(maxBytes = readMaxUploadBytes()) {
+export function uploadInterceptorOptions(maxBytes = readMaxUploadBytes(), maxFiles = 1) {
   return {
     limits: {
       fileSize: maxBytes,
-      files: 1,
+      files: maxFiles,
       fields: 30,
       fieldSize: 64 * 1024,
-      parts: 40
+      parts: 39 + maxFiles
     }
   };
 }

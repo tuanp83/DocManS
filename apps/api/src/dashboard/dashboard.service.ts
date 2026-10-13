@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
-import { canReadProposal } from "../proposals-shared/proposal-access.js";
+import { canReadProposal, readableProposalCandidatesWhere } from "../proposals-shared/proposal-access.js";
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
 import { ProposalManagementOfficerService } from "../proposals-shared/proposal-management-officer.service.js";
 import { ProposalParticipationService } from "../research-proposals/proposal-participation.service.js";
@@ -55,6 +55,7 @@ export class DashboardService {
     }
 
     const records = (await this.prisma.researchProposal.findMany({
+      where: readableProposalCandidatesWhere(actor),
       orderBy: { submittedAt: "desc" },
       select: {
         id: true,
