@@ -513,38 +513,35 @@ export async function getProposalAuditLogs(id: string) {
   return response.auditLogs;
 }
 
+/** Sản phẩm dự kiến của hồ sơ đề xuất. Sản phẩm hoàn thành và nghiệm thu từng sản phẩm nằm ở đề tài. */
 export interface ProposalDeliverable {
   id: string;
   proposalId: string;
   type: string;
   title: string;
   description?: string | null;
-  proofFileName?: string | null;
-  proofStorageKey?: string | null;
-  publishedAt?: string | null;
   status: string;
   createdById: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export async function getProposalDeliverables(proposalId: string): Promise<ProposalDeliverable[]> {
-  return requestJson<ProposalDeliverable[]>(`/proposals/${proposalId}/deliverables`);
+export const DELIVERABLE_TYPES = ["Bài báo khoa học", "Bằng sáng chế", "Sản phẩm công nghệ", "Sách chuyên khảo"] as const;
+
+export type DeliverableInput = { type: string; title: string; description?: string | null };
+
+export async function getProposalDeliverables(proposalId: string) {
+  return requestJson<{ deliverables: ProposalDeliverable[]; canEdit: boolean }>(`/proposals/${proposalId}/deliverables`);
 }
 
-export async function createProposalDeliverable(
-  proposalId: string,
-  data: {
-    type: string;
-    title: string;
-    description?: string;
-    proofFileName?: string;
-    proofStorageKey?: string;
-    publishedAt?: string;
-  }
-): Promise<ProposalDeliverable> {
-  return requestJson<ProposalDeliverable>(`/proposals/${proposalId}/deliverables`, {
-    method: "POST",
-    body: JSON.stringify(data)
-  });
+export async function createProposalDeliverable(proposalId: string, data: DeliverableInput) {
+  return (await requestJson<{ deliverable: ProposalDeliverable }>(`/proposals/${proposalId}/deliverables`, { method: "POST", body: JSON.stringify(data) })).deliverable;
+}
+
+export async function updateProposalDeliverable(proposalId: string, deliverableId: string, data: Partial<DeliverableInput>) {
+  return (await requestJson<{ deliverable: ProposalDeliverable }>(`/proposals/${proposalId}/deliverables/${deliverableId}`, { method: "PATCH", body: JSON.stringify(data) })).deliverable;
+}
+
+export async function deleteProposalDeliverable(proposalId: string, deliverableId: string) {
+  return requestJson<{ success: boolean }>(`/proposals/${proposalId}/deliverables/${deliverableId}`, { method: "DELETE" });
 }

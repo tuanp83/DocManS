@@ -17,6 +17,8 @@ import { ProposalReviewAccessService } from "../dist/apps/api/proposals-shared/p
 import { ProposalManagementOfficerService } from "../dist/apps/api/proposals-shared/proposal-management-officer.service.js";
 import { ResearchProposalsService } from "../dist/apps/api/research-proposals/research-proposals.service.js";
 import { FilesService } from "../dist/apps/api/modules/files/files.service.js";
+import { ProposalDeliverablesService } from "../dist/apps/api/research-proposals/proposal-deliverables.service.js";
+import { createDeliverablePipe, updateDeliverablePipe } from "../dist/apps/api/research-proposals/proposal-deliverables.dto.js";
 import { createEvaluationTables } from "./helpers/evaluation-prisma.mjs";
 
 const adminUser = {
@@ -1020,6 +1022,49 @@ describe("EP-02 proposal intake and submission behavior", () => {
     await upload("thuyet-minh.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     const readiness = await proposalService.getReadiness(piUser, draft.id);
     assert.equal(readiness.missingFiles.some((item) => item.code === "proposal-form"), true, "the superseded PDF no longer satisfies the item");
+  });
+
+  it("planned deliverables: the PI edits them while drafting, they are locked after submission and recorded in its evidence", async () => {
+    const prisma = createEp02Prisma();
+    const rows = [];
+    prisma.proposalDeliverable = {
+      findMany: async ({ where }) => rows.filter((row) => row.proposalId === where.proposalId).map(({ id, type, title, description, ...rest }) => ({ id, type, title, description, ...rest })),
+      findFirst: async ({ where }) => rows.find((row) => row.id === where.id && row.proposalId === where.proposalId) ?? null,
+      create: async ({ data }) => { const row = { id: `deliverable-${rows.length + 1}`, status: "draft", createdAt: new Date(), updatedAt: new Date(), ...data }; rows.push(row); return row; },
+      update: async ({ where, data }) => Object.assign(rows.find((row) => row.id === where.id), data, { updatedAt: new Date() }),
+      delete: async ({ where }) => { rows.splice(rows.findIndex((row) => row.id === where.id), 1); }
+    };
+    const auditLog = createAuditLog();
+    const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
+    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
+    const deliverables = new ProposalDeliverablesService(prisma, proposalService, auditLog);
+    const draft = await createDraft({ prisma, intakeService, proposalService });
+
+    const article = await deliverables.createDeliverable(draft.id, createDeliverablePipe.transform({ type: "Bài báo khoa học", title: "02 bài báo trong nước" }), piUser);
+    const patent = await deliverables.createDeliverable(draft.id, createDeliverablePipe.transform({ type: "Bằng sáng chế", title: "01 giải pháp hữu ích" }), piUser);
+    await deliverables.updateDeliverable(draft.id, article.id, updateDeliverablePipe.transform({ description: "Tạp chí Y dược lâm sàng 108" }), piUser);
+    await deliverables.deleteDeliverable(draft.id, patent.id, piUser);
+    await assert.rejects(() => deliverables.createDeliverable(draft.id, { type: "Bài báo khoa học", title: "Không phải chủ nhiệm" }, otherPiUser), ForbiddenException);
+
+    const view = await deliverables.getDeliverables(draft.id, piUser);
+    assert.equal(view.canEdit, true);
+    assert.deepEqual(view.deliverables.map((item) => [item.title, item.description]), [["02 bài báo trong nước", "Tạp chí Y dược lâm sàng 108"]]);
+    assert.ok(["create-proposal-deliverable", "update-proposal-deliverable", "delete-proposal-deliverable"].every((action) => auditLog.records.some((log) => log.action === action)));
+
+    // Ngày công bố, minh chứng, loại lạ: không thuộc sản phẩm dự kiến của hồ sơ đề xuất.
+    assert.throws(() => createDeliverablePipe.transform({ type: "Bài báo khoa học", title: "X", publishedAt: "2026-01-01" }), /sản phẩm hoàn thành/);
+    assert.throws(() => createDeliverablePipe.transform({ type: "Poster", title: "X" }), BadRequestException);
+
+    const filesService = createFilesService({ prisma, auditLog });
+    for (const [purpose, name] of [["proposal-form", "thuyet-minh.pdf"], ["budget-form", "du-toan.pdf"]]) {
+      await filesService.uploadFile(piUser, { relatedEntityType: "research_proposal", relatedEntityId: draft.id, filePurpose: purpose, fileName: name, mimeType: "application/pdf", sizeBytes: 1000, content: Buffer.alloc(1000, "p") });
+    }
+    await proposalService.submitProposal(piUser, draft.id);
+
+    assert.equal((await deliverables.getDeliverables(draft.id, piUser)).canEdit, false);
+    await assert.rejects(() => deliverables.createDeliverable(draft.id, { type: "Bài báo khoa học", title: "Thêm sau khi nộp" }, piUser), /nháp hoặc đang được yêu cầu bổ sung/);
+    const evidence = prisma.store.submissionEvents.at(-1).snapshot;
+    assert.deepEqual(evidence.deliverables.map((item) => item.title), ["02 bài báo trong nước"]);
   });
 
   it("submit proposal is an explicit readiness-gated state transition with history and edit lock", async () => {
