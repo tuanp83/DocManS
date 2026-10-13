@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { MinioObjectStorageService } from "../infrastructure/minio/minio-object-storage.service.js";
@@ -13,6 +13,7 @@ import type {
   UploadedDocumentFile
 } from "./scientific-documents.dto.js";
 
+const SCIENTIFIC_DOCUMENTS_FILE_CONFIG = "SCIENTIFIC_DOCUMENTS_FILE_CONFIG";
 const MANAGER_ROLES: string[] = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD", "SYSTEM_ADMIN"];
 
 /** Ngày từ DTO đã kiểm tra: chuỗi rỗng = xoá ngày. */
@@ -26,7 +27,8 @@ export class ScientificDocumentsService {
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
     private readonly storage: MinioObjectStorageService = new MinioObjectStorageService(),
-    private readonly fileConfig: FileModuleConfig = defaultFileConfig()
+    // Không phải provider của Nest: chạy thật dùng cấu hình từ biến môi trường, test truyền cấu hình riêng.
+    @Optional() @Inject(SCIENTIFIC_DOCUMENTS_FILE_CONFIG) private readonly fileConfig: FileModuleConfig = defaultFileConfig()
   ) {}
 
   private canManage(actor: SafeUserContext) {
