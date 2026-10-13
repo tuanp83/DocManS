@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SectionCard } from "@/components/ui/section-card";
 import { useSession } from "@/components/auth/session-provider";
@@ -9,6 +10,7 @@ import { ProjectProductsPanel } from "@/components/projects/project-products-pan
 import { ProjectProgressPanel } from "@/components/projects/project-progress-panel";
 import { ProjectSetupForm } from "@/components/projects/project-setup-form";
 import { canProject, getProject, PROJECT_LEVEL_LABELS, listProjectFiles, projectAction, projectCapability, projectDenial, projectFileUrl, projectOfficerCandidates, projectStatusLabel, uploadProjectFile, type ProjectRecord } from "@/lib/projects-api";
+import { projectHistoryLabel } from "@/lib/project-history-labels";
 
 function day(value?: string | null) { return value?.slice(0, 10) ?? ""; }
 function date(value?: string | null) { return value ? new Intl.DateTimeFormat("vi-VN", { timeZone: "UTC" }).format(new Date(value)) : "Chưa có"; }
@@ -98,7 +100,7 @@ export function ProjectDetail({ id }: { id: string }) {
     {!capability ? <p role="alert">Không thể xác minh quyền thao tác. Vui lòng tải lại.</p> : null}
     <div className="button-row"><button className="button" type="button" onClick={() => void refresh()} disabled={busy}>Tải lại đề tài</button></div>
     <SectionCard title={project.title} subtitle={`${project.level && PROJECT_LEVEL_LABELS[project.level] ? `${PROJECT_LEVEL_LABELS[project.level]} · ` : ""}Trạng thái: ${projectStatusLabel(project.status)}`}>
-      <p>Đề xuất nguồn: {project.proposalId}</p><p>Đơn vị chủ trì: {project.hostOrganizationUnit?.name ?? "Chưa có"}</p>
+      <p>Đề xuất nguồn: <Link href={`/proposals/${project.proposalId}`}>Xem hồ sơ đề xuất</Link></p><p>Đơn vị chủ trì: {project.hostOrganizationUnit?.name ?? "Chưa có"}</p>
       <p>Thời gian: {date(project.startDate)} – {date(project.endDate)}. Hạn gần nhất: {date(project.nearestDeadline)} {project.overdue ? "(quá hạn)" : project.approaching ? "(sắp đến hạn)" : ""}</p>
       <p>Chuyên viên phụ trách: {project.officer ? project.officer.officerName ?? project.officer.officerUserId : "Chưa phân công"}</p>
       <h3>Phạm vi đã duyệt</h3><p>{String(project.scope?.summary ?? "Chưa có tóm tắt")}</p>
@@ -130,7 +132,7 @@ export function ProjectDetail({ id }: { id: string }) {
     {allowed("project.finance.read") ? <SectionCard title="Kinh phí và giải ngân" subtitle={project.finance ? `Đã giải ngân ${project.finance.totalDisbursed.toLocaleString("vi-VN")} / ${project.finance.totalBudget.toLocaleString("vi-VN")} đ · đã quyết toán ${project.finance.totalSettled.toLocaleString("vi-VN")} đ` : "Giải ngân, quyết toán theo đợt và chứng từ"}><button className="button" type="button" onClick={() => setDisbursementOpen(true)}>{allowed("project.finance.manage") ? "Cập nhật giải ngân & quyết toán" : "Xem giải ngân & quyết toán"}</button></SectionCard> : null}
     {disbursementOpen ? <MilestoneDisbursementModal isOpen={disbursementOpen} onClose={() => setDisbursementOpen(false)} project={project} currentUserUsername={account?.username} onSuccess={() => void refresh()} /> : null}
 
-    <SectionCard title="Lịch sử đề tài">{!project.history.length ? <p>Chưa có sự kiện.</p> : <ul>{project.history.map((item) => <li key={item.id}>{date(item.createdAt)} · {item.action}{item.reason ? ` · ${item.reason}` : ""}</li>)}</ul>}</SectionCard>
+    <SectionCard title="Lịch sử đề tài">{!project.history.length ? <p>Chưa có sự kiện.</p> : <ul>{project.history.map((item) => <li key={item.id}>{date(item.createdAt)} · {projectHistoryLabel(item.action)}{item.reason ? ` · ${item.reason}` : ""}</li>)}</ul>}</SectionCard>
   </div>;
 }
 

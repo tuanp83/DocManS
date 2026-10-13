@@ -148,8 +148,9 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export async function listProjects(filters?: { overdue?: boolean; approaching?: boolean; health?: HealthLevel }) {
+export async function listProjects(filters?: { overdue?: boolean; approaching?: boolean; health?: HealthLevel; mine?: boolean }) {
   const query = new URLSearchParams();
+  if (filters?.mine) query.set("mine", "true");
   if (filters?.health) query.set("health", filters.health);
   if (filters?.overdue !== undefined) query.set("overdue", String(filters.overdue));
   if (filters?.approaching !== undefined) query.set("approaching", String(filters.approaching));
