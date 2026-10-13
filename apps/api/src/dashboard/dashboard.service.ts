@@ -5,6 +5,7 @@ import { canReadProposal, readableProposalCandidatesWhere } from "../proposals-s
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
 import { ProposalManagementOfficerService } from "../proposals-shared/proposal-management-officer.service.js";
 import { ProposalParticipationService } from "../research-proposals/proposal-participation.service.js";
+import { PROPOSAL_STATUS } from "../proposals-shared/proposal-workflow.js";
 
 export type DashboardProposalRecord = {
   id: string;
@@ -23,8 +24,10 @@ export type DashboardProposalRecord = {
   hostOrganizationUnit: { id: string; name: string } | null;
 };
 
-export const PENDING_STATUSES = ["submitted", "under_review", "checked", "review_in_progress"];
-export const CLOSED_STATUSES = ["approved", "rejected", "completed", "draft"];
+// Theo máy trạng thái thật (proposal-workflow.ts). "Chờ xử lý" là hồ sơ đang chờ phía quản lý/hội đồng/lãnh đạo;
+// hồ sơ "Chờ bổ sung" đang chờ chủ nhiệm nên không tính vào đây.
+export const PENDING_STATUSES: string[] = [PROPOSAL_STATUS.submitted, PROPOSAL_STATUS.resubmitted, PROPOSAL_STATUS.underReview, PROPOSAL_STATUS.readyForApproval];
+export const CLOSED_STATUSES: string[] = [PROPOSAL_STATUS.approved, PROPOSAL_STATUS.rejected, PROPOSAL_STATUS.draft];
 
 export function approvedBudget(record: DashboardProposalRecord) {
   const meta = record.budgetMetadata as { amount?: unknown } | null;
