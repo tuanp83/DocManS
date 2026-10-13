@@ -54,7 +54,9 @@ export default function NotificationsPage() {
       await markNotificationAsRead(id);
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
       setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch {}
+    } catch {
+      // Không chặn người dùng nếu đánh dấu đã đọc thất bại; lần tải sau sẽ đồng bộ lại.
+    }
   }
 
   async function handleMarkAll() {
@@ -62,7 +64,9 @@ export default function NotificationsPage() {
       await markAllNotificationsAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
-    } catch {}
+    } catch {
+      // Không chặn người dùng nếu đánh dấu đã đọc thất bại; lần tải sau sẽ đồng bộ lại.
+    }
   }
 
   const displayedList =

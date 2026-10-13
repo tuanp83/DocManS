@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Req, Res, UploadedFi
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import { buildContentDisposition } from "../modules/files/files.controller.js";
-import { streamToBuffer } from "../modules/files/files.service.js";
+import { sendObjectContent } from "../modules/files/send-object-content.js";
 import { uploadInterceptorOptions } from "../modules/files/upload-limits.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
 import { completeStudentProjectPipe, createStudentProjectPipe, registerStudentProjectPipe, transitionStudentProjectPipe, updateStudentProjectPipe } from "./dto/create-student-project.dto.js";
@@ -64,12 +64,10 @@ export class StudentResearchController {
   @Get(":id/documents/:documentId/download")
   async download(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("documentId") documentId: string, @Res() response: DownloadResponse) {
     const download = await this.studentResearch.downloadDocument(req.currentUser!, id, documentId);
-    const content = await streamToBuffer(download.content);
     response.setHeader("Content-Type", download.mimeType);
-    response.setHeader("Content-Length", String(content.length));
     response.setHeader("Content-Disposition", buildContentDisposition(download.fileName));
     response.setHeader("X-Content-Type-Options", "nosniff");
-    response.send(content);
+    await sendObjectContent(response, download.content, download.sizeBytes);
   }
 
   @Delete(":id/documents/:documentId")

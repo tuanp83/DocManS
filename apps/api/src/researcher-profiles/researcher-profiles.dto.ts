@@ -380,7 +380,7 @@ export const researcherAccountPipe: PipeTransform<unknown, ResearcherAccountInpu
     const allowed = new Set(["contextVersion", "username", "email", "userId", "reason"]);
     if (Object.keys(input).some((key) => !allowed.has(key))) invalid(["body"]);
     const email = text(input, "email", 240);
-    if (email && !/^[A-Za-z0-9.!#$%&'*+\/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(email)) invalid(["email"]);
+    if (email && !/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(email)) invalid(["email"]);
     return { contextVersion: contextVersion(input), username: text(input, "username", 80), email: email?.toLowerCase(), userId: text(input, "userId", 80), reason: text(input, "reason", 500) };
   }
 };

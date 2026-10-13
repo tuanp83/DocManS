@@ -78,20 +78,9 @@ function evaluationPanelPermissions(proposal: ResearchProposal) {
 
 export function ProposalReviewsWorkspace() {
   const { account } = useSession();
-  const [activeTab, setActiveTab] = useState<ActiveTab>("progress");
-  const [proposals, setProposals] = useState<ResearchProposal[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedProposalId, setSelectedProposalId] = useState<string>("");
-  const [progressMap, setProgressMap] = useState<Record<string, ProposalReviewProgress>>({});
-  const [keyword, setKeyword] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [isDecisionModalOpen, setIsDecisionModalOpen] = useState(false);
 
-  // New Modals for Acceptance Council, Disbursement, and IRB
-  const [isIRBModalOpen, setIsIRBModalOpen] = useState(false);
-  const [modalTargetProposal, setModalTargetProposal] = useState<ResearchProposal | null>(null);
-
-  // Chuyên viên QLKH không có quyền Đánh giá hồ sơ
+  // Chuyên viên QLKH không có quyền Đánh giá hồ sơ. Kiểm tra ở component bọc ngoài, trước mọi hook của
+  // màn hình chính: khi phiên tải xong và vai trò đổi, số hook giữa các lần render không được thay đổi.
   if (account?.systemRole === "RESEARCH_MANAGEMENT_STAFF") {
     return (
       <div className="card p-8 border border-amber-200 bg-amber-50/60 rounded-xl max-w-2xl mx-auto my-12 text-center shadow-sm">
@@ -110,6 +99,24 @@ export function ProposalReviewsWorkspace() {
       </div>
     );
   }
+
+  return <ReviewsWorkspaceContent />;
+}
+
+function ReviewsWorkspaceContent() {
+  const { account } = useSession();
+  const [activeTab, setActiveTab] = useState<ActiveTab>("progress");
+  const [proposals, setProposals] = useState<ResearchProposal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedProposalId, setSelectedProposalId] = useState<string>("");
+  const [progressMap, setProgressMap] = useState<Record<string, ProposalReviewProgress>>({});
+  const [keyword, setKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [isDecisionModalOpen, setIsDecisionModalOpen] = useState(false);
+
+  // New Modals for Acceptance Council, Disbursement, and IRB
+  const [isIRBModalOpen, setIsIRBModalOpen] = useState(false);
+  const [modalTargetProposal, setModalTargetProposal] = useState<ResearchProposal | null>(null);
 
   async function loadData() {
     setLoading(true);

@@ -15,6 +15,8 @@ apps/web/.next/
 .codegraph/
 users.md
 _bmad/
+# CSDL SQLite cục bộ còn sót lại (hệ thống dùng PostgreSQL)
+*.db
 # Production secrets and runtime artifacts
 .env.production
 nginx/ssl/

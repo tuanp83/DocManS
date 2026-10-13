@@ -831,7 +831,6 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                   <div className="stm-avatar-container">
                     <div className="stm-avatar-box">
                       {pInfo.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img src={pInfo.avatarUrl} alt={form.fullName || "Ảnh chân dung"} className="stm-avatar-img" />
                       ) : (
                         <div className="stm-avatar-placeholder">

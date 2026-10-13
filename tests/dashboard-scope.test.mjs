@@ -105,7 +105,8 @@ describe("Dashboard and Excel export follow the proposal list visibility filter"
     assert.deepEqual(await readableIds(dashboard, memberR2), ["p1", "p2"], "topic member: participating + own");
     assert.deepEqual(await readableIds(dashboard, reviewer), ["p2"], "reviewer: assigned only");
     assert.deepEqual(await readableIds(dashboard, outsiderB), [], "no relationship: nothing, even in scope");
-    assert.deepEqual(await readableIds(dashboard, adminAB), [], "system role alone grants no record access");
+    // Quản trị hệ thống không được xem dashboard nghiệp vụ toàn trường, kể cả khi có phạm vi đơn vị.
+    await assert.rejects(() => readableIds(dashboard, adminAB), ForbiddenException, "system admin is denied the business dashboard");
     assert.deepEqual(await readableIds(dashboard, staffNoScope), [], "missing scope fails closed");
   });
 

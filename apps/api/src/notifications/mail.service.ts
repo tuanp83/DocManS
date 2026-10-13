@@ -16,7 +16,7 @@ export class MailService {
     const loginUrl = process.env.ACCOUNT_LOGIN_URL?.trim();
     const localHost = /^(localhost|127\.0\.0\.1|::1)$/i.test(host ?? "");
     let validUrl = false;
-    try { const url = new URL(loginUrl ?? ""); validUrl = url.protocol === "https:" || (process.env.NODE_ENV !== "production" && url.protocol === "http:" && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(url.hostname)); } catch {}
+    try { const url = new URL(loginUrl ?? ""); validUrl = url.protocol === "https:" || (process.env.NODE_ENV !== "production" && url.protocol === "http:" && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(url.hostname)); } catch { /* URL không hợp lệ: validUrl giữ false */ }
     if (!host || !from || /[\r\n]/.test(from) || !Number.isInteger(port) || port < 1 || port > 65535 || !validUrl) {
       throw new ServiceUnavailableException({ message: "Chưa cấu hình email cấp tài khoản. Liên hệ quản trị hệ thống.", code: "MAIL_NOT_CONFIGURED" });
     }
