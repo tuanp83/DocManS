@@ -1417,6 +1417,32 @@ describe("ST-3.5 approval decision", () => {
     assert.equal(decided.prisma.store.decisions.length, 1);
   });
 
+  it("budget approval happens only while awaiting or after the decision, by a non-conflicted authority, for a whole VND amount", async () => {
+    const services = createServices();
+    const store = services.prisma.store;
+    const submitted = await createSubmittedProposal(services);
+    await assert.rejects(() => services.decisions.approveBudget(leadershipUser, submitted.id, { approvedBudget: 100000000 }), /chờ phê duyệt hoặc đã được phê duyệt/);
+
+    const { proposal } = await createProposalReadyForApproval(services, {
+      members: [...TEAM, { name: conflictedLeadershipUser.displayName, role: "TOPIC_MEMBER", organization: "Ban Giám Đốc", username: conflictedLeadershipUser.username }]
+    });
+    const stored = () => store.proposals.find((item) => item.id === proposal.id);
+    await assert.rejects(() => services.decisions.approveBudget(conflictedLeadershipUser, proposal.id, { approvedBudget: 100000000 }), BadRequestException);
+    for (const amount of [-1, 1.5, "abc", 2e12]) {
+      await assert.rejects(() => services.decisions.approveBudget(leadershipUser, proposal.id, { approvedBudget: amount }), /số nguyên VND/, String(amount));
+    }
+    assert.equal(stored().budgetMetadata?.approvedAmount, undefined);
+
+    const result = await services.decisions.approveBudget(leadershipUser, proposal.id, { approvedBudget: 150000000, budgetNote: "Ngân sách sự nghiệp" });
+    assert.equal(result.approvedAmount, 150000000);
+    assert.ok(result.contextVersion, "the response carries the new contextVersion");
+    assert.equal(stored().budgetMetadata.approvedAmount, 150000000);
+
+    // Một quyết định phê duyệt kèm kinh phí không hợp lệ bị từ chối, không bỏ qua im lặng.
+    await assert.rejects(() => services.decisions.decide(leadershipUser, proposal.id, "approved", { packageRevision: packageRevision(services, proposal.id), approvedBudget: "abc" }), /số nguyên VND/);
+    assert.equal(stored().status, "ready_for_approval");
+  });
+
   it("AC-ST-3.5-04: self-approval is blocked for participants and for the assigned reviewer", async () => {
     // Leadership who is also a linked participant of the proposal.
     const participating = createServices();

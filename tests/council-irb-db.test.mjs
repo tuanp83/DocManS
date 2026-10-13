@@ -69,6 +69,15 @@ async function newProposal(irbMetadata = undefined) {
   });
 }
 
+/** Proposal whose IRB council is approved and has a submitted member review: ready for a certificate. */
+async function reviewedIrbProposal() {
+  return newProposal({
+    council: { status: "approved", members: [{ userId: memberA.id, displayName: memberA.displayName }, { userId: memberB.id, displayName: memberB.displayName }] },
+    reviews: [{ reviewerId: memberA.id, reviewerName: memberA.displayName, status: "submitted", comment: "Đạt yêu cầu đạo đức", recommendation: "approve" }],
+    certificate: null
+  });
+}
+
 /** Proposal whose IRB council (memberA, memberB) is already approved. */
 async function approvedIrbProposal() {
   return newProposal({
@@ -203,8 +212,8 @@ describe("Council and IRB writes on real PostgreSQL", () => {
   });
 
   it("generates unique IRB-HVQY-YYYY-NNN numbers, keeps the number on re-issue and notifies after commit", async () => {
-    const first = await newProposal();
-    const second = await newProposal();
+    const first = await reviewedIrbProposal();
+    const second = await reviewedIrbProposal();
     notifications.sent.length = 0;
 
     const a = await decisions.updateIRBStatus(irbManager, first.id, { status: "APPROVED", decisionDate: "2026-03-01T00:00:00.000Z" });
@@ -224,28 +233,46 @@ describe("Council and IRB writes on real PostgreSQL", () => {
   });
 
   it("rejects a manual number already held by another proposal with 409 and writes nothing", async () => {
-    const holder = await newProposal();
-    const other = await newProposal();
+    const holder = await reviewedIrbProposal();
+    const other = await reviewedIrbProposal();
     const manual = unique("IRB-MANUAL");
     await decisions.updateIRBStatus(irbManager, holder.id, { status: "APPROVED", certificateNumber: manual });
     notifications.sent.length = 0;
 
     await assert.rejects(decisions.updateIRBStatus(irbManager, other.id, { status: "APPROVED", certificateNumber: manual }), (error) =>
       error instanceof ConflictException && error.getResponse().code === "IRB_CERTIFICATE_NUMBER_TAKEN");
-    assert.equal(await readIrb(other.id), null);
+    assert.equal((await readIrb(other.id)).certificate, null);
     assert.equal(await auditCount(other.id, "update-irb-status"), 0);
     assert.equal(notifications.sent.length, 0, "no notification for a rolled-back certificate");
   });
 
-  it("validates status and number length; REJECTED without a number stores null", async () => {
-    const proposal = await newProposal();
+  it("validates status, number length, dates, risk level and text; REJECTED without a number stores null", async () => {
+    const proposal = await reviewedIrbProposal();
     await assert.rejects(decisions.updateIRBStatus(irbManager, proposal.id, { status: "MAYBE" }), BadRequestException);
     await assert.rejects(decisions.updateIRBStatus(irbManager, proposal.id, { status: "APPROVED", certificateNumber: "x".repeat(101) }), BadRequestException);
-    assert.equal(await readIrb(proposal.id), null);
+    await assert.rejects(decisions.updateIRBStatus(irbManager, proposal.id, { status: "APPROVED", decisionDate: "không phải ngày" }), BadRequestException);
+    await assert.rejects(decisions.updateIRBStatus(irbManager, proposal.id, { status: "APPROVED", decisionDate: "2026-06-01", validUntil: "2026-05-01" }), BadRequestException);
+    await assert.rejects(decisions.updateIRBStatus(irbManager, proposal.id, { status: "APPROVED", riskLevel: "CONTROLLED" }), BadRequestException);
+    await assert.rejects(decisions.updateIRBStatus(irbManager, proposal.id, { status: "APPROVED", ethicsNotes: "x".repeat(5001) }), BadRequestException);
+    assert.equal((await readIrb(proposal.id)).certificate, null);
 
     const rejected = await decisions.updateIRBStatus(irbManager, proposal.id, { status: "REJECTED" });
     assert.equal(rejected.irb.certificate.status, "REJECTED");
     assert.equal(rejected.irb.certificate.certificateNumber, null);
+  });
+
+  it("an IRB certificate needs an approved council with at least one submitted review", async () => {
+    const noCouncil = await newProposal();
+    await assert.rejects(decisions.updateIRBStatus(irbManager, noCouncil.id, { status: "APPROVED" }), /chưa được phê duyệt/);
+    const noReview = await approvedIrbProposal();
+    await assert.rejects(decisions.updateIRBStatus(irbManager, noReview.id, { status: "APPROVED" }), /Chưa có nhận xét/);
+    await assert.rejects(decisions.updateIRBStatus(irbManager, noReview.id, { status: "REJECTED" }), /Chưa có nhận xét/);
+    assert.equal((await readIrb(noReview.id)).certificate, null);
+    assert.equal(await auditCount(noReview.id, "update-irb-status"), 0);
+
+    const issued = await reviewedIrbProposal();
+    await decisions.updateIRBStatus(irbManager, issued.id, { status: "APPROVED" });
+    await assert.rejects(decisions.proposeIrbCouncil(staff, issued.id, { members: [{ userId: memberB.id }] }), /đã có kết luận IRB/);
   });
 
   it("the partial unique index blocks duplicate certificate numbers written directly", async () => {
@@ -259,7 +286,7 @@ describe("Council and IRB writes on real PostgreSQL", () => {
 
   it("IRB numbering restarts at 001 each year and skips a slot already taken by a manual number", async () => {
     const issue = async (date, extra = {}) =>
-      (await decisions.updateIRBStatus(staff, (await newProposal()).id, { status: "APPROVED", decisionDate: date, ...extra })).irb.certificate.certificateNumber;
+      (await decisions.updateIRBStatus(staff, (await reviewedIrbProposal()).id, { status: "APPROVED", decisionDate: date, ...extra })).irb.certificate.certificateNumber;
     assert.equal(await issue("2031-02-01T00:00:00.000Z"), "IRB-HVQY-2031-001");
     assert.equal(await issue("2031-05-01T00:00:00.000Z"), "IRB-HVQY-2031-002");
     assert.equal(await issue("2032-01-15T00:00:00.000Z"), "IRB-HVQY-2032-001");
@@ -268,7 +295,7 @@ describe("Council and IRB writes on real PostgreSQL", () => {
   });
 
   it("concurrent certificate issues on two proposals, each with its own contextVersion, both succeed with distinct numbers", async () => {
-    const [p1, p2] = [await newProposal(), await newProposal()];
+    const [p1, p2] = [await reviewedIrbProposal(), await reviewedIrbProposal()];
     const [v1, v2] = [(await decisions.getIRBInfo(leader, p1.id)).contextVersion, (await decisions.getIRBInfo(leader, p2.id)).contextVersion];
     const [r1, r2] = await Promise.all([
       decisions.updateIRBStatus(staff, p1.id, { status: "APPROVED", decisionDate: "2034-01-01T00:00:00.000Z", contextVersion: v1 }),
