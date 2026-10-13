@@ -21,6 +21,7 @@ import {
   isResearchManagementHead,
   isResearchManagementStaff,
   isSystemAdmin,
+  canReadProposalAuditTrail,
   readableProposalCandidatesWhere
 } from "../proposals-shared/proposal-access.js";
 import {
@@ -908,7 +909,8 @@ export class ResearchProposalsService {
     const { ownerId, id, title, researchFieldCode, proposalTypeCode, objectives, summary, startDate, endDate, budgetMetadata, hostOrganizationUnitId } = proposal;
     return JSON.parse(JSON.stringify({ id, ownerId, title, researchFieldCode, proposalTypeCode, objectives, summary, startDate, endDate, budgetMetadata, hostOrganizationUnitId,
       members: (await this.findMembers(proposal.id)).filter((m) => isRelationshipActiveAt(m, new Date())).map((m) => this.toMemberResponse(m)),
-      attachments: await this.findAttachments(proposal.id), requiredPackage: await this.getRequiredPackageForProposal(proposal) }));
+      // Bằng chứng lần nộp chỉ gồm tệp hiện hành; bản đã bị thay vẫn xem được trong lịch sử tệp.
+      attachments: await this.findActiveAttachments(proposal.id), requiredPackage: await this.getRequiredPackageForProposal(proposal) }));
   }
 
   async completeCheck(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>): Promise<any> {
@@ -1204,6 +1206,10 @@ export class ResearchProposalsService {
     })) as ProposalMemberRecord[];
   }
 
+  private async findActiveAttachments(proposalId: string) {
+    return (await this.findAttachments(proposalId)).filter((attachment) => attachment.status === "active");
+  }
+
   private async findAttachments(proposalId: string, options: { canMutate: boolean } = { canMutate: false }) {
     const records = (await this.prisma.fileRecord.findMany({
       where: { relatedEntityType: "research_proposal", relatedEntityId: proposalId, status: { in: ["active", "superseded"] }, deletedAt: null },
@@ -1231,7 +1237,8 @@ export class ResearchProposalsService {
 
   private async computeReadiness(proposal: ResearchProposalRecord) {
     const requiredPackage = await this.getRequiredPackageForProposal(proposal);
-    const attachments = (await this.findAttachments(proposal.id)).map((attachment) => ({
+    // Chỉ tệp hiện hành: bản cũ hợp lệ đã bị thay không được che một bản mới sai định dạng/dung lượng.
+    const attachments = (await this.findActiveAttachments(proposal.id)).map((attachment) => ({
       ...attachment,
       canEdit: false,
       canDelete: false
@@ -1601,6 +1608,9 @@ export class ResearchProposalsService {
       this.managementOfficers.resolveForProposal(proposalId, asOf)
     ]);
     assertCanReadProposal(actor, proposal, participation, reviewAccess, managementOfficer);
+    if (!canReadProposalAuditTrail(actor, proposal, participation, reviewAccess, managementOfficer)) {
+      throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chỉ cán bộ quản lý hồ sơ được xem nhật ký hành động." });
+    }
 
     // 2. Fetch logs from Prisma
     const logs = await (this.prisma as any).auditLog.findMany({
@@ -1610,11 +1620,11 @@ export class ResearchProposalsService {
       orderBy: {
         timestamp: "desc",
       },
+      take: 500,
       include: {
         actor: {
           select: {
-            displayName: true,
-            credentialEmail: true,
+            displayName: true
           }
         }
       }

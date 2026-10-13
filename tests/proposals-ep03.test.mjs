@@ -431,6 +431,9 @@ function createPrisma() {
         const record = { id: nextId("audit", store.auditLogs), timestamp: new Date(), ...data };
         store.auditLogs.push(record);
         return record;
+      },
+      async findMany({ where, take }) {
+        return store.auditLogs.filter((item) => item.targetEntityId === where.targetEntityId).reverse().slice(0, take ?? Infinity);
       }
     },
     proposalManagementOfficer: {
@@ -1586,6 +1589,43 @@ describe("Evidence binding (mang từ thanhdotien278/DocManS): submission round 
     store.proposals.find((item) => item.id === proposal.id).councilMetadata.status = "submitted";
     await assert.rejects(() => services.decisions.approveCouncil(leadershipUser, proposal.id, {}), /đã chốt hoặc đã trình/);
     assert.equal(store.reviewAssignments.length, 6);
+  });
+
+  it("the proposal action log is for managers only: the PI and assigned reviewers cannot read who did what", async () => {
+    const services = createServices();
+    const { proposal } = await createFullyAssignedProposalUnderReview(services);
+    for (const user of [piUser, reviewerUser, councilMemberUser]) {
+      await assert.rejects(() => services.proposalService.getProposalAuditLogs(user, proposal.id), ForbiddenException, user.id);
+    }
+    const logs = await services.proposalService.getProposalAuditLogs(leadershipUser, proposal.id);
+    assert.ok(logs.length > 0);
+    assert.ok(logs.every((log) => !("actorEmail" in log) && !("credentialEmail" in log)));
+  });
+
+  it("a council proposal cannot set its own status (e.g. approved) and cannot overwrite a council leadership already approved", async () => {
+    const services = createServices();
+    const store = services.prisma.store;
+    const proposal = await createSubmittedProposal(services);
+    const members = [
+      { role: "reviewer_1", userId: reviewerUser.id, displayName: reviewerUser.displayName },
+      { role: "reviewer_2", userId: secondReviewerUser.id, displayName: secondReviewerUser.displayName },
+      { role: "chair", userId: councilMemberUser.id, displayName: councilMemberUser.displayName },
+      { role: "member", userId: councilMemberUser2.id, displayName: councilMemberUser2.displayName },
+      { role: "member", userId: councilMemberUser3.id, displayName: councilMemberUser3.displayName },
+      { role: "secretary", userId: councilSecretaryUser.id, displayName: councilSecretaryUser.displayName }
+    ];
+    const council = () => store.proposals.find((item) => item.id === proposal.id).councilMetadata;
+
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, status: "approved" });
+    assert.equal(council().status, "draft", "client-supplied status is ignored");
+    assert.equal(store.reviewAssignments.length, 0);
+
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, submitToLeadership: true });
+    await services.decisions.approveCouncil(leadershipUser, proposal.id, {});
+    assert.equal(council().status, "approved");
+    await assert.rejects(() => services.decisions.proposeCouncil(staffUser, proposal.id, { members: members.slice(0, 3) }), /đã được lãnh đạo duyệt/);
+    assert.equal(council().status, "approved");
+    assert.equal(council().members.length, 6);
   });
 });
 

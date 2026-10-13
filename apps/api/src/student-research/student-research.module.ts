@@ -11,7 +11,6 @@ import { StudentResearchService } from "./student-research.service.js";
   imports: [AuthModule],
   controllers: [StudentResearchController],
   providers: [
-    PrismaService,
     AuditLogService,
     MinioObjectStorageService,
     {

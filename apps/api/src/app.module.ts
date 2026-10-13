@@ -14,6 +14,7 @@ import { DashboardModule } from "./dashboard/dashboard.module.js";
 import { ApprovedProjectsModule } from "./approved-projects/approved-projects.module.js";
 import { StudentResearchModule } from "./student-research/student-research.module.js";
 
+import { PrismaModule } from "./infrastructure/prisma/prisma.module.js";
 import { PrismaService } from "./infrastructure/prisma/prisma.service.js";
 import { ScheduleModule } from "@nestjs/schedule";
 import { TasksModule } from "./tasks/tasks.module.js";
@@ -45,6 +46,7 @@ class HealthController {
 
 @Module({
   imports: [
+    PrismaModule,
     ScheduleModule.forRoot(),
     AuthModule,
     AdminModule,
@@ -61,7 +63,6 @@ class HealthController {
     StudentResearchModule,
     TasksModule
   ],
-  controllers: [HealthController],
-  providers: [PrismaService]
+  controllers: [HealthController]
 })
 export class AppModule {}

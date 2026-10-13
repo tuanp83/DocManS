@@ -2,7 +2,6 @@ import { Module } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import { NotificationsModule } from "../notifications/notifications.module.js";
 import { AuthModule } from "../auth/auth.module.js";
-import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
 import { ProposalParticipationService } from "../research-proposals/proposal-participation.service.js";
 import { ProposalDecisionsService } from "./proposal-decisions.service.js";
@@ -20,7 +19,6 @@ import { ProposalReviewsService } from "./proposal-reviews.service.js";
   imports: [AuthModule, NotificationsModule],
   controllers: [ProposalEvaluationsController],
   providers: [
-    PrismaService,
     AuditLogService,
     ProposalParticipationService,
     ProposalReviewAccessService,

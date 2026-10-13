@@ -159,6 +159,10 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
 
     // Adjustment: decided by the assigned officer, never by leadership.
     const adjustment = await projects.createAdjustment(pi, id, { contextVersion: await context(pi, id), proposedValues: { scope: { summary: "Tóm tắt điều chỉnh" } }, reason: "Điều chỉnh phạm vi" });
+    // Một bản sửa rỗng không được thay thế nội dung đề nghị đã có.
+    const isEmptyAdjustment = (error) => error instanceof BadRequestException && error.getResponse().code === "ADJUSTMENT_EMPTY";
+    await assert.rejects(projects.editRequestDraft(pi, id, "adjustment", { contextVersion: await context(pi, id), requestId: adjustment.id, proposedValues: { scope: {} }, reason: "Bản sửa trống" }), isEmptyAdjustment);
+    assert.deepEqual((await db.projectRequest.findUnique({ where: { id: adjustment.id } })).proposedValues, { scope: { summary: "Tóm tắt điều chỉnh" } });
     await projects.submitRequest(pi, id, "adjustment", { contextVersion: await context(pi, id), requestId: adjustment.id });
     await projects.reviewAdjustment(staff, id, { contextVersion: await context(staff, id), requestId: adjustment.id });
     await assert.rejects(projects.decideRequest(leader, id, "adjustment", "approve", { contextVersion: await context(leader, id), requestId: adjustment.id }), ForbiddenException);

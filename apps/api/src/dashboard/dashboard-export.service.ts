@@ -2,20 +2,9 @@ import { Injectable } from "@nestjs/common";
 import ExcelJS from "exceljs";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
+import { PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
 import { DashboardService } from "./dashboard.service.js";
 
-const STATUS_MAP: Record<string, string> = {
-  draft: "Bản nháp",
-  submitted: "Đã nộp",
-  checked: "Đã kiểm tra",
-  review_in_progress: "Đang đánh giá",
-  under_review: "Đang phản biện",
-  ready_for_approval: "Chờ phê duyệt",
-  approved: "Đã duyệt",
-  "needs-supplement": "Cần bổ sung",
-  rejected: "Từ chối",
-  completed: "Đã nghiệm thu",
-};
 
 @Injectable()
 export class DashboardExportService {
@@ -63,7 +52,7 @@ export class DashboardExportService {
         owner: p.owner?.displayName || p.owner?.username || "—",
         unit: p.hostOrganizationUnit?.name || "—",
         budget: budget,
-        status: STATUS_MAP[p.status] || p.status,
+        status: PROPOSAL_STATUS_LABELS[p.status] ?? p.status,
         submittedAt: p.submittedAt ? new Intl.DateTimeFormat("vi-VN").format(p.submittedAt) : "—"
       });
     });

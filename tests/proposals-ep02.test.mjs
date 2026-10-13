@@ -1005,6 +1005,23 @@ describe("EP-02 proposal intake and submission behavior", () => {
     assert.equal(workingStorage.objects.size, 0);
   });
 
+  it("readiness only counts the current file: replacing a valid PDF with a wrong format makes the item missing again", async () => {
+    const prisma = createEp02Prisma();
+    const auditLog = createAuditLog();
+    const intakeService = new ProposalIntakePeriodsService(prisma, auditLog);
+    const proposalService = new ResearchProposalsService(prisma, auditLog, new ProposalParticipationService(prisma), new ProposalReviewAccessService(prisma), new ProposalManagementOfficerService(prisma));
+    const draft = await createDraft({ prisma, intakeService, proposalService });
+    const filesService = createFilesService({ prisma, auditLog });
+    const upload = (fileName, mimeType) => filesService.uploadFile(piUser, { relatedEntityType: "research_proposal", relatedEntityId: draft.id, filePurpose: "proposal-form", fileName, mimeType, sizeBytes: 1000, content: Buffer.alloc(1000, "p") });
+
+    await upload("thuyet-minh.pdf", "application/pdf");
+    assert.equal((await proposalService.getReadiness(piUser, draft.id)).missingFiles.some((item) => item.code === "proposal-form"), false);
+
+    await upload("thuyet-minh.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    const readiness = await proposalService.getReadiness(piUser, draft.id);
+    assert.equal(readiness.missingFiles.some((item) => item.code === "proposal-form"), true, "the superseded PDF no longer satisfies the item");
+  });
+
   it("submit proposal is an explicit readiness-gated state transition with history and edit lock", async () => {
     const prisma = createEp02Prisma();
     const auditLog = createAuditLog();

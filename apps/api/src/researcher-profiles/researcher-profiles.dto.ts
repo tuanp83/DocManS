@@ -365,7 +365,8 @@ export const researcherProfileMutationPipe: PipeTransform<unknown, { contextVers
 export const updateMyProfilePipe: PipeTransform<unknown, UpdateResearcherProfileDto> = {
   transform(value) {
     const input = record(value);
-    const allowed = new Set(["contextVersion", "managementOrganizationUnitId", "fullName", "externalAffiliation", "academicRankCatalogItemId", "academicDegreeCatalogItemId", "title", "position", "militaryRank", "contactEmail", "contactPhone", "contactNote", "researchFieldIds", "expertiseKeywords", "publications", "participations", "curriculumVitae", "username"]);
+    // Đơn vị quản lý quyết định phạm vi quản lý hồ sơ: người dùng không tự đổi được (researcher-profile-access.md).
+    const allowed = new Set(["contextVersion", "fullName", "externalAffiliation", "academicRankCatalogItemId", "academicDegreeCatalogItemId", "title", "position", "militaryRank", "contactEmail", "contactPhone", "contactNote", "researchFieldIds", "expertiseKeywords", "publications", "participations", "curriculumVitae", "username"]);
     if (Object.keys(input).some((key) => !allowed.has(key))) invalid(["administrativeFields"]);
     const profileKeys = Object.keys(input).filter((key) => key !== "contextVersion" && key !== "username");
     const base = profileKeys.length ? updateResearcherProfilePipe.transform(input, { type: "body" }) : researcherProfileMutationPipe.transform(input, { type: "body" });

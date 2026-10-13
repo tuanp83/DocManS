@@ -234,6 +234,10 @@ export class ResearcherProfilesService {
       const profile = await this.lockedProfile(tx, actor, id, "researcher-profile.update");
       if (!profile) throw new NotFoundException({ message: "Không tìm thấy hồ sơ nhà khoa học." });
       assertResearcherProfileAction(actor, "researcher-profile.update", profile.managementOrganizationUnitId);
+      // Chuyển hồ sơ sang đơn vị khác: người quản lý phải có phạm vi ở cả đơn vị đích.
+      if (input.managementOrganizationUnitId && input.managementOrganizationUnitId !== profile.managementOrganizationUnitId) {
+        assertResearcherProfileAction(actor, "researcher-profile.update", input.managementOrganizationUnitId);
+      }
       this.assertProfileVersion(input.contextVersion, profile);
       if (input.profileType !== undefined && input.profileType !== profile.profileType && profile.linkedUserId) {
         throw new ConflictException({ message: "Không thể đổi loại hồ sơ khi hồ sơ đang liên kết tài khoản.", code: "PROFILE_ACCOUNT_ROLE_CONFLICT" });
@@ -384,7 +388,6 @@ export class ResearcherProfilesService {
     const correlationId = randomUUID();
     const safeInput: UpdateResearcherProfileDto = {
       contextVersion: input.contextVersion,
-      managementOrganizationUnitId: input.managementOrganizationUnitId,
       fullName: input.fullName,
       externalAffiliation: input.externalAffiliation,
       academicRankCatalogItemId: input.academicRankCatalogItemId,
