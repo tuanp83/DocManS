@@ -109,6 +109,7 @@ export function loadTrends(filters: DashboardFilters, range: { from?: string }, 
 
 /** Cùng quy tắc với API (dashboard-query.ts): loại sản phẩm đầu ra 1–100 ký tự, không ký tự điều khiển. */
 export function isFilterableType(value: string) {
+  // eslint-disable-next-line no-control-regex -- cố ý so khớp ký tự điều khiển để chặn chúng
   return /^[^\u0000-\u001f\u007f]{1,100}$/u.test(value);
 }
 

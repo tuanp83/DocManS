@@ -31,7 +31,7 @@ export function ResetPasswordForm() {
     const confirmPassword = String(form.get("confirmPassword") ?? "");
     if (!token) return setError("Cần mã đặt lại mật khẩu do quản trị viên cung cấp.");
     if (newPassword !== confirmPassword) return setError("Mật khẩu xác nhận không khớp.");
-    setBusy(true); try { activationToken ? await completeAccountActivation(token, newPassword, confirmPassword) : await completePasswordReset(token, newPassword); router.replace("/login"); } catch (cause) { setError(cause instanceof Error ? cause.message : "Không thể thiết lập mật khẩu."); } finally { formElement.reset(); setBusy(false); }
+    setBusy(true); try { if (activationToken) await completeAccountActivation(token, newPassword, confirmPassword); else await completePasswordReset(token, newPassword); router.replace("/login"); } catch (cause) { setError(cause instanceof Error ? cause.message : "Không thể thiết lập mật khẩu."); } finally { formElement.reset(); setBusy(false); }
   }}>
     {activationToken ? null : <label className="field"><span>Mã đặt lại mật khẩu</span><input name="token" autoComplete="one-time-code" /></label>}
     <label className="field"><span>Mật khẩu mới</span><input name="newPassword" type="password" autoComplete="new-password" /></label>

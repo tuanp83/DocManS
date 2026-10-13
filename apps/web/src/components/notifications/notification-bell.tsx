@@ -80,7 +80,9 @@ export function NotificationBell() {
           prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
         );
         setUnreadCount((prev) => Math.max(0, prev - 1));
-      } catch {}
+      } catch {
+        // Không chặn việc mở liên kết nếu đánh dấu đã đọc thất bại.
+      }
     }
     setIsOpen(false);
     if (item.link) {
@@ -95,6 +97,7 @@ export function NotificationBell() {
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch {
+      // Không chặn người dùng nếu đánh dấu đã đọc thất bại; lần tải sau sẽ đồng bộ lại.
     } finally {
       setLoading(false);
     }

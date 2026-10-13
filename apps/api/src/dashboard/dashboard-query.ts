@@ -45,6 +45,7 @@ const CODE = /^[A-Za-z0-9_.-]{1,80}$/;
 const STATUS = /^[a-z_]{1,40}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 // Loại tài liệu đầu ra có dấu tiếng Việt và khoảng trắng; chặn ký tự điều khiển.
+// eslint-disable-next-line no-control-regex -- cố ý so khớp ký tự điều khiển để chặn chúng
 const FREE_TEXT = /^[^\u0000-\u001f\u007f]{1,100}$/u;
 
 function invalid(key: string, message: string): never {
