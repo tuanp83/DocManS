@@ -1,4 +1,4 @@
-import { Controller, Get, Module, Res } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 import { AdminModule } from "./admin/admin.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { FilesModule } from "./modules/files/files.module.js";
@@ -15,34 +15,10 @@ import { ApprovedProjectsModule } from "./approved-projects/approved-projects.mo
 import { StudentResearchModule } from "./student-research/student-research.module.js";
 
 import { PrismaModule } from "./infrastructure/prisma/prisma.module.js";
-import { PrismaService } from "./infrastructure/prisma/prisma.service.js";
+import { HealthController } from "./infrastructure/health/health.controller.js";
+import { MinioObjectStorageService } from "./infrastructure/minio/minio-object-storage.service.js";
 import { ScheduleModule } from "@nestjs/schedule";
 import { TasksModule } from "./tasks/tasks.module.js";
-
-@Controller("api/v1/health")
-class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
-
-  @Get()
-  async health(@Res() res: any) {
-    try {
-      await this.prisma.$queryRaw`SELECT 1`;
-      return res.status(200).json({
-        status: "ok",
-        service: "DocManSystem API",
-        database: "connected",
-        timestamp: new Date().toISOString()
-      });
-    } catch (error) {
-      return res.status(503).json({
-        status: "error",
-        service: "DocManSystem API",
-        database: "disconnected",
-        timestamp: new Date().toISOString()
-      });
-    }
-  }
-}
 
 @Module({
   imports: [
@@ -63,6 +39,7 @@ class HealthController {
     StudentResearchModule,
     TasksModule
   ],
-  controllers: [HealthController]
+  controllers: [HealthController],
+  providers: [MinioObjectStorageService]
 })
 export class AppModule {}

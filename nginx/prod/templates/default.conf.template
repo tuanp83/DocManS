@@ -29,8 +29,15 @@ upstream docmans_web {
 }
 
 server {
-    listen 80;
+    listen 80 default_server;
     server_name ${SERVER_NAME};
+
+    # Healthcheck của container nginx (Docker gọi từ bên trong container), không chuyển sang HTTPS.
+    location = /nginx-health {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
 
     location / {
         return 301 https://$host$request_uri;
