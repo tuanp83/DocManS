@@ -34,7 +34,7 @@ export class ProposalReviewAccessService {
       const [assignments, persistedReview] = await Promise.all([
         this.prisma.proposalReviewAssignment.findMany({
           where: { proposalId, reviewerUserId: userId },
-          select: { id: true, status: true, assignmentRole: true, assignedAt: true, effectiveFrom: true, effectiveUntil: true }
+          select: { id: true, status: true, assignmentRole: true, assignedAt: true, effectiveFrom: true, effectiveUntil: true, acceptedAt: true }
         }),
         this.prisma.proposalReview.findFirst({
           where: { proposalId, reviewerUserId: userId, status: { in: ["draft", "submitted"] } },
@@ -64,7 +64,7 @@ export class ProposalReviewAccessService {
       const [assignments, persistedReview] = await Promise.all([
         this.prisma.proposalReviewAssignment.findMany({
           where: { proposalId, reviewerUserId: userId },
-          select: { id: true, status: true, assignmentRole: true, assignedAt: true, effectiveFrom: true, effectiveUntil: true }
+          select: { id: true, status: true, assignmentRole: true, assignedAt: true, effectiveFrom: true, effectiveUntil: true, acceptedAt: true }
         }),
         this.prisma.proposalReview.findFirst({
           where: { proposalId, reviewerUserId: userId, status: { in: ["draft", "submitted"] } },
@@ -91,7 +91,7 @@ export class ProposalReviewAccessService {
       [assignments, persistedReviews] = await Promise.all([
         this.prisma.proposalReviewAssignment.findMany({
           where: { proposalId: { in: proposalIds }, reviewerUserId: userId },
-          select: { id: true, proposalId: true, status: true, assignmentRole: true, assignedAt: true, effectiveFrom: true, effectiveUntil: true }
+          select: { id: true, proposalId: true, status: true, assignmentRole: true, assignedAt: true, effectiveFrom: true, effectiveUntil: true, acceptedAt: true }
         }) as Promise<AssignmentRow[]>,
         this.prisma.proposalReview.findMany({
           where: { proposalId: { in: proposalIds }, reviewerUserId: userId, status: { in: ["draft", "submitted"] } },

@@ -266,14 +266,14 @@ export class ProposalReviewsService {
     }
     const access = await this.reviewAccess.resolveForProposal(actor?.id, proposalId);
     if (!access.isAssignedReviewer) {
-      throw new ForbiddenException({ message: "Bạn không được phân công đánh giá hồ sơ này." });
+      // Phân công còn mở nhưng chưa cấp quyền: thường là lời mời chưa được đồng ý.
+      throw new ForbiddenException({ message: access.hasReviewConflict ? "Bạn cần đồng ý nhận phản biện trước khi chấm phiếu." : "Bạn không được phân công đánh giá hồ sơ này." });
     }
     if (!isScoringRole(access.assignmentRole)) {
       throw new ForbiddenException({ message: "Thư ký hội đồng ghi biên bản, không chấm phiếu đánh giá." });
     }
 
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    if (!actor.organizationScopes.some((scope) => scope.id === proposal.hostOrganizationUnitId)) throw new ForbiddenException();
     // Phiếu chỉ ghi cho phân công của lần nộp hiện tại: hồ sơ đã nộp lại thì phân công cũ hết giá trị.
     const evidence = await assertCurrentCompletenessEvidence(this.prisma, proposal);
     const assignment = (await this.prisma.proposalReviewAssignment.findUnique({ where: { id: access.assignmentId } })) as { id: string; proposalId: string; reviewedSubmissionEventId?: string | null } | null;

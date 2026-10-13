@@ -1,4 +1,4 @@
-import { label, NOTIFICATION_TYPES, vnDate, type WorkflowEvent } from "../notifications/workflow-events.js";
+import { label, NOTIFICATION_TYPES, proposalLink, vnDate, type WorkflowEvent } from "../notifications/workflow-events.js";
 import { getAssignmentRoleLabel } from "../proposals-shared/proposal-review-access.js";
 
 /** Lời mời tham gia đánh giá (phản biện, thành viên, thư ký hội đồng). */
@@ -10,5 +10,28 @@ export function reviewInvitationEvent(proposalId: string, proposal: { code?: str
     message: `Bạn được mời tham gia đánh giá hồ sơ ${label(proposal)} với vai trò ${getAssignmentRoleLabel(role)}. Hạn: ${vnDate(dueDate)}.`,
     link: "/invitation-to-review",
     metadata: { proposalId, assignmentRole: role, dueDate: dueDate?.toISOString() ?? null }
+  };
+}
+
+/** Nhà khoa học đồng ý hoặc từ chối lời mời đánh giá: báo người phân công và cán bộ QLKH phụ trách. */
+export function reviewInvitationResponseEvent(
+  proposalId: string,
+  proposal: { code?: string | null; title: string },
+  userIds: string[],
+  reviewerName: string,
+  role: string,
+  response: "accept" | "decline",
+  reason: string
+): WorkflowEvent {
+  const accepted = response === "accept";
+  return {
+    type: accepted ? NOTIFICATION_TYPES.reviewInvitationAccepted : NOTIFICATION_TYPES.reviewInvitationDeclined,
+    userIds,
+    title: `${reviewerName} ${accepted ? "đồng ý" : "từ chối"} phản biện: ${proposal.title}`,
+    message: accepted
+      ? `${reviewerName} đã đồng ý tham gia đánh giá hồ sơ ${label(proposal)} với vai trò ${getAssignmentRoleLabel(role)}.`
+      : `${reviewerName} đã từ chối tham gia đánh giá hồ sơ ${label(proposal)} (vai trò ${getAssignmentRoleLabel(role)}). Lý do: ${reason}. Cần mời người khác thay thế.`,
+    link: proposalLink(proposalId),
+    metadata: { proposalId, assignmentRole: role, response }
   };
 }

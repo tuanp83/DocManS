@@ -9,7 +9,9 @@
 export const REVIEW_ASSIGNMENT_STATUS = {
   assigned: "assigned",
   revoked: "revoked",
-  completed: "completed"
+  completed: "completed",
+  /** Người được mời từ chối nhận phản biện: không còn tính trong vòng, chuyên viên mời người khác. */
+  declined: "declined"
 } as const;
 
 export type ReviewAssignmentStatus = (typeof REVIEW_ASSIGNMENT_STATUS)[keyof typeof REVIEW_ASSIGNMENT_STATUS];
@@ -25,8 +27,24 @@ export const REVIEW_ASSIGNMENT_ROLE_LABELS: Record<ReviewAssignmentRole, string>
 export const REVIEW_ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
   [REVIEW_ASSIGNMENT_STATUS.assigned]: "Đang được phân công",
   [REVIEW_ASSIGNMENT_STATUS.revoked]: "Đã thu hồi",
-  [REVIEW_ASSIGNMENT_STATUS.completed]: "Đã hoàn thành"
+  [REVIEW_ASSIGNMENT_STATUS.completed]: "Đã hoàn thành",
+  [REVIEW_ASSIGNMENT_STATUS.declined]: "Đã từ chối"
 };
+
+/** Phân công đang mở nhưng người được mời chưa trả lời. */
+export const REVIEW_ASSIGNMENT_PENDING_LABEL = "Chờ xác nhận";
+/** Phân công đang mở và người được mời đã đồng ý. */
+export const REVIEW_ASSIGNMENT_ACCEPTED_LABEL = "Đã nhận phản biện";
+
+/** Lời mời đang chờ người được mời trả lời (đồng ý / từ chối). */
+export function isPendingInvitation(assignment: { status: string; acceptedAt?: Date | null }) {
+  return assignment.status === REVIEW_ASSIGNMENT_STATUS.assigned && !assignment.acceptedAt;
+}
+
+export function getReviewAssignmentStatusLabel(assignment: { status: string; acceptedAt?: Date | null }) {
+  if (assignment.status === REVIEW_ASSIGNMENT_STATUS.assigned) return assignment.acceptedAt ? REVIEW_ASSIGNMENT_ACCEPTED_LABEL : REVIEW_ASSIGNMENT_PENDING_LABEL;
+  return REVIEW_ASSIGNMENT_STATUS_LABELS[assignment.status] ?? assignment.status;
+}
 
 export const REVIEW_STATUS = {
   draft: "draft",
@@ -68,6 +86,7 @@ export type ReviewAssignmentLike = {
   assignedAt?: Date | null;
   effectiveFrom?: Date | null;
   effectiveUntil?: Date | null;
+  acceptedAt?: Date | null;
 };
 
 export type ProposalReviewAccess = {
@@ -117,8 +136,9 @@ export function getRecommendationLabel(value: string | null | undefined) {
 
 /**
  * Resolves what a user may do on one proposal from that user's assignment rows on it. Only an
- * `assigned` row grants access: a revoked assignment stays in history but stops granting anything,
- * and a completed one keeps read access to the package the review was written against.
+ * `assigned` row the reviewer has accepted grants access: a pending invitation shows nothing but its
+ * own summary, a revoked or declined assignment stays in history but stops granting anything, and a
+ * completed one keeps read access to the package the review was written against.
  */
 export function resolveProposalReviewAccess(assignments?: ReviewAssignmentLike[] | null, asOf = new Date()): ProposalReviewAccess {
   if (!assignments?.length) {
@@ -127,7 +147,7 @@ export function resolveProposalReviewAccess(assignments?: ReviewAssignmentLike[]
 
   const active = assignments
     .filter((assignment) =>
-      (assignment.status === REVIEW_ASSIGNMENT_STATUS.assigned || assignment.status === REVIEW_ASSIGNMENT_STATUS.completed) &&
+      ((assignment.status === REVIEW_ASSIGNMENT_STATUS.assigned && !isPendingInvitation(assignment)) || assignment.status === REVIEW_ASSIGNMENT_STATUS.completed) &&
       (!assignment.effectiveFrom || assignment.effectiveFrom <= asOf) &&
       (!assignment.effectiveUntil || asOf < assignment.effectiveUntil)
     )

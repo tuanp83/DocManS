@@ -23,6 +23,8 @@ export const NOTIFICATION_TYPES = {
   proposalSubmissionReceipt: "PROPOSAL_SUBMISSION_RECEIPT",
   proposalResubmitted: "PROPOSAL_RESUBMITTED",
   reviewInvitation: "INVITATION_TO_REVIEW",
+  reviewInvitationAccepted: "REVIEW_INVITATION_ACCEPTED",
+  reviewInvitationDeclined: "REVIEW_INVITATION_DECLINED",
   supplementRequested: "SUPPLEMENT_REQUESTED",
   supplementDue: "SUPPLEMENT_DUE",
   proposalDecision: "PROPOSAL_DECISION",

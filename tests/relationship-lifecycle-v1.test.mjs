@@ -48,9 +48,12 @@ describe("Story 1.9 proposal relationship lifecycle", () => {
     assert.equal(isSourceRelationshipFactV1(fact), true);
     assert.equal(isSourceRelationshipFactV1({ ...fact, effectiveUntil: fact.effectiveFrom }), false);
 
-    const assignment = { id: "assignment-1", status: "assigned", assignedAt: asOf, effectiveFrom: new Date("2026-07-31T08:00:00.000Z"), effectiveUntil: asOf };
+    const assignment = { id: "assignment-1", status: "assigned", assignedAt: asOf, effectiveFrom: new Date("2026-07-31T08:00:00.000Z"), effectiveUntil: asOf, acceptedAt: new Date("2026-07-31T08:00:00.000Z") };
     assert.equal(resolveProposalReviewAccess([assignment], new Date("2026-07-31T08:59:59.999Z")).isAssignedReviewer, true);
     assert.equal(resolveProposalReviewAccess([assignment], asOf).isAssignedReviewer, false);
+    // Lời mời chưa được đồng ý không cấp quyền, kể cả trong thời gian hiệu lực; từ chối cũng vậy.
+    assert.equal(resolveProposalReviewAccess([{ ...assignment, acceptedAt: null }], new Date("2026-07-31T08:30:00.000Z")).isAssignedReviewer, false);
+    assert.equal(resolveProposalReviewAccess([{ ...assignment, status: "declined" }], new Date("2026-07-31T08:30:00.000Z")).isAssignedReviewer, false);
   });
 
   it("keeps a staff secretary blocked from reviewer assignment and all decision actions", () => {
