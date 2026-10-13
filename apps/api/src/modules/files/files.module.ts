@@ -12,7 +12,6 @@ import { FilesService } from "./files.service.js";
   imports: [AuthModule],
   controllers: [FilesController],
   providers: [
-    PrismaService,
     AuditLogService,
     MinioObjectStorageService,
     ProposalParticipationService,
