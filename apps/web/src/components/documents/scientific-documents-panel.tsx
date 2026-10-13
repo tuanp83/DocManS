@@ -179,6 +179,7 @@ export function ScientificDocumentsPanel() {
   // Form State
   const [formDocNumber, setFormDocNumber] = useState("");
   const [formTitle, setFormTitle] = useState("");
+  const [formIssuingAuthority, setFormIssuingAuthority] = useState("");
   const [formCategory, setFormCategory] = useState<SubCategoryKey>("LAW_REGULATION");
   const [formIssuedDate, setFormIssuedDate] = useState("");
   const [formEffectiveDate, setFormEffectiveDate] = useState("");
@@ -242,6 +243,7 @@ export function ScientificDocumentsPanel() {
   function resetForm() {
     setFormDocNumber("");
     setFormTitle("");
+    setFormIssuingAuthority("");
     setFormCategory("LAW_REGULATION");
     setFormIssuedDate("");
     setFormEffectiveDate("");
@@ -262,6 +264,7 @@ export function ScientificDocumentsPanel() {
     setEditingDoc(doc);
     setFormDocNumber(doc.documentNumber);
     setFormTitle(doc.title);
+    setFormIssuingAuthority(doc.issuingAuthority || "");
     setFormCategory(normalizeCategoryKey(doc.category));
     setFormIssuedDate(doc.issuedDate ? doc.issuedDate.split("T")[0] : "");
     setFormEffectiveDate(doc.effectiveDate ? doc.effectiveDate.split("T")[0] : "");
@@ -288,6 +291,7 @@ export function ScientificDocumentsPanel() {
       fd.append("documentNumber", formDocNumber.trim());
       fd.append("title", formTitle.trim());
       fd.append("category", formCategory);
+      if (formIssuingAuthority.trim()) fd.append("issuingAuthority", formIssuingAuthority.trim());
       if (formIssuedDate) fd.append("issuedDate", formIssuedDate);
       if (formEffectiveDate) fd.append("effectiveDate", formEffectiveDate);
       if (formDescription.trim()) fd.append("description", formDescription.trim());
@@ -320,9 +324,12 @@ export function ScientificDocumentsPanel() {
       const fd = new FormData();
       fd.append("documentNumber", formDocNumber.trim());
       fd.append("title", formTitle.trim());
-      fd.append("category", formCategory);
-      if (formIssuedDate) fd.append("issuedDate", formIssuedDate);
-      if (formEffectiveDate) fd.append("effectiveDate", formEffectiveDate);
+      // Nhóm hiển thị gộp nhiều phân loại (vd. mẫu thuyết minh vào "Mẫu văn bản"): giữ phân loại gốc nếu người dùng không đổi nhóm.
+      fd.append("category", normalizeCategoryKey(editingDoc.category) === formCategory ? editingDoc.category : formCategory);
+      fd.append("issuingAuthority", formIssuingAuthority.trim());
+      // Luôn gửi ngày, kể cả rỗng: xoá trống ô ngày là xoá ngày đã lưu.
+      fd.append("issuedDate", formIssuedDate);
+      fd.append("effectiveDate", formEffectiveDate);
       fd.append("description", formDescription.trim());
       if (formFile) {
         fd.append("file", formFile);
@@ -676,6 +683,18 @@ export function ScientificDocumentsPanel() {
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Cơ quan ban hành</label>
+                <input
+                  type="text"
+                  maxLength={255}
+                  placeholder="VD: Bộ Khoa học và Công nghệ, Học viện Quân y"
+                  value={formIssuingAuthority}
+                  onChange={(e) => setFormIssuingAuthority(e.target.value)}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1">
@@ -817,6 +836,18 @@ export function ScientificDocumentsPanel() {
                   required
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Cơ quan ban hành</label>
+                <input
+                  type="text"
+                  maxLength={255}
+                  placeholder="VD: Bộ Khoa học và Công nghệ, Học viện Quân y"
+                  value={formIssuingAuthority}
+                  onChange={(e) => setFormIssuingAuthority(e.target.value)}
                   className="w-full rounded-lg border border-input bg-background px-3 py-1.5 text-xs focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>

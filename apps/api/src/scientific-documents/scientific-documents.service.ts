@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { MinioObjectStorageService } from "../infrastructure/minio/minio-object-storage.service.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
+import { assertValidUpload, defaultFileConfig, readUploadFileName, type FileModuleConfig } from "../modules/files/file-validation.js";
 import type {
   CreateScientificDocumentDto,
   QueryScientificDocumentsDto,
@@ -11,30 +13,28 @@ import type {
   UploadedDocumentFile
 } from "./scientific-documents.dto.js";
 
-const ALLOWED_MIME_TYPES = new Set([
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/zip",
-  "application/x-zip-compressed",
-  "application/octet-stream"
-]);
+const MANAGER_ROLES: string[] = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD", "SYSTEM_ADMIN"];
+
+/** Ngày từ DTO đã kiểm tra: chuỗi rỗng = xoá ngày. */
+function toDate(value: string | undefined) {
+  return value ? new Date(value) : null;
+}
 
 @Injectable()
 export class ScientificDocumentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
-    private readonly storage: MinioObjectStorageService = new MinioObjectStorageService()
+    private readonly storage: MinioObjectStorageService = new MinioObjectStorageService(),
+    private readonly fileConfig: FileModuleConfig = defaultFileConfig()
   ) {}
 
+  private canManage(actor: SafeUserContext) {
+    return MANAGER_ROLES.includes(actor.systemRole);
+  }
+
   assertCanManage(actor: SafeUserContext) {
-    const allowedRoles = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD", "SYSTEM_ADMIN"];
-    if (!allowedRoles.includes(actor.systemRole)) {
+    if (!this.canManage(actor)) {
       throw new ForbiddenException({
         message: "Chỉ nhà quản lý khoa học hoặc quản trị hệ thống mới có quyền quản lý văn bản, biểu mẫu."
       });
@@ -50,11 +50,8 @@ export class ScientificDocumentsService {
       where.category = query.category;
     }
 
-    if (query.status) {
-      where.status = query.status;
-    } else {
-      where.status = "ACTIVE";
-    }
+    // Văn bản hết hiệu lực chỉ hiện cho người quản lý; người dùng khác luôn chỉ thấy văn bản đang hiệu lực.
+    where.status = query.status && this.canManage(actor) ? query.status : "ACTIVE";
 
     if (query.search?.trim()) {
       const searchTerm = query.search.trim();
@@ -130,20 +127,13 @@ export class ScientificDocumentsService {
     }
 
     const docId = randomUUID();
-    const safeOriginalName = file.originalname || "document.pdf";
-    const objectKey = `scientific-documents/${docId}/${safeOriginalName}`;
+    const stored = await this.storeFile(docId, file);
+    const { fileName: safeOriginalName, objectKey } = stored;
 
-    await this.storage.putObject({
-      objectKey,
-      content: file.buffer,
-      mimeType: file.mimetype || "application/octet-stream",
-      sizeBytes: file.size
-    });
+    const issuedDate = toDate(dto.issuedDate);
+    const effectiveDate = toDate(dto.effectiveDate);
 
-    const issuedDate = dto.issuedDate ? new Date(dto.issuedDate) : null;
-    const effectiveDate = dto.effectiveDate ? new Date(dto.effectiveDate) : null;
-
-    const created = await this.prisma.scientificDocument.create({
+    const created = await this.withObjectCleanup(objectKey, () => this.prisma.scientificDocument.create({
       data: {
         id: docId,
         documentNumber: dto.documentNumber.trim(),
@@ -156,7 +146,7 @@ export class ScientificDocumentsService {
         status: "ACTIVE",
         fileName: safeOriginalName,
         fileSize: file.size,
-        mimeType: file.mimetype || "application/octet-stream",
+        mimeType: file.mimetype,
         storageObjectKey: objectKey,
         createdById: actor.id
       },
@@ -170,7 +160,7 @@ export class ScientificDocumentsService {
           }
         }
       }
-    });
+    }));
 
     await this.auditLog.record({
       action: "create-scientific-document",
@@ -206,28 +196,22 @@ export class ScientificDocumentsService {
     if (dto.category !== undefined) data.category = dto.category.trim();
     if (dto.issuingAuthority !== undefined) data.issuingAuthority = dto.issuingAuthority.trim() || null;
     if (dto.description !== undefined) data.description = dto.description.trim() || null;
-    if (dto.status !== undefined) data.status = dto.status.trim();
-    if (dto.issuedDate !== undefined) data.issuedDate = dto.issuedDate ? new Date(dto.issuedDate) : null;
-    if (dto.effectiveDate !== undefined) data.effectiveDate = dto.effectiveDate ? new Date(dto.effectiveDate) : null;
+    if (dto.status !== undefined) data.status = dto.status;
+    if (dto.issuedDate !== undefined) data.issuedDate = toDate(dto.issuedDate);
+    if (dto.effectiveDate !== undefined) data.effectiveDate = toDate(dto.effectiveDate);
 
+    // Tệp mới luôn có khoá riêng: tệp cũ (kể cả cùng tên) vẫn nằm nguyên trên MinIO, không bị ghi đè.
+    let newObjectKey: string | null = null;
     if (file && file.buffer && file.buffer.length > 0) {
-      const safeOriginalName = file.originalname || "document.pdf";
-      const objectKey = `scientific-documents/${existing.id}/${safeOriginalName}`;
-
-      await this.storage.putObject({
-        objectKey,
-        content: file.buffer,
-        mimeType: file.mimetype || "application/octet-stream",
-        sizeBytes: file.size
-      });
-
-      data.fileName = safeOriginalName;
+      const stored = await this.storeFile(existing.id, file);
+      newObjectKey = stored.objectKey;
+      data.fileName = stored.fileName;
       data.fileSize = file.size;
-      data.mimeType = file.mimetype || "application/octet-stream";
-      data.storageObjectKey = objectKey;
+      data.mimeType = file.mimetype;
+      data.storageObjectKey = stored.objectKey;
     }
 
-    const updated = await this.prisma.scientificDocument.update({
+    const updated = await this.withObjectCleanup(newObjectKey, () => this.prisma.scientificDocument.update({
       where: { id },
       data: data as never,
       include: {
@@ -240,7 +224,7 @@ export class ScientificDocumentsService {
           }
         }
       }
-    });
+    }));
 
     await this.auditLog.record({
       action: "update-scientific-document",
@@ -249,7 +233,7 @@ export class ScientificDocumentsService {
       targetEntity: "scientific-document",
       targetEntityId: updated.id,
       username: actor.username,
-      reason: `Updated ${updated.category}: ${updated.documentNumber}`
+      reason: `Updated ${updated.category}: ${updated.documentNumber}${newObjectKey ? ` (thay tệp, bản trước: ${existing.storageObjectKey})` : ""}`
     });
 
     return updated;
@@ -313,5 +297,24 @@ export class ScientificDocumentsService {
       mimeType: doc.mimeType,
       size: doc.fileSize
     };
+  }
+
+  /** Kiểm tra tệp theo quy tắc chung rồi lưu dưới khoá UUID (tên gốc chỉ giữ trong CSDL). */
+  private async storeFile(documentId: string, file: UploadedDocumentFile) {
+    const fileName = readUploadFileName(file.originalname);
+    assertValidUpload({ fileName, mimeType: file.mimetype, sizeBytes: file.size, content: file.buffer }, this.fileConfig);
+    const objectKey = `scientific-documents/${documentId}/${randomUUID()}${path.extname(fileName).toLowerCase()}`;
+    await this.storage.putObject({ objectKey, content: file.buffer, mimeType: file.mimetype, sizeBytes: file.size });
+    return { fileName, objectKey };
+  }
+
+  /** Ghi CSDL lỗi thì xoá object vừa tải lên để không để lại tệp mồ côi. */
+  private async withObjectCleanup<T>(objectKey: string | null, write: () => Promise<T>) {
+    try {
+      return await write();
+    } catch (error) {
+      if (objectKey) await this.storage.deleteObject?.(objectKey).catch(() => undefined);
+      throw error;
+    }
   }
 }

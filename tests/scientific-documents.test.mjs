@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { BadRequestException } from "@nestjs/common";
 import { ScientificDocumentsService } from "../dist/apps/api/scientific-documents/scientific-documents.service.js";
+import { createScientificDocumentPipe, queryScientificDocumentsPipe, updateScientificDocumentPipe } from "../dist/apps/api/scientific-documents/scientific-documents.dto.js";
 
 describe("ScientificDocumentsService", () => {
   const researcherActor = {
@@ -152,7 +154,7 @@ describe("ScientificDocumentsService", () => {
         originalname: "thuyetminh.docx",
         mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         size: 500,
-        buffer: Buffer.from("dummy-doc-content")
+        buffer: Buffer.alloc(500, "d")
       }
     );
 
@@ -233,5 +235,67 @@ describe("ScientificDocumentsService", () => {
     assert.equal(download.fileName, sampleDoc.fileName);
     assert.equal(download.mimeType, sampleDoc.mimeType);
     assert.equal(audited, true);
+  });
+
+  const docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const upload = (name, mimetype = docx, size = 64) => ({ originalname: name, mimetype, size, buffer: Buffer.alloc(size, "x") });
+  const fileConfig = { allowedExtensions: [".doc", ".docx", ".pdf", ".xls", ".xlsx"], maxFileSizeBytes: 1024 * 1024 };
+
+  it("rejects a file whose type is not allowed or whose MIME does not match, before storing it", async () => {
+    const puts = [];
+    const service = new ScientificDocumentsService({ scientificDocument: { create: async () => assert.fail("no record") } }, { record: async () => {} }, { putObject: async (args) => puts.push(args) }, fileConfig);
+    const dto = { documentNumber: "BM-02", title: "Biểu mẫu", category: "FORM_TEMPLATE" };
+    await assert.rejects(() => service.createDocument(staffActor, dto, upload("macro.exe", "application/octet-stream")), /Định dạng tệp/);
+    await assert.rejects(() => service.createDocument(staffActor, dto, upload("bieumau.docx", "application/pdf")), /MIME/);
+    assert.equal(puts.length, 0);
+  });
+
+  it("replacing a file never overwrites the previous object, even with the same file name", async () => {
+    const puts = [];
+    const deletes = [];
+    let stored = { ...sampleDoc, storageObjectKey: "scientific-documents/doc-1/old.pdf" };
+    const prisma = {
+      scientificDocument: {
+        findFirst: async () => stored,
+        update: async ({ data }) => (stored = { ...stored, ...data })
+      }
+    };
+    const service = new ScientificDocumentsService(prisma, { record: async () => {} }, { putObject: async (args) => puts.push(args), deleteObject: async (key) => deletes.push(key) }, fileConfig);
+    await service.updateDocument(staffActor, "doc-1", {}, upload("thong-tu.pdf", "application/pdf"));
+    await service.updateDocument(staffActor, "doc-1", {}, upload("thong-tu.pdf", "application/pdf"));
+    assert.equal(puts.length, 2);
+    assert.notEqual(puts[0].objectKey, puts[1].objectKey, "same file name, different object keys");
+    assert.ok(puts.every((put) => put.objectKey.startsWith("scientific-documents/doc-1/") && !put.objectKey.includes("thong-tu")));
+    assert.equal(stored.fileName, "thong-tu.pdf");
+    assert.equal(deletes.length, 0, "earlier versions stay in storage");
+  });
+
+  it("removes the uploaded object when the database write fails", async () => {
+    const deletes = [];
+    let putKey = null;
+    const prisma = { scientificDocument: { create: async () => { throw new Error("db down"); } } };
+    const service = new ScientificDocumentsService(prisma, { record: async () => {} }, { putObject: async ({ objectKey }) => { putKey = objectKey; }, deleteObject: async (key) => deletes.push(key) }, fileConfig);
+    await assert.rejects(() => service.createDocument(staffActor, { documentNumber: "BM-03", title: "Mẫu", category: "FORM_TEMPLATE" }, upload("mau.docx")), /db down/);
+    assert.deepEqual(deletes, [putKey]);
+  });
+
+  it("only managers can list documents that are no longer in force", async () => {
+    const seen = [];
+    const prisma = { scientificDocument: { findMany: async ({ where }) => { seen.push(where.status); return []; } } };
+    const service = new ScientificDocumentsService(prisma, { record: async () => {} }, {}, fileConfig);
+    await service.listDocuments(researcherActor, { status: "INACTIVE" });
+    await service.listDocuments(staffActor, { status: "INACTIVE" });
+    assert.deepEqual(seen, ["ACTIVE", "INACTIVE"]);
+  });
+
+  it("validates category, status, dates and lengths; an empty date clears it", () => {
+    const valid = { documentNumber: "BM-04", title: "Mẫu", category: "GUIDELINE" };
+    assert.throws(() => createScientificDocumentPipe.transform({ ...valid, category: "ANYTHING" }), BadRequestException);
+    assert.throws(() => createScientificDocumentPipe.transform({ ...valid, issuedDate: "31/12/2026" }), BadRequestException);
+    assert.throws(() => createScientificDocumentPipe.transform({ ...valid, title: "x".repeat(501) }), BadRequestException);
+    assert.throws(() => updateScientificDocumentPipe.transform({ status: "DELETED" }), BadRequestException);
+    assert.throws(() => queryScientificDocumentsPipe.transform({ status: "DELETED" }), BadRequestException);
+    assert.deepEqual(updateScientificDocumentPipe.transform({ issuedDate: "", status: "INACTIVE" }), { issuedDate: "", status: "INACTIVE" });
+    assert.equal(createScientificDocumentPipe.transform({ ...valid, issuedDate: "2026-05-01" }).issuedDate, "2026-05-01");
   });
 });
