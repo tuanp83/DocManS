@@ -51,6 +51,16 @@ const users = [
     unit: "Ban Giám Đốc"
   },
   {
+    id: "user-vicedirector",
+    username: "pgiamdoc",
+    passwordHash:
+      "scrypt:user-vicedirector:aa956b2ea39e44840e51e3003262a3181e6fbc299756ffb303e0610017a8baf94daadd2c9f83726f5330ec2dbf161e0bb9eb4877498a8e376de028ab0db4a819",
+    displayName: "TS. Phó Giám Đốc",
+    status: "active",
+    systemRole: "LEADERSHIP_APPROVAL_AUTHORITY",
+    unit: "Ban Giám Đốc"
+  },
+  {
     id: "user-staff",
     username: "nmphuong",
     passwordHash:
@@ -1461,7 +1471,6 @@ await prisma.researchProposal.update({
     managementOfficers: {
       create: [
         {
-          id: "officer-001",
           officerUserId: "user-staff-hdtien1",
           status: "ACTIVE",
           effectiveFrom: new Date(),

@@ -50,6 +50,10 @@ export class DashboardService {
       throw new ForbiddenException({ message: "Không có quyền xem số liệu tổng hợp." });
     }
 
+    if (actor.systemRole === "SYSTEM_ADMIN") {
+      throw new ForbiddenException({ message: "Quản trị viên hệ thống không có quyền xem dashboard nghiệp vụ." });
+    }
+
     const records = (await this.prisma.researchProposal.findMany({
       orderBy: { submittedAt: "desc" },
       select: {

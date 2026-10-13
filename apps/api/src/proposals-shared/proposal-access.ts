@@ -44,7 +44,7 @@ export function isResearcherInternalUser(user?: SafeUserContext) {
 }
 
 export function isInternalResearcherEligible(user?: SafeUserContext) {
-  return isResearcherInternalUser(user) || isResearchOversightAuthority(user);
+  return isResearcherInternalUser(user) || isResearchOversightAuthority(user) || isResearchManagementStaff(user) || isResearchManagementHead(user) || isLeadership(user);
 }
 
 export function isLeadership(user?: SafeUserContext) {

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Bảng Phân Quyền Tài Khoản Hệ Thống DocManS</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; max-width: 1100px; margin: 30px auto; color: #2d3748; padding: 20px; }
+        h1 { color: #1a365d; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; text-align: center; }
+        h2 { color: #2b6cb0; margin-top: 30px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #cbd5e0; padding: 12px 15px; text-align: left; }
+        th { background-color: #ebf8ff; color: #2c5282; font-weight: 600; text-transform: uppercase; font-size: 0.9em; }
+        tr:nth-child(even) { background-color: #f7fafc; }
+        tr:hover { background-color: #edf2f7; }
+        .role-tag { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; background: #e2e8f0; color: #4a5568; }
+        .admin { background: #fed7d7; color: #c53030; }
+        .leadership { background: #fefcbf; color: #b7791f; }
+        .manager { background: #c6f6d5; color: #276749; }
+        .staff { background: #bee3f8; color: #2b6cb0; }
+        .researcher { background: #e9d8fd; color: #6b46c1; }
+        .external { background: #edf2f7; color: #4a5568; }
+        .check { color: #38a169; font-weight: bold; font-size: 1.2em; text-align: center; }
+        .cross { color: #e53e3e; font-weight: bold; font-size: 1.2em; text-align: center; }
+        td.center { text-align: center; }
+    </style>
+</head>
+<body>
+
+<h1>BẢNG PHÂN QUYỀN TÀI KHOẢN (RBAC) - DOCMANS</h1>
+<p>Dưới đây là ma trận phân quyền chi tiết của từng loại tài khoản trong hệ thống quản lý Đề tài nghiên cứu khoa học DocManS.</p>
+
+<h2>1. Danh sách Tài khoản & Vai trò tương ứng</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Tên đăng nhập</th>
+            <th>Tên hiển thị</th>
+            <th>Mã Vai Trò (System Role)</th>
+            <th>Mô tả Quyền hạn Chính</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>admin</strong> / <strong>admin2</strong></td>
+            <td>TS. Đỗ Tiến Thành</td>
+            <td><span class="role-tag admin">SYSTEM_ADMIN</span></td>
+            <td>Quản trị toàn quyền hệ thống. Cấu hình tham số, quản lý người dùng, xem log lỗi và quản lý dữ liệu gốc.</td>
+        </tr>
+        <tr>
+            <td><strong>tvtien</strong> / <strong>pgiamdoc</strong></td>
+            <td>GS. TS. Trần Viết Tiến / TS. Phó Giám Đốc</td>
+            <td><span class="role-tag leadership">LEADERSHIP_APPROVAL_AUTHORITY</span></td>
+            <td>Ban Giám Đốc. Phê duyệt cuối cùng (cấp cao nhất) cho các đề xuất nghiên cứu, kinh phí, và nghiệm thu thanh lý.</td>
+        </tr>
+        <tr>
+            <td><strong>nmphuong</strong> / <strong>dmtrung</strong></td>
+            <td>PGS. TS. Nguyễn Minh Phương</td>
+            <td><span class="role-tag manager">RESEARCH_MANAGEMENT_HEAD</span></td>
+            <td>Lãnh đạo Phòng KHQS. Ký duyệt hồ sơ sơ bộ, lập Hội đồng, phân công chuyên viên theo dõi đề tài.</td>
+        </tr>
+        <tr>
+            <td><strong>hdtien1</strong> / <strong>hdtien2</strong></td>
+            <td>ThS. Hoàng Đình Tiến</td>
+            <td><span class="role-tag staff">RESEARCH_MANAGEMENT_STAFF</span></td>
+            <td>Chuyên viên KHQS. Kiểm tra tính hợp lệ của hồ sơ nộp lên, hỗ trợ tạo hội đồng, tiếp nhận báo cáo định kỳ.</td>
+        </tr>
+        <tr>
+            <td><strong>ttlan</strong></td>
+            <td>TS. Trần Thị Lan</td>
+            <td><span class="role-tag manager">RESEARCH_OVERSIGHT_AUTHORITY</span></td>
+            <td>Thanh tra / Kiểm soát. Xem (Read-only) toàn bộ báo cáo, hồ sơ tài chính để giám sát tính minh bạch.</td>
+        </tr>
+        <tr>
+            <td><strong>patuan</strong> / <strong>researcher1</strong></td>
+            <td>TS. Phạm Anh Tuấn</td>
+            <td><span class="role-tag researcher">RESEARCHER_INTERNAL_USER</span></td>
+            <td>Cán bộ nội bộ Học viện. Nộp đề xuất mới, cập nhật tiến độ Kanban, quản lý kinh phí và hồ sơ khoa học cá nhân. Có thể được mời làm chuyên gia chấm điểm.</td>
+        </tr>
+        <tr>
+            <td><strong>external1</strong></td>
+            <td>Nhà nghiên cứu ngoài</td>
+            <td><span class="role-tag external">EXTERNAL_RESEARCHER_USER</span></td>
+            <td>Khách mời. Chỉ có thể làm thành viên (member) trong các đề tài, hoặc được cấp quyền chấm điểm khi được mời làm hội đồng ngoài trường.</td>
+        </tr>
+    </tbody>
+</table>
+
+<h2>2. Ma trận Phân quyền Chức năng (Permission Matrix)</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Phân hệ / Chức năng</th>
+            <th>Admin</th>
+            <th>Ban Giám Đốc</th>
+            <th>Trưởng phòng KHQS</th>
+            <th>Chuyên viên KHQS</th>
+            <th>Chủ nhiệm / Giảng viên</th>
+            <th>Thanh tra</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Xem Dashboard Toàn trường</strong></td>
+            <td class="center cross">✗</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center cross">✗</td>
+            <td class="center check">✓</td>
+        </tr>
+        <tr>
+            <td><strong>Tạo mới Hồ sơ Đề tài</strong></td>
+            <td class="center cross">✗</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center cross">✗</td>
+        </tr>
+        <tr>
+            <td><strong>Đánh giá Hồ sơ (Chấm điểm Hội đồng)</strong></td>
+            <td class="center cross">✗</td>
+            <td class="center check">✓ (Khi được chỉ định)</td>
+            <td class="center check">✓ (Khi được chỉ định)</td>
+            <td class="center check">✓ (Khi được chỉ định)</td>
+            <td class="center check">✓ (Khi được chỉ định)</td>
+            <td class="center cross">✗</td>
+        </tr>
+        <tr>
+            <td><strong>Thiết lập Hội đồng xét duyệt</strong></td>
+            <td class="center check">✓</td>
+            <td class="center cross">✗</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓ (Dự thảo)</td>
+            <td class="center cross">✗</td>
+            <td class="center cross">✗</td>
+        </tr>
+        <tr>
+            <td><strong>Ký Phê duyệt Đề tài & Kinh phí</strong></td>
+            <td class="center cross">✗</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓ (Cấp Cơ sở)</td>
+            <td class="center cross">✗</td>
+            <td class="center cross">✗</td>
+            <td class="center cross">✗</td>
+        </tr>
+        <tr>
+            <td><strong>Tạo & Kéo thả nhiệm vụ Kanban</strong></td>
+            <td class="center cross">✗</td>
+            <td class="center cross">✗</td>
+            <td class="center cross">✗</td>
+            <td class="center cross">✗</td>
+            <td class="center check">✓ (Đề tài của mình)</td>
+            <td class="center cross">✗</td>
+        </tr>
+        <tr>
+            <td><strong>Xem Lịch sử Giải ngân / Báo cáo</strong></td>
+            <td class="center cross">✗</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓ (Đề tài của mình)</td>
+            <td class="center check">✓</td>
+        </tr>
+        <tr>
+            <td><strong>Cập nhật Lý lịch Khoa học</strong></td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+            <td class="center check">✓</td>
+        </tr>
+        <tr>
+            <td><strong>Quản lý Người dùng & Cài đặt hệ thống</strong></td>
+            <td class="center check">✓</td>
+            <td class="center cross">✗</td>
+            <td class="center cross">✗</td>
+            <td class="center cross">✗</td>
+            <td class="center cross">✗</td>
+            <td class="center cross">✗</td>
+        </tr>
+    </tbody>
+</table>
+
+</body>
+</html>
