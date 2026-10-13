@@ -389,7 +389,7 @@ describe("Epic 2 researcher profiles and account access on real PostgreSQL", () 
     await assert.rejects(() => profiles.updateMyProfile(self, updateMyProfilePipe.transform({ contextVersion: contextVersion(updated), position: "Ngừng hoạt động" })), ForbiddenException);
   });
 
-  it("self-service rejects a management-organization change (contract: researcher-profile-access.md)", { todo: "SOURCE CONFLICT: updateMyProfilePipe allows managementOrganizationUnitId (commit 0c46628)" }, async () => {
+  it("self-service rejects a management-organization change (contract: researcher-profile-access.md)", async () => {
     const researcher = await createUser({ role: "EXTERNAL_RESEARCHER_USER" });
     const profile = await newProfile(staff, { profileType: "EXTERNAL" });
     await linkAccount(profile.id, researcher);
@@ -455,6 +455,13 @@ describe("Epic 2 researcher profiles and account access on real PostgreSQL", () 
     await assert.rejects(() => profiles.listProfiles(staff, { organizationUnitId: orgB.id }), ForbiddenException);
     await assert.rejects(() => profiles.getProfile(staff, inB.id), ForbiddenException);
     await assert.rejects(() => profiles.getProfile(outsider, inA.id), ForbiddenException);
+
+    await assert.rejects(
+      () => profiles.updateProfile(staff, inA.id, updateResearcherProfilePipe.transform({ contextVersion: contextVersion(inA), managementOrganizationUnitId: orgB.id })),
+      ForbiddenException,
+      "a manager cannot move a profile into a unit outside their scope"
+    );
+    assert.equal((await db.researcherProfile.findUnique({ where: { id: inA.id } })).managementOrganizationUnitId, orgA.id);
 
     await profiles.setStatus(staff, inA.id, "INACTIVE", contextVersion(inA));
     const inactive = await profiles.listProfiles(staff, { status: "INACTIVE", pageSize: "100" });

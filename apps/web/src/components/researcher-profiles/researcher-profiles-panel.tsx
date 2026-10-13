@@ -19,6 +19,7 @@ import {
   type ResearcherOrganization,
   type ScientificCurriculumVitae
 } from "@/lib/researcher-profiles-api";
+import { matchOrganizationUnit } from "@/lib/organization-match";
 
 const initialCv: ScientificCurriculumVitae = {
   personalInfo: {
@@ -279,16 +280,11 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
 
   function handleOrganizationUnitChange(value: string) {
     setOrganizationUnitName(value);
-    const normalized = value.trim().toLowerCase();
-    const matched = organizations.find((item) =>
-      item.name.toLowerCase().trim() === normalized ||
-      item.code.toLowerCase().trim() === normalized ||
-      normalized.includes(item.name.toLowerCase()) ||
-      item.name.toLowerCase().includes(normalized)
-    );
+    const matched = matchOrganizationUnit(organizations, value);
     setForm((current) => ({
       ...current,
       externalAffiliation: value,
+      // Không khớp rõ ràng thì giữ đơn vị quản lý hiện tại, không tự gán đơn vị khác.
       managementOrganizationUnitId: matched ? matched.id : (current.managementOrganizationUnitId || organizations[0]?.id || ""),
       curriculumVitae: {
         ...current.curriculumVitae,
@@ -308,14 +304,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
     await perform(async () => {
       const { managementOrganizationUnitId, profileType, provisionAccount, username: nextUsername, ...personal } = form;
       const unitText = (form.externalAffiliation?.trim() || organizationUnitName.trim() || (form.curriculumVitae?.personalInfo as any)?.organization?.trim() || "");
-      const normalized = unitText.toLowerCase();
-      const matched = organizations.find((item) =>
-        item.name.toLowerCase().trim() === normalized ||
-        item.code.toLowerCase().trim() === normalized ||
-        normalized.includes(item.name.toLowerCase()) ||
-        item.name.toLowerCase().includes(normalized)
-      );
-      const effectiveOrgUnitId = matched?.id || managementOrganizationUnitId || organizations[0]?.id || "";
+      const effectiveOrgUnitId = matchOrganizationUnit(organizations, unitText)?.id || managementOrganizationUnitId || organizations[0]?.id || "";
       const effectiveAffiliation = unitText || undefined;
       const input = {
         ...personal,
@@ -332,8 +321,8 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
       if (editing) {
         const result = await updateResearcherProfile(self ? "my-profile" : editing.id, {
           ...input,
-          managementOrganizationUnitId: effectiveOrgUnitId,
-          ...(self ? { username: nextUsername } : { profileType }),
+          // Người dùng tự sửa hồ sơ không đổi được đơn vị quản lý (API từ chối trường này).
+          ...(self ? { username: nextUsername } : { profileType, managementOrganizationUnitId: effectiveOrgUnitId }),
           contextVersion: editing.viewerAuthorization.contextVersion
         });
         select(result.profile);
