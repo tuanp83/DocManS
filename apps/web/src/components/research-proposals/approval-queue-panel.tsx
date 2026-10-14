@@ -170,6 +170,11 @@ export function ApprovalQueuePanel() {
     () => proposals.filter((p) => p.irbMetadata?.council?.status === "submitted" && atLeadership("IRB_COUNCIL", p.id)),
     [proposals, notRouted]
   );
+  // Kết luận Hội đồng IRB chờ ký cấp Giấy chứng nhận.
+  const waitingIrbCertificates = useMemo(
+    () => proposals.filter((p) => p.irbMetadata?.conclusion?.status === "submitted" && atLeadership("IRB_CERTIFICATE", p.id)),
+    [proposals, notRouted]
+  );
 
   // --- TAB 1: DUYỆT HỘI ĐỒNG ---
   const waitingCouncilProposals = useMemo(
@@ -548,7 +553,7 @@ export function ApprovalQueuePanel() {
           }}
         >
           Hội đồng đạo đức (IRB)
-          <span style={{ background: "#f1f5f9", color: "#64748b", padding: "2px 8px", borderRadius: "12px", fontSize: "12px", fontWeight: 700 }}>{waitingIrb.length}</span>
+          <span style={{ background: "#f1f5f9", color: "#64748b", padding: "2px 8px", borderRadius: "12px", fontSize: "12px", fontWeight: 700 }}>{waitingIrb.length + waitingIrbCertificates.length}</span>
         </button>
       </div>
 
@@ -557,7 +562,7 @@ export function ApprovalQueuePanel() {
           <h3 style={{ margin: "0 0 4px 0", fontSize: "16px" }}>Tờ trình thành lập Hội đồng đạo đức chờ ký</h3>
           <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#64748b" }}>Đã qua Trưởng ban QLKH và Trưởng phòng KHQS. Giám đốc hoặc Phó GĐ phụ trách Khoa học ký.</p>
           {waitingIrb.length === 0 ? (
-            <p className="state-message">Không có tờ trình IRB nào chờ ký.</p>
+            <p className="state-message">Không có tờ trình thành lập Hội đồng IRB nào chờ ký.</p>
           ) : (
             <div className="table-wrap">
               <table className="data-table">
@@ -589,13 +594,48 @@ export function ApprovalQueuePanel() {
           )}
         </div>
       )}
+      {activeTab === "irb" && (
+        <div style={{ background: "#ffffff", borderRadius: "8px", border: "1px solid #e2e8f0", padding: "16px", marginTop: "16px" }}>
+          <h3 style={{ margin: "0 0 4px 0", fontSize: "16px" }}>Kết luận Hội đồng IRB chờ ký cấp Giấy chứng nhận</h3>
+          <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#64748b" }}>Thư ký hội đồng lập, chuyên viên trình qua Trưởng ban QLKH và Trưởng phòng KHQS.</p>
+          {waitingIrbCertificates.length === 0 ? (
+            <p className="state-message">Không có kết luận IRB nào chờ ký.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Đề tài</th>
+                    <th>Kết luận</th>
+                    <th>Người trình</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {waitingIrbCertificates.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <span className="record-title">{p.title}</span>
+                        <span className="record-meta">{p.code || "Chưa cấp mã"} · {p.hostOrganizationUnitName}</span>
+                      </td>
+                      <td>{p.irbMetadata?.conclusion?.decision === "APPROVED" ? "Chấp thuận" : "Không chấp thuận"}</td>
+                      <td>{p.irbMetadata?.conclusion?.submittedByName ?? "—"}</td>
+                      <td>
+                        <button type="button" className="button primary" onClick={() => setIrbTarget(p)}>Xem & ký</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
       {irbTarget ? (
         <IRBApprovalModal
           isOpen
           onClose={() => setIrbTarget(null)}
           proposal={irbTarget}
-          currentUserRole={account?.systemRole}
-          currentUserUsername={account?.username}
           onSuccess={() => { setIrbTarget(null); void loadData(); }}
         />
       ) : null}

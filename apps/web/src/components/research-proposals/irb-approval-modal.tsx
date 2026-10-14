@@ -1,453 +1,399 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, CheckCircle2, FileText, HeartPulse, Send, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import {
-  X,
-  HeartPulse,
-  ShieldCheck,
-  ShieldAlert,
-  AlertCircle,
-  Save,
-  CheckCircle2,
-  Calendar,
-  Download,
-  FileText,
-  UserCheck,
-  Users
-} from "lucide-react";
-import {
-  IRBMetadata,
-  fetchIRBInfo,
-  proposeIrbCouncil,
   approveIrbCouncil,
-  submitIrbReview,
+  fetchIRBInfo,
+  IRB_COMPOSITION,
+  IRB_RISK_LABELS,
+  IRB_ROLE_LABELS,
+  loadCouncilCandidates,
+  proposeIrbCouncil,
+  rejectIrbCouncil,
+  returnIrbConclusion,
+  submitIrbConclusion,
   updateIRBStatus,
-  IRBMember,
-  type IRBContextVersion
+  type CouncilCandidate,
+  type IRBInfo,
+  type IRBMember,
+  type IrbRole
 } from "@/lib/proposal-evaluations-api";
-import { exportIrbCertificateWord, ProposalExportData } from "@/lib/word-export";
+import { exportIrbCertificateWord, type ProposalExportData } from "@/lib/word-export";
+import { RoutingStatus } from "@/components/approvals/routing-status";
 import "@/styles/council-modals.css";
 
-interface IRBApprovalModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  proposal: {
-    id: string;
-    code?: string;
-    title: string;
-    ownerDisplayName?: string;
-    hostOrganizationUnit?: string;
-    irbMetadata?: IRBMetadata | null;
-  };
-  currentUserRole?: string;
-  currentUserUsername?: string;
-  onSuccess?: () => void;
+const ROLES: IrbRole[] = ["chair", "secretary", "reviewer", "member"];
+const COUNCIL_STATUS_LABELS: Record<string, string> = {
+  draft: "Đang soạn",
+  submitted: "Đang trình",
+  returned: "Bị Phòng KHQS trả lại",
+  rejected: "Ban giám đốc trả lại",
+  approved: "Đã ký thành lập"
+};
+const CONCLUSION_STATUS_LABELS: Record<string, string> = {
+  draft: "Thư ký đang soạn",
+  finalized: "Thư ký đã chốt, chờ chuyên viên trình",
+  submitted: "Đang trình Ban giám đốc",
+  returned: "Bị trả lại, thư ký sửa",
+  signed: "Đã ký cấp giấy"
+};
+const MEMBER_STATUS_COLORS: Record<string, string> = { invited: "#b45309", accepted: "#15803d", declined: "#b91c1c", active: "#166534" };
+
+const toDateInput = (value?: string | null) => (value ? value.slice(0, 10) : "");
+const vnDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : "—");
+
+/** Đếm theo vai trò, so với quy định (hiện cạnh danh sách để chuyên viên biết còn thiếu gì). */
+export function irbCompositionSummary(members: Array<{ role: IrbRole }>) {
+  return ROLES.map((role) => {
+    const count = members.filter((member) => member.role === role).length;
+    const { min, max } = IRB_COMPOSITION[role];
+    return { role, count, ok: count >= min && count <= max, text: `${IRB_ROLE_LABELS[role]} ${count}/${min === max ? min : `${min}–${max}`}` };
+  });
 }
 
+/**
+ * Quản lý Hội đồng Đạo đức (IRB) cho chuyên viên phụ trách / Trưởng phòng và Ban giám đốc. Nút hiện theo `viewer` do
+ * máy chủ trả về; máy chủ kiểm tra lại mọi quyền. Thành viên hội đồng nhận lời mời, nhận xét và lập kết luận ở trang
+ * hồ sơ (IrbMemberPanel).
+ */
 export function IRBApprovalModal({
   isOpen,
   onClose,
   proposal,
-  currentUserRole,
-  currentUserUsername,
   onSuccess
-}: IRBApprovalModalProps) {
-  // Display hints only — the backend checks role and the proposal's organization scope.
-  const isScientificManagement = currentUserRole === "RESEARCH_MANAGEMENT_STAFF" || currentUserRole === "RESEARCH_MANAGEMENT_HEAD";
-  // Ký thành lập hội đồng IRB: Giám đốc hoặc Phó GĐ phụ trách Khoa học. Cấp giấy chứng nhận: Giám đốc hoặc cán bộ QLKH.
-  const isLeadership = currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY";
-  const canSignCouncil = isLeadership || currentUserRole === "SCIENCE_DEPUTY_DIRECTOR";
-
-  const [loading, setLoading] = useState(false);
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  proposal: { id: string; code?: string; title: string; ownerDisplayName?: string; hostOrganizationUnit?: string; hostOrganizationUnitName?: string };
+  onSuccess?: () => void;
+}) {
+  const [info, setInfo] = useState<IRBInfo | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  const [irbData, setIrbData] = useState<IRBMetadata | null>(null);
-  // Proposal contextVersion from the last IRB read/write; a stale token makes the server reject with 409.
-  const [contextVersion, setContextVersion] = useState<IRBContextVersion>(undefined);
-  
-  // Council Form State
-  const [councilMembers, setCouncilMembers] = useState<IRBMember[]>([]);
-  const [newUserId, setNewUserId] = useState("");
-  const [newUserDisplayName, setNewUserDisplayName] = useState("");
-  const [newUserRole, setNewUserRole] = useState("Ủy viên");
-  
-  // Review Form State
-  const [reviewComment, setReviewComment] = useState("");
-  const [reviewRecommendation, setReviewRecommendation] = useState("Đồng ý thông qua");
-
-  // Certificate Form State
-  const [certificateStatus, setCertificateStatus] = useState<"APPROVED" | "REJECTED">("APPROVED");
+  const [members, setMembers] = useState<IRBMember[]>([]);
+  const [meetingDate, setMeetingDate] = useState("");
+  const [meetingLocation, setMeetingLocation] = useState("");
+  const [candidates, setCandidates] = useState<CouncilCandidate[]>([]);
+  const [pickId, setPickId] = useState("");
+  const [pickRole, setPickRole] = useState<IrbRole>("member");
+  const [decisionNumber, setDecisionNumber] = useState("");
+  const [approvalNote, setApprovalNote] = useState("");
   const [certificateNumber, setCertificateNumber] = useState("");
-  const [approvalDate, setApprovalDate] = useState("");
+  const [decisionDate, setDecisionDate] = useState(new Date().toISOString().slice(0, 10));
   const [validUntil, setValidUntil] = useState("");
-  const [riskLevel, setRiskLevel] = useState<"MINIMAL" | "LOW" | "HIGH">("LOW");
-  const [ethicsNotes, setEthicsNotes] = useState("");
+  const [refreshKey, setRefreshKey] = useState("");
+
+  async function load() {
+    try {
+      const data = await fetchIRBInfo(proposal.id);
+      setInfo(data);
+      setLoadError("");
+      setMembers(data.irb.council?.members ?? []);
+      setMeetingDate(toDateInput(data.irb.council?.meetingDate));
+      setMeetingLocation(data.irb.council?.meetingLocation ?? "");
+      setRefreshKey(JSON.stringify([data.irb.council?.status, data.irb.conclusion?.status, !!data.irb.certificate]));
+      if (data.viewer.isCoordinator && !candidates.length) {
+        loadCouncilCandidates(proposal.id).then((result) => setCandidates(result.candidates.filter((item) => item.userId && !item.isConflicted))).catch(() => undefined);
+      }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Không tải được thông tin Hội đồng IRB.");
+    }
+  }
 
   useEffect(() => {
-    if (isOpen) {
-      loadIRBData();
-    }
+    if (isOpen) void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tải lại khi mở modal hoặc đổi hồ sơ
   }, [isOpen, proposal.id]);
 
-  const loadIRBData = async () => {
-    try {
-      setLoading(true);
-      const res = await fetchIRBInfo(proposal.id);
-      if (res && res.irb) {
-        setIrbData(res.irb);
-        setContextVersion(res.contextVersion);
-        if (res.irb.council?.members) {
-          setCouncilMembers(res.irb.council.members);
-        }
-        if (res.irb.certificate) {
-          setCertificateStatus(res.irb.certificate.status);
-          setCertificateNumber(res.irb.certificate.certificateNumber || "");
-          setApprovalDate(res.irb.certificate.decisionDate || "");
-          setValidUntil(res.irb.certificate.validUntil || "");
-          setRiskLevel((res.irb.certificate.riskLevel as any) || "LOW");
-          setEthicsNotes(res.irb.certificate.ethicsNotes || "");
-        } else {
-          // Left empty so the server assigns a unique number from its sequence.
-          setCertificateNumber("");
-          setApprovalDate(new Date().toISOString().split("T")[0]);
-          setValidUntil("2027-12-31");
-          setEthicsNotes("Nghiên cứu can thiệp y dược học đáp ứng đầy đủ các tiêu chuẩn đạo đức theo Hướng dẫn Quốc gia và Tuyên ngôn Helsinki.");
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load IRB info", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const statusOf = useMemo(() => {
+    const rows = info?.memberStatuses ?? [];
+    return (member: IRBMember) => rows.find((row) => row.userId === member.userId && row.role === member.role) ?? null;
+  }, [info]);
 
-  const handleAddMember = () => {
-    if (newUserId && newUserDisplayName) {
-      setCouncilMembers([...councilMembers, { userId: newUserId, displayName: newUserDisplayName, role: newUserRole }]);
-      setNewUserId("");
-      setNewUserDisplayName("");
-    }
-  };
+  if (!isOpen) return null;
 
-  const handleProposeCouncil = async () => {
-    if (!isScientificManagement) return;
+  const irb = info?.irb;
+  const viewer = info?.viewer;
+  const councilStatus = irb?.council?.status ?? "draft";
+  const editable = !!viewer?.isCoordinator && ["draft", "returned", "rejected"].includes(councilStatus) && !irb?.certificate;
+  const conclusion = irb?.conclusion ?? null;
+  const certificate = irb?.certificate ?? null;
+  const summary = irbCompositionSummary(members);
+
+  async function run(action: () => Promise<{ contextVersion?: unknown } | unknown>, success: string) {
     setSaving(true);
     setMessage(null);
     try {
-      const res = await proposeIrbCouncil(proposal.id, councilMembers, "", contextVersion);
-      if (res.success) {
-        setIrbData(res.irb);
-        setContextVersion(res.contextVersion);
-        setMessage({ type: "success", text: "Trình danh sách Hội đồng Y đức thành công!" });
-        onSuccess?.();
-      }
-    } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || "Lỗi lưu hội đồng" });
+      await action();
+      setMessage({ type: "success", text: success });
+      await load();
+      onSuccess?.();
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Thao tác không thành công." });
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  const handleApproveCouncil = async () => {
-    if (!canSignCouncil) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      const res = await approveIrbCouncil(proposal.id, contextVersion);
-      if (res.success) {
-        setIrbData(res.irb);
-        setContextVersion(res.contextVersion);
-        setMessage({ type: "success", text: "Phê duyệt Hội đồng Y đức thành công!" });
-        onSuccess?.();
-      }
-    } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || "Lỗi duyệt hội đồng" });
-    } finally {
-      setSaving(false);
+  function addMember() {
+    const candidate = candidates.find((item) => item.userId === pickId);
+    if (!candidate?.userId) return;
+    if (members.some((member) => member.userId === candidate.userId)) {
+      setMessage({ type: "error", text: `${candidate.fullName} đã có trong danh sách.` });
+      return;
     }
+    setMembers([...members, { userId: candidate.userId, displayName: candidate.fullName, role: pickRole, academicTitle: candidate.academicTitle, unit: candidate.unit }]);
+    setPickId("");
+  }
+
+  const propose = (action: "save" | "invite" | "submit") =>
+    run(
+      () => proposeIrbCouncil(proposal.id, { action, members, meetingDate, meetingLocation, contextVersion: info?.contextVersion }),
+      action === "save" ? "Đã lưu nháp danh sách." : action === "invite" ? "Đã gửi lời mời cho thành viên mới." : "Đã trình Trưởng ban QLKH rà soát."
+    );
+
+  const askReason = (label: string) => {
+    const reason = window.prompt(label);
+    return reason && reason.trim() ? reason.trim() : null;
   };
 
-  const handleSubmitReview = async () => {
-    setSaving(true);
-    setMessage(null);
-    try {
-      const res = await submitIrbReview(proposal.id, { comment: reviewComment, recommendation: reviewRecommendation, contextVersion });
-      if (res.success) {
-        setIrbData(res.irb);
-        setContextVersion(res.contextVersion);
-        setMessage({ type: "success", text: "Gửi nhận xét thành công!" });
-        onSuccess?.();
-      }
-    } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || "Lỗi gửi nhận xét" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleIssueCertificate = async () => {
-    if (!isScientificManagement && !isLeadership) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      const res = await updateIRBStatus(proposal.id, {
-        status: certificateStatus,
-        certificateNumber,
-        decisionDate: approvalDate,
-        validUntil,
-        riskLevel,
-        ethicsNotes,
-        contextVersion,
-      });
-      if (res.success) {
-        setIrbData(res.irb);
-        setContextVersion(res.contextVersion);
-        setCertificateNumber(res.irb.certificate?.certificateNumber || "");
-        setMessage({ type: "success", text: "Đã cấp/cập nhật Giấy chứng nhận IRB thành công!" });
-        onSuccess?.();
-      }
-    } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || "Lỗi cấp chứng nhận" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleExportWord = () => {
+  function handleExportWord() {
+    if (!certificate) return;
     const exportData: ProposalExportData = {
       code: proposal.code || "HVQY-NCKH",
       title: proposal.title,
       ownerDisplayName: proposal.ownerDisplayName || "Chủ nhiệm đề tài",
-      hostOrganizationUnit: proposal.hostOrganizationUnit || "Học viện Quân y"
+      hostOrganizationUnit: proposal.hostOrganizationUnit || proposal.hostOrganizationUnitName || "Học viện Quân y"
     };
-
+    const chair = members.find((member) => member.role === "chair");
     exportIrbCertificateWord(exportData, {
-      certificateNumber,
-      approvalDate,
-      validUntil,
-      riskLevel,
-      councilPresident: "GS. TS. Nguyễn Minh Phương",
-      ethicsNotes
+      certificateNumber: certificate.certificateNumber ?? undefined,
+      approvalDate: vnDate(certificate.decisionDate),
+      validUntil: vnDate(certificate.validUntil),
+      riskLevel: (certificate.riskLevel as "MINIMAL" | "LOW" | "HIGH") ?? "LOW",
+      councilPresident: chair?.displayName ?? "",
+      ethicsNotes: certificate.ethicsNotes
     });
-  };
+  }
 
-  if (!isOpen) return null;
-
-  const councilStatus = irbData?.council?.status || "draft";
-  const hasCertificate = !!irbData?.certificate;
+  const section = { border: "1px solid #e2e8f0", borderRadius: "8px", padding: "16px", marginBottom: "16px" } as const;
+  const heading = { margin: "0 0 12px 0", fontSize: "15px", color: "inherit", display: "flex", alignItems: "center", gap: "6px" } as const;
+  const chip = (text: string, color: string) => <span style={{ fontSize: "12px", color, border: `1px solid ${color}`, padding: "1px 8px", borderRadius: "999px", whiteSpace: "nowrap" }}>{text}</span>;
 
   return (
-    <div className="cmd-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="cmd-modal" style={{ maxWidth: "900px", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
-        {/* Header */}
+    <div className="cmd-overlay" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="cmd-modal" role="dialog" aria-modal="true" aria-label="Hội đồng Đạo đức (IRB)" style={{ maxWidth: "960px", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
         <div className="cmd-header" style={{ flexShrink: 0 }}>
           <div className="cmd-header-left">
-            <div className="cmd-header-icon rose">
-              <HeartPulse size={22} />
-            </div>
+            <div className="cmd-header-icon rose"><HeartPulse size={22} /></div>
             <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <h2 className="cmd-header-title">
-                  Quản lý Hội đồng Đạo đức Y sinh (IRB)
-                </h2>
-              </div>
-              <p className="cmd-header-subtitle">
-                {proposal.code} - {proposal.title}
-              </p>
+              <h2 className="cmd-header-title">Hội đồng Đạo đức trong nghiên cứu Y sinh học (IRB)</h2>
+              <p className="cmd-header-subtitle">{proposal.code ? `${proposal.code} – ` : ""}{proposal.title}</p>
             </div>
           </div>
-          <button onClick={onClose} className="cmd-close-btn">
-            <X size={20} />
-          </button>
+          <button type="button" onClick={onClose} className="cmd-close-btn" aria-label="Đóng"><X size={20} /></button>
         </div>
 
-        {/* Body */}
         <div className="cmd-body" style={{ overflowY: "auto", flex: 1 }}>
-          {message && (
-            <div className={`cmd-alert ${message.type === "success" ? "success" : "error"}`}>
+          {message ? (
+            <div className={`cmd-alert ${message.type}`} role={message.type === "error" ? "alert" : "status"}>
               {message.type === "success" ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
               <span>{message.text}</span>
             </div>
-          )}
+          ) : null}
+          {loadError ? <p className="state-message error">{loadError}</p> : null}
+          {!info && !loadError ? <p className="state-message">Đang tải…</p> : null}
 
-          {/* Section 1: Phân công Hội đồng */}
-          <div style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-            <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "6px" }}>
-              <Users size={16} color="#475569" />
-              1. Danh sách Hội đồng IRB
-              <span style={{ marginLeft: "auto", fontSize: "12px", background: councilStatus === "approved" ? "#dcfce7" : councilStatus === "submitted" ? "#fef08a" : "#e2e8f0", color: councilStatus === "approved" ? "#166534" : "#854d0e", padding: "2px 8px", borderRadius: "4px" }}>
-                {councilStatus === "draft" ? "Đang soạn" : councilStatus === "submitted" ? "Chờ duyệt" : "Đã phê duyệt"}
-              </span>
-            </h3>
-            
-            {councilStatus === "draft" && isScientificManagement && (
-              <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
-                <input type="text" placeholder="ID User" value={newUserId} onChange={e => setNewUserId(e.target.value)} className="cmd-input" style={{ width: "120px" }} />
-                <input type="text" placeholder="Họ tên nhà khoa học" value={newUserDisplayName} onChange={e => setNewUserDisplayName(e.target.value)} className="cmd-input" style={{ flex: 1 }} />
-                <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)} className="cmd-select" style={{ width: "150px" }}>
-                  <option value="Chủ tịch">Chủ tịch</option>
-                  <option value="Ủy viên phản biện">Ủy viên phản biện</option>
-                  <option value="Ủy viên">Ủy viên</option>
-                  <option value="Thư ký">Thư ký</option>
-                </select>
-                <button type="button" onClick={handleAddMember} className="cmd-btn outline">Thêm</button>
-              </div>
-            )}
-            
-            {councilMembers.length > 0 ? (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
-                <thead>
-                  <tr style={{ background: "#f8fafc", textAlign: "left", color: "#475569" }}>
-                    <th style={{ padding: "8px", borderBottom: "1px solid #e2e8f0" }}>Vai trò</th>
-                    <th style={{ padding: "8px", borderBottom: "1px solid #e2e8f0" }}>Tên thành viên</th>
-                    <th style={{ padding: "8px", borderBottom: "1px solid #e2e8f0" }}>Tài khoản</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {councilMembers.map((m, idx) => (
-                    <tr key={idx}>
-                      <td style={{ padding: "8px", borderBottom: "1px solid #e2e8f0", fontWeight: 600 }}>{m.role}</td>
-                      <td style={{ padding: "8px", borderBottom: "1px solid #e2e8f0" }}>{m.displayName}</td>
-                      <td style={{ padding: "8px", borderBottom: "1px solid #e2e8f0", color: "#64748b" }}>{m.userId}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p style={{ color: "#64748b", fontSize: "14px" }}>Chưa có thành viên nào.</p>
-            )}
+          {info ? (
+            <>
+              {/* 1. Danh sách hội đồng và lời mời */}
+              <div style={section}>
+                <h3 style={heading}>
+                  <Users size={16} color="#475569" /> 1. Thành phần hội đồng
+                  <span style={{ marginLeft: "auto" }}>{chip(COUNCIL_STATUS_LABELS[councilStatus] ?? councilStatus, councilStatus === "approved" ? "#166534" : "#475569")}</span>
+                </h3>
+                {irb?.council?.returnReason && councilStatus === "returned" ? <p className="callout warning">Phòng KHQS trả lại: {irb.council.returnReason}</p> : null}
+                {irb?.council?.rejectionReason && councilStatus === "rejected" ? <p className="callout warning">Ban giám đốc trả lại: {irb.council.rejectionReason}</p> : null}
+                <p className="record-meta" style={{ margin: "0 0 8px" }}>
+                  Quy định: 1 Chủ tịch, 1 Thư ký, 2–3 Phản biện, 3–5 Ủy viên. Người được mời chỉ thấy tên đề tài cho tới khi Ban giám đốc ký thành lập.{" "}
+                  {(editable || irb?.council?.invitationsSentAt) && summary.map((item) => <span key={item.role} style={{ marginRight: "8px", color: item.ok ? "#166534" : "#b45309", fontWeight: 600 }}>{item.text}</span>)}
+                </p>
 
-            <div style={{ marginTop: "12px", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-              {councilStatus === "draft" && isScientificManagement && (
-                <button onClick={handleProposeCouncil} disabled={saving || councilMembers.length === 0} className="cmd-btn rose">
-                  Trình duyệt Hội đồng
-                </button>
-              )}
-              {councilStatus === "submitted" && canSignCouncil && (
-                <button onClick={handleApproveCouncil} disabled={saving} className="cmd-btn rose">
-                  Giám đốc phê duyệt Hội đồng
-                </button>
-              )}
-            </div>
-          </div>
+                {editable ? (
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
+                    <select aria-label="Nhà khoa học" value={pickId} onChange={(event) => setPickId(event.target.value)} className="cmd-select" style={{ flex: "1 1 280px" }}>
+                      <option value="">Chọn nhà khoa học…</option>
+                      {candidates.filter((item) => !members.some((member) => member.userId === item.userId)).map((item) => (
+                        <option key={item.id} value={item.userId ?? ""}>{item.fullName} — {item.unit}</option>
+                      ))}
+                    </select>
+                    <select aria-label="Vai trò" value={pickRole} onChange={(event) => setPickRole(event.target.value as IrbRole)} className="cmd-select" style={{ width: "140px" }}>
+                      {ROLES.map((role) => <option key={role} value={role}>{IRB_ROLE_LABELS[role]}</option>)}
+                    </select>
+                    <button type="button" onClick={addMember} disabled={!pickId} className="cmd-btn outline">Thêm</button>
+                  </div>
+                ) : null}
 
-          {/* Section 2: Nhận xét của thành viên */}
-          {councilStatus === "approved" && (
-            <div style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "6px" }}>
-                <FileText size={16} color="#475569" />
-                2. Phiếu nhận xét của Hội đồng
-              </h3>
-              
-              {irbData?.reviews && irbData.reviews.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
-                  {irbData.reviews.map((r, idx) => (
-                    <div key={idx} style={{ background: "#f8fafc", padding: "12px", borderRadius: "6px", border: "1px solid #cbd5e1" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                        <span style={{ fontWeight: 600, fontSize: "14px" }}>{r.reviewerName}</span>
-                        <span style={{ fontSize: "12px", color: "#15803d", background: "#dcfce7", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>{r.recommendation}</span>
-                      </div>
-                      <p style={{ margin: 0, fontSize: "14px", color: "#334155" }}>{r.comment}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "16px" }}>Chưa có nhận xét nào.</p>
-              )}
+                {members.length ? (
+                  <table className="data-table">
+                    <thead><tr><th>Vai trò</th><th>Thành viên</th><th>Đơn vị</th><th>Lời mời</th>{editable ? <th aria-label="Bỏ" /> : null}</tr></thead>
+                    <tbody>
+                      {members.map((member, index) => {
+                        const status = statusOf(member);
+                        return (
+                          <tr key={`${member.userId}-${index}`}>
+                            <td>
+                              {editable ? (
+                                <select aria-label={`Vai trò của ${member.displayName}`} value={member.role} onChange={(event) => setMembers(members.map((item, i) => (i === index ? { ...item, role: event.target.value as IrbRole } : item)))} className="cmd-select">
+                                  {ROLES.map((role) => <option key={role} value={role}>{IRB_ROLE_LABELS[role]}</option>)}
+                                </select>
+                              ) : <strong>{IRB_ROLE_LABELS[member.role] ?? member.role}</strong>}
+                            </td>
+                            <td>{member.displayName}</td>
+                            <td>{member.unit || "—"}</td>
+                            <td>
+                              {status ? chip(status.statusLabel, MEMBER_STATUS_COLORS[status.status] ?? "#475569") : chip("Chưa gửi lời mời", "#64748b")}
+                              {status?.declineReason ? <span className="record-meta" style={{ display: "block" }}>Lý do: {status.declineReason}</span> : null}
+                            </td>
+                            {editable ? <td><button type="button" className="cmd-btn outline" aria-label={`Bỏ ${member.displayName}`} onClick={() => setMembers(members.filter((_, i) => i !== index))}><Trash2 size={14} /></button></td> : null}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : <p className="record-meta">Chưa có thành viên nào.</p>}
 
-              {/* Form nhận xét nếu là thành viên */}
-              <div style={{ borderTop: "1px dashed #cbd5e1", paddingTop: "12px" }}>
-                <p style={{ fontSize: "13px", fontWeight: 600, marginBottom: "8px" }}>Form Nhập nhận xét (Dành cho thành viên HĐ)</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <select value={reviewRecommendation} onChange={e => setReviewRecommendation(e.target.value)} className="cmd-select">
-                    <option value="Đồng ý thông qua">Đồng ý thông qua</option>
-                    <option value="Thông qua có sửa chữa">Thông qua có sửa chữa</option>
-                    <option value="Không thông qua">Không thông qua</option>
-                  </select>
-                  <textarea 
-                    rows={3} 
-                    placeholder="Nội dung nhận xét về mặt đạo đức..." 
-                    value={reviewComment} 
-                    onChange={e => setReviewComment(e.target.value)} 
-                    className="cmd-textarea" 
-                  />
-                  <div style={{ alignSelf: "flex-end" }}>
-                    <button onClick={handleSubmitReview} disabled={saving} className="cmd-btn outline">Gửi Nhận xét</button>
+                <div className="cmd-grid-2" style={{ marginTop: "12px" }}>
+                  <div className="cmd-form-group">
+                    <label className="cmd-label" htmlFor="irb-meeting-date">Ngày họp dự kiến</label>
+                    <input id="irb-meeting-date" type="date" disabled={!editable} value={meetingDate} onChange={(event) => setMeetingDate(event.target.value)} className="cmd-input" />
+                  </div>
+                  <div className="cmd-form-group">
+                    <label className="cmd-label" htmlFor="irb-meeting-location">Địa điểm họp</label>
+                    <input id="irb-meeting-location" type="text" disabled={!editable} value={meetingLocation} onChange={(event) => setMeetingLocation(event.target.value)} className="cmd-input" />
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* Section 3: Cấp giấy chứng nhận */}
-          {councilStatus === "approved" && (
-            <div style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "16px" }}>
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "15px", color: "#0f172a", display: "flex", alignItems: "center", gap: "6px" }}>
-                <ShieldCheck size={16} color="#e11d48" />
-                3. Quyết định & Cấp Chứng nhận IRB
-                {hasCertificate && (
-                  <span style={{ marginLeft: "auto", fontSize: "12px", background: certificateStatus === "APPROVED" ? "#dcfce7" : "#fee2e2", color: certificateStatus === "APPROVED" ? "#166534" : "#991b1b", padding: "2px 8px", borderRadius: "4px" }}>
-                    {certificateStatus === "APPROVED" ? "Đã cấp chứng nhận" : "Bị từ chối"}
-                  </span>
-                )}
-              </h3>
-              
-              <div className="cmd-grid-2" style={{ marginBottom: "12px" }}>
-                <div className="cmd-form-group">
-                  <label className="cmd-label">Trạng thái phê duyệt</label>
-                  <select disabled={!isScientificManagement && !isLeadership} value={certificateStatus} onChange={e => setCertificateStatus(e.target.value as any)} className="cmd-select">
-                    <option value="APPROVED">Chấp thuận (Cấp giấy)</option>
-                    <option value="REJECTED">Từ chối chấp thuận</option>
-                  </select>
-                </div>
-                <div className="cmd-form-group">
-                  <label className="cmd-label">Số Giấy chứng nhận IRB</label>
-                  <input type="text" disabled={!isScientificManagement && !isLeadership} value={certificateNumber} onChange={e => setCertificateNumber(e.target.value)} placeholder="Để trống để hệ thống tự cấp số" className="cmd-input" />
-                </div>
-                <div className="cmd-form-group">
-                  <label className="cmd-label">Ngày cấp</label>
-                  <input type="date" disabled={!isScientificManagement && !isLeadership} value={approvalDate} onChange={e => setApprovalDate(e.target.value)} className="cmd-input" />
-                </div>
-                <div className="cmd-form-group">
-                  <label className="cmd-label">Có hiệu lực đến</label>
-                  <input type="date" disabled={!isScientificManagement && !isLeadership} value={validUntil} onChange={e => setValidUntil(e.target.value)} className="cmd-input" />
-                </div>
-                <div className="cmd-form-group">
-                  <label className="cmd-label">Phân loại rủi ro</label>
-                  <select disabled={!isScientificManagement && !isLeadership} value={riskLevel} onChange={e => setRiskLevel(e.target.value as any)} className="cmd-select">
-                    <option value="MINIMAL">Rủi ro tối thiểu (Minimal)</option>
-                    <option value="LOW">Rủi ro thấp (Low)</option>
-                    <option value="HIGH">Rủi ro cao (High)</option>
-                  </select>
-                </div>
+                {editable ? (
+                  <div style={{ marginTop: "12px", display: "flex", gap: "8px", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                    <button type="button" disabled={saving} onClick={() => void propose("save")} className="cmd-btn outline">Lưu nháp</button>
+                    <button type="button" disabled={saving || !members.length} onClick={() => void propose("invite")} className="cmd-btn outline"><Send size={14} /> Gửi lời mời</button>
+                    <button type="button" disabled={saving || summary.some((item) => !item.ok)} onClick={() => void propose("submit")} className="cmd-btn rose" title={summary.some((item) => !item.ok) ? "Thành phần chưa đủ theo quy định" : undefined}>Trình Trưởng ban rà soát</button>
+                  </div>
+                ) : null}
+
+                {councilStatus === "submitted" && viewer?.canSign ? (
+                  <div style={{ borderTop: "1px dashed #cbd5e1", marginTop: "12px", paddingTop: "12px" }}>
+                    <div className="cmd-grid-2">
+                      <div className="cmd-form-group">
+                        <label className="cmd-label" htmlFor="irb-decision-number">Số quyết định thành lập</label>
+                        <input id="irb-decision-number" className="cmd-input" value={decisionNumber} placeholder="Để trống: hệ thống đặt số" onChange={(event) => setDecisionNumber(event.target.value)} />
+                      </div>
+                      <div className="cmd-form-group">
+                        <label className="cmd-label" htmlFor="irb-approval-note">Ý kiến</label>
+                        <input id="irb-approval-note" className="cmd-input" value={approvalNote} onChange={(event) => setApprovalNote(event.target.value)} />
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "8px" }}>
+                      <button type="button" disabled={saving} className="cmd-btn outline" onClick={() => { const reason = askReason("Lý do trả lại tờ trình Hội đồng IRB:"); if (reason) void run(() => rejectIrbCouncil(proposal.id, { reason, contextVersion: info.contextVersion }), "Đã trả lại tờ trình cho chuyên viên."); }}>Trả lại</button>
+                      <button type="button" disabled={saving} className="cmd-btn rose" onClick={() => void run(() => approveIrbCouncil(proposal.id, { decisionNumber, approvalNote, contextVersion: info.contextVersion }), "Đã ký quyết định thành lập Hội đồng IRB.")}>Ký thành lập hội đồng</button>
+                    </div>
+                  </div>
+                ) : null}
+                {councilStatus === "approved" ? <p className="record-meta" style={{ marginTop: "8px" }}>Quyết định {irb?.council?.decisionNumber ?? ""} — {irb?.council?.approvedByName ?? ""} ký ngày {vnDate(irb?.council?.approvedAt)}.</p> : null}
               </div>
 
-              <div className="cmd-form-group">
-                <label className="cmd-label">Kết luận thẩm định</label>
-                <textarea disabled={!isScientificManagement && !isLeadership} rows={2} value={ethicsNotes} onChange={e => setEthicsNotes(e.target.value)} className="cmd-textarea" />
-              </div>
+              <RoutingStatus subjectType="proposal" subjectId={proposal.id} refreshKey={refreshKey} />
 
-              <div style={{ marginTop: "12px", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                {hasCertificate && (
-                  <button onClick={handleExportWord} className="cmd-btn outline">Xuất Giấy chứng nhận IRB (.doc)</button>
-                )}
-                {(isScientificManagement || isLeadership) && (
-                  <button onClick={handleIssueCertificate} disabled={saving} className="cmd-btn rose">
-                    Lưu Quyết Định IRB
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+              {/* 2. Nhận xét */}
+              {councilStatus === "approved" ? (
+                <div style={section}>
+                  <h3 style={heading}><FileText size={16} color="#475569" /> 2. Nhận xét của thành viên ({irb?.reviews?.length ?? 0})</h3>
+                  {irb?.reviews?.length ? (
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      {irb.reviews.map((review) => (
+                        <div key={review.reviewerId} style={{ background: "#f8fafc", color: "#0f172a", padding: "10px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "4px" }}>
+                            <strong>{review.reviewerName}{review.roleLabel ? ` (${review.roleLabel})` : ""}</strong>
+                            <span style={{ fontSize: "12px", color: "#475569" }}>{review.recommendationLabel ?? review.recommendation} · {vnDate(review.submittedAt)}</span>
+                          </div>
+                          <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{review.comment}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="record-meta">Chưa có nhận xét. Thành viên gửi nhận xét ở trang hồ sơ đề tài.</p>}
+                </div>
+              ) : null}
+
+              {/* 3. Kết luận và cấp giấy */}
+              {councilStatus === "approved" ? (
+                <div style={section}>
+                  <h3 style={heading}>
+                    <ShieldCheck size={16} color="#e11d48" /> 3. Kết luận và Giấy chứng nhận
+                    {conclusion ? <span style={{ marginLeft: "auto" }}>{chip(CONCLUSION_STATUS_LABELS[conclusion.status] ?? conclusion.status, "#475569")}</span> : null}
+                  </h3>
+                  {!conclusion ? <p className="record-meta">Thư ký hội đồng chưa lập kết luận.</p> : (
+                    <dl className="cmd-grid-2" style={{ margin: 0 }}>
+                      <div><dt className="cmd-label">Kết luận</dt><dd>{conclusion.decision === "APPROVED" ? "Chấp thuận" : "Không chấp thuận"}</dd></div>
+                      <div><dt className="cmd-label">Mức độ rủi ro</dt><dd>{IRB_RISK_LABELS[conclusion.riskLevel] ?? conclusion.riskLevel}</dd></div>
+                      <div><dt className="cmd-label">Đối tượng nghiên cứu</dt><dd>{conclusion.targetSubjects || "—"}</dd></div>
+                      <div><dt className="cmd-label">Thư ký lập</dt><dd>{conclusion.recordedByName ?? "—"}, {vnDate(conclusion.recordedAt)}</dd></div>
+                      <div style={{ gridColumn: "1 / -1" }}><dt className="cmd-label">Ý kiến kết luận</dt><dd style={{ whiteSpace: "pre-wrap" }}>{conclusion.ethicsNotes}</dd></div>
+                      {conclusion.conditions ? <div style={{ gridColumn: "1 / -1" }}><dt className="cmd-label">Điều kiện / yêu cầu chỉnh sửa</dt><dd style={{ whiteSpace: "pre-wrap" }}>{conclusion.conditions}</dd></div> : null}
+                      {conclusion.status === "returned" && conclusion.returnReason ? <div style={{ gridColumn: "1 / -1" }}><p className="callout warning">Bị trả lại: {conclusion.returnReason}</p></div> : null}
+                    </dl>
+                  )}
+
+                  {conclusion?.status === "finalized" && viewer?.isCoordinator ? (
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+                      <button type="button" disabled={saving} className="cmd-btn rose" onClick={() => void run(() => submitIrbConclusion(proposal.id, info.contextVersion), "Đã trình kết luận qua Phòng KHQS.")}>Trình kết luận qua Phòng KHQS</button>
+                    </div>
+                  ) : null}
+
+                  {conclusion?.status === "submitted" && viewer?.canSign ? (
+                    <div style={{ borderTop: "1px dashed #cbd5e1", marginTop: "12px", paddingTop: "12px" }}>
+                      <div className="cmd-grid-2">
+                        <div className="cmd-form-group">
+                          <label className="cmd-label" htmlFor="irb-cert-number">Số Giấy chứng nhận</label>
+                          <input id="irb-cert-number" className="cmd-input" value={certificateNumber} placeholder="Để trống: hệ thống tự cấp số" onChange={(event) => setCertificateNumber(event.target.value)} />
+                        </div>
+                        <div className="cmd-form-group">
+                          <label className="cmd-label" htmlFor="irb-cert-date">Ngày ký</label>
+                          <input id="irb-cert-date" type="date" className="cmd-input" value={decisionDate} onChange={(event) => setDecisionDate(event.target.value)} />
+                        </div>
+                        <div className="cmd-form-group">
+                          <label className="cmd-label" htmlFor="irb-cert-valid">Hiệu lực đến</label>
+                          <input id="irb-cert-valid" type="date" className="cmd-input" value={validUntil} placeholder="Mặc định 1 năm" onChange={(event) => setValidUntil(event.target.value)} />
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "8px" }}>
+                        <button type="button" disabled={saving} className="cmd-btn outline" onClick={() => { const reason = askReason("Lý do trả lại kết luận cho thư ký hội đồng:"); if (reason) void run(() => returnIrbConclusion(proposal.id, { reason, contextVersion: info.contextVersion }), "Đã trả lại kết luận."); }}>Trả lại thư ký</button>
+                        <button type="button" disabled={saving} className="cmd-btn rose" onClick={() => void run(() => updateIRBStatus(proposal.id, { certificateNumber, decisionDate, validUntil: validUntil || undefined, contextVersion: info.contextVersion }), "Đã ký cấp Giấy chứng nhận IRB.")}>
+                          Ký {conclusion.decision === "APPROVED" ? "cấp Giấy chứng nhận" : "văn bản không chấp thuận"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {certificate ? (
+                    <div style={{ marginTop: "12px", padding: "12px", borderRadius: "6px", color: "#0f172a", background: certificate.status === "APPROVED" ? "#f0fdf4" : "#fef2f2" }}>
+                      <strong>{certificate.status === "APPROVED" ? `Giấy chứng nhận số ${certificate.certificateNumber}` : "Không chấp thuận về đạo đức"}</strong>
+                      <span className="record-meta" style={{ display: "block" }}>{certificate.approvedByName} ký ngày {vnDate(certificate.decisionDate)}{certificate.status === "APPROVED" ? `, hiệu lực đến ${vnDate(certificate.validUntil)}` : ""}.</span>
+                      {certificate.status === "APPROVED" ? <button type="button" onClick={handleExportWord} className="cmd-btn outline" style={{ marginTop: "8px" }}>Xuất Giấy chứng nhận (.doc)</button> : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
 
-        {/* Footer */}
         <div className="cmd-footer" style={{ flexShrink: 0 }}>
-          <button onClick={onClose} className="cmd-btn outline">Đóng</button>
+          <button type="button" onClick={onClose} className="cmd-btn outline">Đóng</button>
         </div>
       </div>
     </div>
   );
 }
-

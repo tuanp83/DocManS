@@ -157,6 +157,11 @@ export function canReadProposal(
     return true;
   }
 
+  // Thành viên Hội đồng Đạo đức (IRB) đã được ký thành lập đọc hồ sơ (kể cả ngoài đơn vị) để nhận xét.
+  if (reviewAccess?.isIrbMember && isWorkflowVisibleStatus(proposal.status) && !evaluateProposalConflict(participation).conflicted) {
+    return true;
+  }
+
   if (!getOrganizationScopeIds(user).includes(proposal.hostOrganizationUnitId)) {
     return false;
   }

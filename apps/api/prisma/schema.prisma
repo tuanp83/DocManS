@@ -48,6 +48,8 @@ model User {
   approvalSteps                        ApprovalStep[]                 @relation("ApprovalStepActor")
   assignedUnitPositions                UnitPosition[]                 @relation("UnitPositionAssigner")
   createdManagementPortfolios          ManagementPortfolio[]          @relation("ManagementPortfolioCreator")
+  irbMemberships                       ProposalIrbMember[]            @relation("IrbMemberUser")
+  irbInvitationsSent                   ProposalIrbMember[]            @relation("IrbMemberInviter")
   proposalReviews                      ProposalReview[]               @relation("ProposalReviewReviewer")
   createdEvaluationSummaries           ProposalEvaluationSummary[]    @relation("EvaluationSummaryCreator")
   updatedEvaluationSummaries           ProposalEvaluationSummary[]    @relation("EvaluationSummaryEditor")
@@ -526,6 +528,7 @@ model ResearchProposal {
   supplementRequests               ProposalSupplementRequest[]
   reviewAssignments                ProposalReviewAssignment[]
   managementOfficers               ProposalManagementOfficer[]
+  irbMembers                       ProposalIrbMember[]
   reviews                          ProposalReview[]
   evaluationSummary                ProposalEvaluationSummary?
   decisions                        ProposalDecision[]
@@ -621,6 +624,33 @@ model ManagementPortfolio {
 
   @@index([officerUserId])
   @@map("management_portfolios")
+}
+
+/// Thành viên Hội đồng Đạo đức trong nghiên cứu Y sinh học (IRB) của một hồ sơ, tách khỏi phân công phản biện để
+/// không cấp quyền chấm phiếu đánh giá. Trạng thái: invited (chờ trả lời, chỉ thấy tên đề tài) → accepted / declined;
+/// active sau khi Ban giám đốc ký thành lập (được đọc hồ sơ, nhận xét); revoked khi bị bỏ khỏi danh sách.
+model ProposalIrbMember {
+  id            String           @id @default(uuid())
+  proposalId    String           @map("proposal_id")
+  proposal      ResearchProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  userId        String           @map("user_id")
+  user          User             @relation("IrbMemberUser", fields: [userId], references: [id], onDelete: Restrict)
+  role          String
+  status        String           @default("invited")
+  invitedById   String           @map("invited_by_id")
+  invitedBy     User             @relation("IrbMemberInviter", fields: [invitedById], references: [id], onDelete: Restrict)
+  invitedAt     DateTime         @default(now()) @map("invited_at")
+  acceptedAt    DateTime?        @map("accepted_at")
+  declinedAt    DateTime?        @map("declined_at")
+  declineReason String?          @map("decline_reason")
+  activatedAt   DateTime?        @map("activated_at")
+  revokedAt     DateTime?        @map("revoked_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  @@index([proposalId, status])
+  @@index([userId, status])
+  @@map("proposal_irb_members")
 }
 
 /// Hồ sơ trình qua Phòng KHQS trước khi lên Ban giám đốc: chuyên viên lập → Trưởng ban QLKH trình → Trưởng phòng

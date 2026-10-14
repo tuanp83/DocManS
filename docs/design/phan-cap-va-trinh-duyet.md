@@ -67,7 +67,8 @@ Chuyên viên lập, bấm "Trình Trưởng ban rà soát"
 |---|---|---|
 | Thành lập hội đồng đánh giá | Tờ trình hội đồng (sau khi mọi thành viên nhận lời) | Giám đốc hoặc Phó GĐ KH |
 | Phê duyệt đề tài và kinh phí | Gói đánh giá đã chốt | Chỉ Giám đốc |
-| Hội đồng đạo đức (IRB) | Đề xuất hội đồng IRB | Giám đốc hoặc Phó GĐ KH |
+| Thành lập Hội đồng đạo đức (IRB) | Tờ trình hội đồng IRB (sau khi mọi thành viên nhận lời) | Giám đốc hoặc Phó GĐ KH |
+| Cấp Giấy chứng nhận đạo đức (IRB) | Kết luận do thư ký hội đồng IRB lập, chuyên viên trình | Giám đốc hoặc Phó GĐ KH |
 | Hội đồng nghiệm thu | Đề xuất hội đồng nghiệm thu | Giám đốc hoặc Phó GĐ KH |
 | Gia hạn đề tài | Chuyên viên thẩm định đề nghị gia hạn | Giám đốc hoặc Phó GĐ KH |
 | Điều chỉnh đề tài | Chuyên viên thẩm định đề nghị điều chỉnh | Giám đốc hoặc Phó GĐ KH |
@@ -79,6 +80,19 @@ Chuyên viên lập, bấm "Trình Trưởng ban rà soát"
 
 - Người được mời chỉ thấy **tên đề tài**, vai trò, hạn và người mời cho đến khi bấm **Đồng ý**; bấm **Từ chối** phải ghi lý do.
 - Lời mời hội đồng gửi **trước khi trình**: chỉ trình được khi mọi thành viên đã nhận lời; người từ chối phải được thay. Thành viên đã nhận lời xem được hồ sơ khi Ban giám đốc ký quyết định thành lập.
+
+### Hội đồng Đạo đức trong nghiên cứu Y sinh học (IRB)
+
+Thành phần: **1 Chủ tịch, 1 Thư ký, 2–3 Phản biện, 3–5 Ủy viên**; không mời chủ nhiệm, thành viên, thư ký đề tài.
+
+1. Chuyên viên phụ trách (hoặc Trưởng phòng) chọn thành viên ở **Đánh giá hồ sơ → Quản lý Hội đồng Y đức**, bấm **Gửi lời mời**.
+2. Người được mời thấy lời mời ở **Được mời phản biện** và trên trang hồ sơ — chỉ có tên đề tài, vai trò, người mời. Bấm **Đồng ý** hoặc **Từ chối** (bắt buộc lý do; chuyên viên được báo để thay người).
+3. Khi mọi người đã nhận lời và đủ thành phần, chuyên viên **Trình Trưởng ban rà soát** → Trưởng phòng → Ban giám đốc **Ký thành lập hội đồng** hoặc **Trả lại**.
+4. Sau khi ký thành lập, thành viên mới đọc được hồ sơ (chỉ đọc, không chấm phiếu đánh giá đề tài). Chủ tịch, Phản biện, Ủy viên gửi **nhận xét** trên trang hồ sơ.
+5. **Thư ký** lập và **chốt kết luận** (chấp thuận / không chấp thuận, mức rủi ro, đối tượng, điều kiện) khi mọi phản biện đã gửi nhận xét. Sau khi chốt, nhận xét bị khoá.
+6. Chuyên viên **Trình kết luận qua Phòng KHQS** → Trưởng ban → Trưởng phòng → Ban giám đốc **Ký cấp Giấy chứng nhận** (số IRB-HVQY-năm-số tự cấp) hoặc **Trả lại thư ký**.
+
+Hội đồng IRB đã ký thành lập trước bản này được giữ nguyên (thành viên có tài khoản trở thành thành viên hội đồng); hội đồng cũ chưa ký vẫn ký được như trước.
 
 ## 5. Mỗi vai trò dùng trang nào
 
@@ -114,5 +128,6 @@ Tờ trình đã nằm chờ Ban giám đốc từ trước khi lên bản vẫn
 ## 7. Kiểm thử
 
 - `tests/role-hierarchy-e2e-db.test.mjs`: toàn luồng trên PostgreSQL thật với đủ vai trò, từ nộp hồ sơ đến Giám đốc phê duyệt.
+- `tests/irb-council-db.test.mjs`: Hội đồng IRB từ lời mời tới Giấy chứng nhận (thành phần, người chưa nhận lời không đọc được hồ sơ, trả lại, người ký).
 - `tests/approval-routing-db.test.mjs`: luồng trình duyệt (không bỏ bước, sai người bị chặn, trả lại, người ký).
 - `tests/role-hierarchy.test.mjs`, `tests/evaluation-coordination-db.test.mjs`, `tests/unit-positions-db.test.mjs`: quyền theo vai trò, giao mảng, chức danh.

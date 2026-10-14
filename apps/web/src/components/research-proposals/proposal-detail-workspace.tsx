@@ -12,6 +12,7 @@ import { ProposalDecisionPanel } from "@/components/research-proposals/proposal-
 import { ProposalEvaluationPanel } from "@/components/research-proposals/proposal-evaluation-panel";
 import { ProposalReviewForm } from "@/components/research-proposals/proposal-review-form";
 import { ReviewInvitationActions } from "@/components/research-proposals/review-invitation-actions";
+import { IrbMemberPanel } from "@/components/research-proposals/irb-member-panel";
 import { loadMyReviewAssignments, type ReviewerQueueItem } from "@/lib/proposal-evaluations-api";
 import { ProposalManagementOfficerPanel } from "@/components/research-proposals/proposal-management-officer-panel";
 import { ProposalDeliverablesPanel } from "@/components/research-proposals/proposal-deliverables-panel";
@@ -118,6 +119,8 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
   const [isResubmitting, setIsResubmitting] = useState(false);
   const [invitation, setInvitation] = useState<ReviewerQueueItem | null>(null);
   const [declined, setDeclined] = useState(false);
+  // Người được mời vào Hội đồng IRB nhưng chưa được đọc hồ sơ: chỉ hiện khung lời mời, không báo lỗi quyền.
+  const [irbPresence, setIrbPresence] = useState<string | null>(null);
 
   /** Lời mời phản biện hồ sơ này đang chờ người xem trả lời (chưa đồng ý thì chưa được đọc hồ sơ). */
   async function loadInvitation() {
@@ -490,16 +493,20 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
     </SectionCard>
   ) : null;
 
+  // Khung IRB của chính thành viên hội đồng: hiện cả khi chưa được đọc hồ sơ (lời mời chỉ có tên đề tài).
+  const irbPanel = <IrbMemberPanel proposalId={proposalId} onChanged={() => void refresh()} onPresence={setIrbPresence} />;
+
   if (state === "error" || !proposal || !form) {
-    if (invitationCard) return invitationCard;
+    if (invitationCard) return <>{invitationCard}{irbPanel}</>;
     if (declined) return <p className="state-message">Bạn đã từ chối lời mời phản biện hồ sơ này. Chuyên viên quản lý khoa học đã được thông báo.</p>;
-    return <p className="state-message error">Không thể tải chi tiết hồ sơ hoặc bạn không có quyền truy cập.</p>;
+    return <>{irbPanel}{irbPresence === "invited" || irbPresence === "accepted" ? null : <p className="state-message error">Không thể tải chi tiết hồ sơ hoặc bạn không có quyền truy cập.</p>}</>;
   }
 
   return (
     <div className="grid detail-grid">
       <div className="grid">
         {invitationCard}
+        {irbPanel}
         <button className="button" type="button" disabled={isSaving || isUploading || isSubmitting || isResubmitting} onClick={() => { if (!unsaved || window.confirm("Bỏ thay đổi chưa lưu và tải lại hồ sơ?")) void refresh(); }}>Tải lại hồ sơ</button>
         {unsaved ? <p role="status" className="state-message">Có thay đổi chưa lưu. Lưu bản nháp trước khi nộp.</p> : null}
         {message ? <p className="state-message success" role="status">{message}</p> : null}

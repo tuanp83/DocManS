@@ -474,95 +474,169 @@ export function loadCouncilCandidates(proposalId: string) {
 
 // Nghiệm thu và giải ngân gắn với đề tài: xem lib/projects-api.ts.
 
-// Biomedical Research Ethics Council / IRB Types & APIs -----------------------
-export type IRBMember = {
-  userId: string;
-  displayName: string;
-  role: string;
-};
+// Hội đồng Đạo đức trong nghiên cứu Y sinh học (IRB) ------------------------------------------------------
+// Luồng (apps/api/src/proposal-evaluations/irb-council.ts): mời → Đồng ý/Từ chối → trình qua Phòng KHQS → Ban giám đốc ký
+// thành lập → thành viên nhận xét → thư ký lập kết luận → chuyên viên trình → Ban giám đốc ký cấp Giấy chứng nhận.
+
+export type IrbRole = "chair" | "secretary" | "reviewer" | "member";
+export const IRB_ROLE_LABELS: Record<IrbRole, string> = { chair: "Chủ tịch", secretary: "Thư ký", reviewer: "Phản biện", member: "Ủy viên" };
+/** Thành phần quy định: 1 Chủ tịch, 1 Thư ký, 2–3 Phản biện, 3–5 Ủy viên. */
+export const IRB_COMPOSITION: Record<IrbRole, { min: number; max: number }> = { chair: { min: 1, max: 1 }, secretary: { min: 1, max: 1 }, reviewer: { min: 2, max: 3 }, member: { min: 3, max: 5 } };
+export type IrbRecommendation = "approve" | "revise" | "reject";
+export const IRB_RECOMMENDATION_LABELS: Record<IrbRecommendation, string> = { approve: "Đồng ý thông qua", revise: "Thông qua với điều kiện chỉnh sửa", reject: "Không thông qua" };
+export const IRB_RISK_LABELS: Record<string, string> = { MINIMAL: "Rủi ro tối thiểu", LOW: "Rủi ro thấp", HIGH: "Rủi ro cao" };
+
+export type IRBMember = { userId: string; displayName: string; role: IrbRole; roleLabel?: string; academicTitle?: string; unit?: string };
 
 export type IRBReview = {
   reviewerId: string;
   reviewerName: string;
+  role?: IrbRole;
+  roleLabel?: string;
   status: "submitted";
   comment: string;
   recommendation: string;
+  recommendationLabel?: string;
   submittedAt: string;
+};
+
+export type IRBConclusion = {
+  status: "draft" | "finalized" | "submitted" | "returned" | "signed";
+  decision: "APPROVED" | "REJECTED";
+  riskLevel: string;
+  targetSubjects?: string;
+  ethicsNotes: string;
+  conditions?: string;
+  meetingConductedAt?: string;
+  recordedByName?: string;
+  recordedAt?: string;
+  submittedByName?: string;
+  returnReason?: string;
+  returnedByName?: string;
 };
 
 export type IRBMetadata = {
   council?: {
-    status: "draft" | "submitted" | "approved";
+    status: "draft" | "submitted" | "returned" | "rejected" | "approved";
     members: IRBMember[];
+    meetingDate?: string;
+    meetingLocation?: string;
     proposedById?: string;
     proposedByName?: string;
     proposedAt?: string;
-    approvedById?: string;
+    invitationsSentAt?: string | null;
+    decisionNumber?: string;
     approvedByName?: string;
     approvedAt?: string;
-    meetingDate?: string;
+    returnReason?: string;
+    rejectionReason?: string;
   };
   reviews?: IRBReview[];
+  conclusion?: IRBConclusion | null;
   certificate?: {
     status: "APPROVED" | "REJECTED";
-    certificateNumber?: string;
+    certificateNumber?: string | null;
     decisionDate?: string;
     validUntil?: string;
     ethicsNotes?: string;
     riskLevel?: string;
     targetSubjects?: string;
+    conditions?: string;
     approvedById?: string;
     approvedByName?: string;
     updatedAt?: string;
-  };
+  } | null;
+};
+
+export type IrbMemberStatus = {
+  id: string;
+  proposalId: string;
+  userId: string;
+  displayName: string | null;
+  role: IrbRole;
+  roleLabel: string;
+  status: "invited" | "accepted" | "declined" | "active" | "revoked";
+  statusLabel: string;
+  invitedAt: string | null;
+  acceptedAt: string | null;
+  declinedAt: string | null;
+  declineReason: string | null;
+};
+
+/** Lời mời / tư cách thành viên IRB của người xem: chỉ tên đề tài. */
+export type IrbInvitation = IrbMemberStatus & {
+  proposal: { id: string; code: string | null; title: string };
+  invitedByName: string | null;
+  meetingDate: string | null;
+  councilStatus: string;
+  reviewSubmitted: boolean;
+  conclusionStatus: string | null;
+  certificateStatus: string | null;
 };
 
 /** Opaque proposal contextVersion token returned by the API; sent back unchanged on the next write. */
 export type IRBContextVersion = unknown;
-type IRBResponse = { success: boolean; proposalId: string; irb: IRBMetadata; contextVersion?: IRBContextVersion };
+export type IRBInfo = {
+  proposalId: string;
+  irb: IRBMetadata;
+  memberStatuses: IrbMemberStatus[];
+  viewer: { memberRole: IrbRole | null; isCoordinator: boolean; canSign: boolean };
+  contextVersion?: IRBContextVersion;
+};
+type IRBResponse = { success: boolean; irb: IRBMetadata; contextVersion?: IRBContextVersion };
+
+const irbPost = (proposalId: string, path: string, body: Record<string, unknown>) =>
+  requestJson<IRBResponse>(`/research-proposals/${proposalId}/irb${path}`, { method: "POST", body: JSON.stringify(body) });
 
 export function fetchIRBInfo(proposalId: string) {
-  return requestJson<IRBResponse>(
-    `/research-proposals/${proposalId}/irb`
-  );
+  return requestJson<IRBInfo>(`/research-proposals/${proposalId}/irb`);
 }
 
-export function proposeIrbCouncil(proposalId: string, members: IRBMember[], meetingDate: string = "", contextVersion?: IRBContextVersion) {
-  return requestJson<IRBResponse>(
-    `/research-proposals/${proposalId}/irb/propose`,
-    { method: "POST", body: JSON.stringify({ members, meetingDate, contextVersion }) }
-  );
+export async function loadMyIrbInvitations() {
+  return (await requestJson<{ invitations: IrbInvitation[] }>("/research-proposals/irb-invitations/mine")).invitations;
 }
 
-export function approveIrbCouncil(proposalId: string, contextVersion?: IRBContextVersion) {
-  return requestJson<IRBResponse>(
-    `/research-proposals/${proposalId}/irb/approve-council`,
-    { method: "POST", body: JSON.stringify({ contextVersion }) }
-  );
+/** save: lưu nháp; invite: gửi lời mời cho người mới; submit: trình qua Phòng KHQS (mọi người đã nhận lời). */
+export function proposeIrbCouncil(proposalId: string, payload: { action: "save" | "invite" | "submit"; members: IRBMember[]; meetingDate?: string; meetingLocation?: string; contextVersion?: IRBContextVersion }) {
+  return irbPost(proposalId, "/propose", payload);
 }
 
-export function submitIrbReview(proposalId: string, payload: { comment: string; recommendation: string; contextVersion?: IRBContextVersion }) {
-  return requestJson<IRBResponse>(
-    `/research-proposals/${proposalId}/irb/review`,
-    { method: "POST", body: JSON.stringify(payload) }
-  );
+export function acceptIrbInvitation(proposalId: string, memberId: string) {
+  return requestJson<IrbMemberStatus>(`/research-proposals/${proposalId}/irb/members/${memberId}/accept`, { method: "POST", body: "{}" });
 }
 
+export function declineIrbInvitation(proposalId: string, memberId: string, reason: string) {
+  return requestJson<IrbMemberStatus>(`/research-proposals/${proposalId}/irb/members/${memberId}/decline`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+export function approveIrbCouncil(proposalId: string, payload: { decisionNumber?: string; approvalNote?: string; contextVersion?: IRBContextVersion }) {
+  return irbPost(proposalId, "/approve-council", payload);
+}
+
+export function rejectIrbCouncil(proposalId: string, payload: { reason: string; contextVersion?: IRBContextVersion }) {
+  return irbPost(proposalId, "/reject-council", payload);
+}
+
+export function submitIrbReview(proposalId: string, payload: { comment: string; recommendation: IrbRecommendation; contextVersion?: IRBContextVersion }) {
+  return irbPost(proposalId, "/review", payload);
+}
+
+export function saveIrbConclusion(proposalId: string, payload: Omit<IRBConclusion, "status"> & { action: "save" | "finalize"; contextVersion?: IRBContextVersion }) {
+  return irbPost(proposalId, "/conclusion", payload);
+}
+
+export function submitIrbConclusion(proposalId: string, contextVersion?: IRBContextVersion) {
+  return irbPost(proposalId, "/conclusion/submit", { contextVersion });
+}
+
+export function returnIrbConclusion(proposalId: string, payload: { reason: string; contextVersion?: IRBContextVersion }) {
+  return irbPost(proposalId, "/conclusion/return", payload);
+}
+
+/** Ban giám đốc ký cấp Giấy chứng nhận theo kết luận đã trình; để trống số thì hệ thống tự cấp. */
 export function updateIRBStatus(
   proposalId: string,
-  payload: {
-    status: "APPROVED" | "REJECTED";
-    certificateNumber?: string;
-    decisionDate?: string;
-    validUntil?: string;
-    riskLevel?: string;
-    targetSubjects?: string;
-    ethicsNotes?: string;
-    contextVersion?: IRBContextVersion;
-  }
+  payload: { certificateNumber?: string; decisionDate?: string; validUntil?: string; contextVersion?: IRBContextVersion }
 ) {
-  return requestJson<IRBResponse>(
-    `/research-proposals/${proposalId}/irb`,
-    { method: "POST", body: JSON.stringify(payload) }
-  );
+  return irbPost(proposalId, "", payload);
 }
