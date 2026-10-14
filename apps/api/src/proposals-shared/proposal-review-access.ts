@@ -11,7 +11,12 @@ export const REVIEW_ASSIGNMENT_STATUS = {
   revoked: "revoked",
   completed: "completed",
   /** Người được mời từ chối nhận phản biện: không còn tính trong vòng, chuyên viên mời người khác. */
-  declined: "declined"
+  declined: "declined",
+  /**
+   * Được mời vào hội đồng theo tờ trình, chưa có quyết định thành lập: trả lời được lời mời nhưng chưa có quyền
+   * gì với hồ sơ. Lãnh đạo duyệt hội đồng thì chuyển thành "assigned" (giữ thời điểm nhận lời).
+   */
+  invited: "invited"
 } as const;
 
 export type ReviewAssignmentStatus = (typeof REVIEW_ASSIGNMENT_STATUS)[keyof typeof REVIEW_ASSIGNMENT_STATUS];
@@ -28,8 +33,17 @@ export const REVIEW_ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
   [REVIEW_ASSIGNMENT_STATUS.assigned]: "Đang được phân công",
   [REVIEW_ASSIGNMENT_STATUS.revoked]: "Đã thu hồi",
   [REVIEW_ASSIGNMENT_STATUS.completed]: "Đã hoàn thành",
-  [REVIEW_ASSIGNMENT_STATUS.declined]: "Đã từ chối"
+  [REVIEW_ASSIGNMENT_STATUS.declined]: "Đã từ chối",
+  [REVIEW_ASSIGNMENT_STATUS.invited]: "Được mời vào hội đồng"
 };
+
+/** Đã nhận lời tham gia hội đồng, chờ lãnh đạo ra quyết định thành lập. */
+export const COUNCIL_INVITATION_ACCEPTED_LABEL = "Đã nhận lời, chờ quyết định thành lập";
+
+/** Phân công tính trong vòng đánh giá (tiến độ, giới hạn thành phần): đang hiệu lực hoặc đã hoàn thành. */
+export function isRoundActiveStatus(status: string) {
+  return status === REVIEW_ASSIGNMENT_STATUS.assigned || status === REVIEW_ASSIGNMENT_STATUS.completed;
+}
 
 /** Phân công đang mở nhưng người được mời chưa trả lời. */
 export const REVIEW_ASSIGNMENT_PENDING_LABEL = "Chờ xác nhận";
@@ -38,11 +52,12 @@ export const REVIEW_ASSIGNMENT_ACCEPTED_LABEL = "Đã nhận phản biện";
 
 /** Lời mời đang chờ người được mời trả lời (đồng ý / từ chối). */
 export function isPendingInvitation(assignment: { status: string; acceptedAt?: Date | null }) {
-  return assignment.status === REVIEW_ASSIGNMENT_STATUS.assigned && !assignment.acceptedAt;
+  return (assignment.status === REVIEW_ASSIGNMENT_STATUS.assigned || assignment.status === REVIEW_ASSIGNMENT_STATUS.invited) && !assignment.acceptedAt;
 }
 
 export function getReviewAssignmentStatusLabel(assignment: { status: string; acceptedAt?: Date | null }) {
   if (assignment.status === REVIEW_ASSIGNMENT_STATUS.assigned) return assignment.acceptedAt ? REVIEW_ASSIGNMENT_ACCEPTED_LABEL : REVIEW_ASSIGNMENT_PENDING_LABEL;
+  if (assignment.status === REVIEW_ASSIGNMENT_STATUS.invited) return assignment.acceptedAt ? COUNCIL_INVITATION_ACCEPTED_LABEL : REVIEW_ASSIGNMENT_PENDING_LABEL;
   return REVIEW_ASSIGNMENT_STATUS_LABELS[assignment.status] ?? assignment.status;
 }
 

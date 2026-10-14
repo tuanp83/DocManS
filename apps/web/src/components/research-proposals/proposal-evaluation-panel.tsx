@@ -37,6 +37,7 @@ import {
   reopenProposalEvaluationSummary,
   submitProposalEvaluationPackage,
   type EvaluationApiError,
+  type ProposalReviewAssignment,
   type ProposalReviewProgress,
   type ReviewAssignmentRole
 } from "@/lib/proposal-evaluations-api";
@@ -556,8 +557,27 @@ export function ProposalEvaluationPanel({
   const isCouncilApproved = council?.status === "approved";
   const isCouncilSubmitted = council?.status === "submitted";
 
+  // Tình trạng lời mời của từng thành viên trong tờ trình đã lưu (theo vòng đánh giá hiện tại).
+  const councilInvitationRows = (council?.members ?? []).map((member) => {
+    const mine = (list?: ProposalReviewAssignment[]) => (list ?? []).filter((item) => member.userId && item.reviewerUserId === member.userId);
+    const active = mine(progress.assignments)[0];
+    const invitation = mine(progress.councilInvitations)[0];
+    const declinedRow = mine(progress.declinedAssignments)[0];
+    const roleLabel = member.roleLabel && member.roleLabel !== member.role ? member.roleLabel : COUNCIL_ROLE_LABELS[member.role] ?? member.role;
+    const base = { role: member.role, roleLabel, userId: member.userId, displayName: member.displayName };
+    if (!member.userId) return { ...base, accepted: false, statusLabel: "Chưa gắn tài khoản", detail: "Chọn nhà khoa học có tài khoản để gửi lời mời.", tone: "#b91c1c" };
+    if (active) return { ...base, accepted: true, statusLabel: "Đang được phân công", detail: active.acceptedAt ? `Nhận lời ${formatDate(active.acceptedAt)}` : "", tone: "#15803d" };
+    if (invitation?.acceptedAt) return { ...base, accepted: true, statusLabel: "Đã nhận lời", detail: formatDate(invitation.acceptedAt), tone: "#15803d" };
+    if (invitation) return { ...base, accepted: false, statusLabel: "Chờ xác nhận", detail: `Mời ${formatDate(invitation.assignedAt)}`, tone: "#c2410c" };
+    if (declinedRow) return { ...base, accepted: false, statusLabel: "Đã từ chối — cần thay người khác", detail: declinedRow.declineReason, tone: "#b91c1c" };
+    return { ...base, accepted: false, statusLabel: "Chưa gửi lời mời", detail: "", tone: "#64748b" };
+  });
+  const allCouncilMembersAccepted = councilInvitationRows.length > 0 && councilInvitationRows.every((row) => row.accepted);
+
   // --- Handlers Hội đồng (Giai đoạn 1) ---
-  async function handleProposeCouncil(submitToLeadership: boolean) {
+  /** save: lưu nháp; invite: lưu và gửi lời mời thành viên mới; submit: trình lãnh đạo khi mọi người đã nhận lời. */
+  async function handleProposeCouncil(action: "save" | "invite" | "submit") {
+    const submitToLeadership = action === "submit";
     setCouncilError("");
     setCouncilSuccess("");
 
@@ -653,13 +673,15 @@ export function ProposalEvaluationPanel({
         meetingLocation: councilMeetingLocation,
         tentativeAgenda: councilTentativeAgenda,
         members,
-        submitToLeadership,
+        action,
         contextVersion
       });
       setCouncilSuccess(
-        submitToLeadership
+        action === "submit"
           ? "Đã gửi tờ trình đề xuất Hội đồng lên Lãnh đạo Học viện phê duyệt thành công!"
-          : "Đã lưu bản nháp tờ trình đề xuất Hội đồng."
+          : action === "invite"
+            ? "Đã lưu tờ trình và gửi lời mời đến các thành viên chưa được mời. Theo dõi tình trạng nhận lời ở bảng bên dưới."
+            : "Đã lưu bản nháp tờ trình đề xuất Hội đồng."
       );
       await refresh();
       onWorkflowChange();
@@ -1673,6 +1695,35 @@ export function ProposalEvaluationPanel({
               />
             </label>
 
+            {councilInvitationRows.length ? (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Vai trò trong hội đồng</th>
+                      <th>Thành viên</th>
+                      <th>Tình trạng lời mời</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {councilInvitationRows.map((row) => (
+                      <tr key={`${row.role}-${row.userId ?? row.displayName}`}>
+                        <td>{row.roleLabel}</td>
+                        <td>{row.displayName}</td>
+                        <td>
+                          <span className="record-title" style={{ color: row.tone }}>{row.statusLabel}</span>
+                          {row.detail ? <span className="record-meta">{row.detail}</span> : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            <p className="record-meta" style={{ margin: 0 }}>
+              Thành viên chỉ xem được tên đề tài cho đến khi nhận lời; hồ sơ mở khi lãnh đạo ký quyết định thành lập. Trình lãnh đạo khi mọi thành viên đã nhận lời; người từ chối cần được thay bằng người khác.
+            </p>
+
             {councilError && <p className="form-error">{councilError}</p>}
             {councilSuccess && <p className="state-message success">{councilSuccess}</p>}
 
@@ -1680,7 +1731,7 @@ export function ProposalEvaluationPanel({
               <button
                 type="button"
                 className="button"
-                onClick={() => handleProposeCouncil(false)}
+                onClick={() => handleProposeCouncil("save")}
                 disabled={isSubmittingCouncil}
                 style={{ fontSize: "13px" }}
               >
@@ -1688,9 +1739,20 @@ export function ProposalEvaluationPanel({
               </button>
               <button
                 type="button"
-                className="button primary"
-                onClick={() => handleProposeCouncil(true)}
+                className="button"
+                onClick={() => handleProposeCouncil("invite")}
                 disabled={isSubmittingCouncil}
+                title="Lưu tờ trình và gửi lời mời đến thành viên chưa được mời"
+                style={{ fontSize: "13px" }}
+              >
+                Gửi lời mời thành viên
+              </button>
+              <button
+                type="button"
+                className="button primary"
+                onClick={() => handleProposeCouncil("submit")}
+                disabled={isSubmittingCouncil || !allCouncilMembersAccepted}
+                title={allCouncilMembersAccepted ? undefined : "Chỉ trình được khi mọi thành viên đã nhận lời tham gia"}
                 style={{ background: "#15803d", borderColor: "#15803d", fontSize: "13px", display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
                 <Send size={15} />

@@ -1658,17 +1658,16 @@ describe("Evidence binding (mang từ thanhdotien278/DocManS): submission round 
       { role: "secretary", userId: councilSecretaryUser.id, displayName: councilSecretaryUser.displayName }
     ];
     await assert.rejects(() => services.decisions.approveCouncil(leadershipUser, proposal.id, { members }), /tờ trình hội đồng đã gửi/);
-    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, submitToLeadership: true });
+    await inviteAndAcceptCouncil(services, proposal, members);
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, action: "submit" });
     await services.decisions.approveCouncil(leadershipUser, proposal.id, {});
     const round = store.submissionEvents.find((event) => event.snapshot?.kind === "completeness_check").snapshot.submissionEventId;
     assert.equal(store.reviewAssignments.length, 6);
     assert.ok(store.reviewAssignments.every((assignment) => assignment.reviewedSubmissionEventId === round));
-    // Phân công tạo từ hội đồng cũng là lời mời: từng người phải đồng ý trước khi chấm.
-    assert.ok(store.reviewAssignments.every((assignment) => assignment.acceptedAt === null || assignment.acceptedAt === undefined));
-    for (const user of [reviewerUser, secondReviewerUser, councilMemberUser, councilMemberUser2, councilMemberUser3, councilSecretaryUser]) {
-      const invitation = store.reviewAssignments.find((assignment) => assignment.reviewerUserId === user.id);
-      await services.assignments.respondToInvitation(user, proposal.id, invitation.id, { response: "accept" });
-    }
+    // Quyết định thành lập chuyển lời mời đã nhận lời thành phân công hiệu lực, không phải đồng ý lại.
+    assert.ok(store.reviewAssignments.every((assignment) => assignment.status === "assigned" && assignment.acceptedAt));
+    assert.equal(store.proposals.find((item) => item.id === proposal.id).status, "under_review");
+    assert.ok(store.submissionEvents.some((event) => event.toStatus === "under_review" && /duyệt hội đồng/.test(event.note ?? "")));
 
     const reviewData = { scoreData: FULL_SCORES, comment: "Nhận xét", recommendation: "approve" };
     for (const user of [reviewerUser, secondReviewerUser, councilMemberUser, councilMemberUser2, councilMemberUser3]) await services.reviews.submitMyReview(user, proposal.id, reviewData);
@@ -1709,12 +1708,115 @@ describe("Evidence binding (mang từ thanhdotien278/DocManS): submission round 
     assert.equal(council().status, "draft", "client-supplied status is ignored");
     assert.equal(store.reviewAssignments.length, 0);
 
+    await inviteAndAcceptCouncil(services, proposal, members);
     await services.decisions.proposeCouncil(staffUser, proposal.id, { members, submitToLeadership: true });
     await services.decisions.approveCouncil(leadershipUser, proposal.id, {});
     assert.equal(council().status, "approved");
+    // Hội đồng đã duyệt không bị trả lại (thành viên đang giữ phân công).
+    await assert.rejects(() => services.decisions.rejectCouncil(leadershipUser, proposal.id, { reason: "Đổi" }), /đang chờ duyệt/);
     await assert.rejects(() => services.decisions.proposeCouncil(staffUser, proposal.id, { members: members.slice(0, 3) }), /đã được lãnh đạo duyệt/);
     assert.equal(council().status, "approved");
     assert.equal(council().members.length, 6);
+  });
+});
+
+/** Chuyên viên gửi lời mời hội đồng theo tờ trình, rồi từng thành viên đồng ý. */
+async function inviteAndAcceptCouncil(services, proposal, members) {
+  await services.decisions.proposeCouncil(staffUser, proposal.id, { members, action: "invite" });
+  for (const member of members) {
+    const invitation = services.prisma.store.reviewAssignments.find((row) => row.reviewerUserId === member.userId && row.status === "invited");
+    const user = ACCOUNTS.find((account) => account.id === member.userId);
+    await services.assignments.respondToInvitation(user, proposal.id, invitation.id, { response: "accept" });
+  }
+}
+
+describe("Mời thành viên hội đồng trước khi trình lãnh đạo", () => {
+  const roster = () => [
+    { role: "reviewer_1", userId: reviewerUser.id, displayName: reviewerUser.displayName },
+    { role: "reviewer_2", userId: secondReviewerUser.id, displayName: secondReviewerUser.displayName },
+    { role: "chair", userId: councilMemberUser.id, displayName: councilMemberUser.displayName },
+    { role: "member", userId: councilMemberUser2.id, displayName: councilMemberUser2.displayName },
+    { role: "member", userId: councilMemberUser3.id, displayName: councilMemberUser3.displayName },
+    { role: "secretary", userId: councilSecretaryUser.id, displayName: councilSecretaryUser.displayName }
+  ];
+
+  it("lời mời hội đồng: chưa nhận lời thì không trình được, nhận lời rồi vẫn chưa xem hồ sơ cho đến khi có quyết định", async () => {
+    const services = createServices({ requireAcceptance: true });
+    const store = services.prisma.store;
+    const proposal = await createSubmittedProposal(services);
+    const members = roster();
+
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, action: "save" });
+    assert.equal(store.reviewAssignments.length, 0, "lưu nháp chưa mời ai");
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, action: "invite" });
+    assert.equal(store.reviewAssignments.filter((row) => row.status === "invited").length, 6);
+    // Gửi lại không mời trùng.
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, action: "invite" });
+    assert.equal(store.reviewAssignments.length, 6);
+    await assert.rejects(() => services.decisions.proposeCouncil(staffUser, proposal.id, { members, action: "submit" }), /Chờ nhận lời/);
+
+    const [queued] = await services.assignments.listMyAssignments(reviewerUser);
+    assert.equal(queued.invitationPending, true);
+    await services.assignments.respondToInvitation(reviewerUser, proposal.id, queued.id, { response: "accept" });
+    const [afterAccept] = await services.assignments.listMyAssignments(reviewerUser);
+    assert.equal(afterAccept.awaitingCouncilDecision, true);
+    await assert.rejects(() => services.assignments.getReviewPackage(reviewerUser, proposal.id), ForbiddenException);
+    // Lời mời hội đồng chưa có quyết định không tính vào tiến độ vòng đánh giá.
+    assert.equal((await services.summaries.getReviewProgress(staffUser, proposal.id)).activeAssignmentCount, 0);
+    assert.equal((await services.summaries.getReviewProgress(staffUser, proposal.id)).councilInvitations.length, 6);
+  });
+
+  it("thành viên từ chối thì phải thay người; người bị bỏ khỏi tờ trình bị thu hồi lời mời; duyệt xong mới được đánh giá", async () => {
+    const notifications = { events: [], async dispatch(events) { this.events.push(...events); return events.length; } };
+    const services = createServices({ requireAcceptance: true, notifications });
+    const store = services.prisma.store;
+    const proposal = await createSubmittedProposal(services);
+    const members = roster();
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, action: "invite" });
+    assert.equal(notifications.events.filter((event) => event.type === "INVITATION_TO_REVIEW").length, 6);
+
+    const declinedRow = store.reviewAssignments.find((row) => row.reviewerUserId === councilMemberUser3.id);
+    await services.assignments.respondToInvitation(councilMemberUser3, proposal.id, declinedRow.id, { response: "decline", reason: "Trùng lịch" });
+    for (const member of members.filter((item) => item.userId !== councilMemberUser3.id)) {
+      const row = store.reviewAssignments.find((item) => item.reviewerUserId === member.userId && item.status === "invited");
+      await services.assignments.respondToInvitation(ACCOUNTS.find((account) => account.id === member.userId), proposal.id, row.id, { response: "accept" });
+    }
+    await assert.rejects(() => services.decisions.proposeCouncil(staffUser, proposal.id, { members, action: "submit" }), /Đã từ chối \(cần thay người khác\): .*/);
+
+    // Chuyên viên thay người từ chối bằng người khác và mời người mới.
+    const replaced = members.map((item) => (item.userId === councilMemberUser3.id ? { role: "member", userId: unassignedReviewerUser.id, displayName: unassignedReviewerUser.displayName } : item));
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members: replaced, action: "invite" });
+    const replacement = store.reviewAssignments.find((row) => row.reviewerUserId === unassignedReviewerUser.id && row.status === "invited");
+    await services.assignments.respondToInvitation(unassignedReviewerUser, proposal.id, replacement.id, { response: "accept" });
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members: replaced, action: "submit" });
+
+    await services.decisions.rejectCouncil(leadershipUser, proposal.id, { reason: "Bổ sung ngày họp" });
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members: replaced, action: "submit", meetingDate: futureDate(5) });
+    await services.decisions.approveCouncil(leadershipUser, proposal.id, {});
+    const active = store.reviewAssignments.filter((row) => row.status === "assigned");
+    assert.equal(active.length, 6);
+    assert.ok(!active.some((row) => row.reviewerUserId === councilMemberUser3.id));
+    assert.equal((await services.assignments.getReviewPackage(unassignedReviewerUser, proposal.id)).assignmentRole, "committee_member");
+    const established = notifications.events.find((event) => event.type === "REVIEW_COUNCIL_ESTABLISHED");
+    assert.equal(established.userIds.length, 6);
+  });
+
+  it("biên bản: thư ký hội đồng ghi được sau khi thành lập; dữ liệu tờ trình và biên bản được kiểm tra", async () => {
+    const services = createServices();
+    const proposal = await createSubmittedProposal(services);
+    const members = roster();
+    await assert.rejects(() => services.decisions.proposeCouncil(staffUser, proposal.id, { members: [{ role: "boss", displayName: "X" }] }), /Vai trò/);
+    await assert.rejects(() => services.decisions.proposeCouncil(staffUser, proposal.id, { members, meetingDate: "ngày mai" }), /Ngày họp/);
+    await assert.rejects(() => services.decisions.recordCouncilMinutes(staffUser, proposal.id, { conclusion: "approved" }), /đã được lãnh đạo quyết định/);
+
+    await inviteAndAcceptCouncil(services, proposal, members);
+    await services.decisions.proposeCouncil(staffUser, proposal.id, { members, action: "submit" });
+    await services.decisions.approveCouncil(leadershipUser, proposal.id, {});
+    await assert.rejects(() => services.decisions.recordCouncilMinutes(councilSecretaryUser, proposal.id, { conclusion: "tuyệt vời" }), /Kết luận/);
+    await assert.rejects(() => services.decisions.recordCouncilMinutes(councilSecretaryUser, proposal.id, { averageScore: 150 }), /0 đến 100/);
+    const saved = await services.decisions.recordCouncilMinutes(councilSecretaryUser, proposal.id, { conclusion: "revision_required", averageScore: 81.5, summaryComments: "Bổ sung cỡ mẫu" });
+    assert.equal(saved.councilMetadata.councilMinutes.recordedByRole, "committee_secretary");
+    await assert.rejects(() => services.decisions.recordCouncilMinutes(reviewerUser, proposal.id, { conclusion: "approved" }));
   });
 });
 

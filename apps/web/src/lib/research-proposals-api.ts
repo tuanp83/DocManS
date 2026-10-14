@@ -178,6 +178,8 @@ export type CouncilMinutes = {
 
 export type CouncilMetadata = {
   status: "draft" | "submitted" | "approved" | "rejected";
+  /** Đã gửi lời mời thành viên theo tờ trình (quy trình mời trước khi trình). */
+  invitationsSentAt?: string;
   decisionNumber?: string;
   decidedAt?: string;
   decidedById?: string;

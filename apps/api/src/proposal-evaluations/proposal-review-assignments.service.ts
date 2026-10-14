@@ -457,7 +457,7 @@ export class ProposalReviewAssignmentsService {
       where: {
         reviewerUserId: actor.id,
         status: {
-          in: [REVIEW_ASSIGNMENT_STATUS.assigned, REVIEW_ASSIGNMENT_STATUS.completed]
+          in: [REVIEW_ASSIGNMENT_STATUS.assigned, REVIEW_ASSIGNMENT_STATUS.completed, REVIEW_ASSIGNMENT_STATUS.invited]
         }
       },
       orderBy: { assignedAt: "desc" },
@@ -491,7 +491,8 @@ export class ProposalReviewAssignmentsService {
       const access = await this.reviewAccess.resolveForProposal(actor.id, assignment.proposalId);
       const conflict = await this.participation.evaluateConflict(actor.id, assignment.proposalId);
       // Lời mời chưa trả lời chưa cấp quyền xem hồ sơ nhưng vẫn hiện để nhà khoa học đồng ý hoặc từ chối.
-      const pending = isPendingInvitation(assignment) && (!assignment.effectiveUntil || assignment.effectiveUntil > new Date());
+      // Lời mời hội đồng đã nhận lời vẫn hiện (chờ quyết định thành lập) nhưng chưa mở hồ sơ.
+      const pending = (isPendingInvitation(assignment) || assignment.status === REVIEW_ASSIGNMENT_STATUS.invited) && (!assignment.effectiveUntil || assignment.effectiveUntil > new Date());
       // Người phản biện có thể thuộc đơn vị khác đơn vị chủ trì: phân công là căn cứ, không xét phạm vi đơn vị.
       if ((access.isAssignedReviewer || pending) && !conflict.conflicted) visible.push(assignment);
     }
@@ -680,6 +681,8 @@ export class ProposalReviewAssignmentsService {
       status: assignment.status,
       statusLabel: getReviewAssignmentStatusLabel(assignment),
       invitationPending: isPendingInvitation(assignment),
+      /** Đã nhận lời tham gia hội đồng, chờ lãnh đạo ra quyết định thành lập (chưa xem hồ sơ, chưa chấm). */
+      awaitingCouncilDecision: assignment.status === REVIEW_ASSIGNMENT_STATUS.invited && Boolean(assignment.acceptedAt),
       acceptedAt: assignment.acceptedAt?.toISOString() ?? "",
       declinedAt: assignment.declinedAt?.toISOString() ?? "",
       declineReason: assignment.declineReason ?? "",

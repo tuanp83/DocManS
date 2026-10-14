@@ -35,3 +35,15 @@ export function reviewInvitationResponseEvent(
     metadata: { proposalId, assignmentRole: role, response }
   };
 }
+
+/** Lãnh đạo ký quyết định thành lập hội đồng: thành viên đã nhận lời được mở hồ sơ để đánh giá. */
+export function councilEstablishedEvent(proposalId: string, proposal: { code?: string | null; title: string }, userIds: string[], decisionNumber: string): WorkflowEvent {
+  return {
+    type: NOTIFICATION_TYPES.reviewCouncilEstablished,
+    userIds,
+    title: `Quyết định thành lập hội đồng: ${proposal.title}`,
+    message: `Hội đồng đánh giá hồ sơ ${label(proposal)} đã được thành lập (${decisionNumber}). Bạn có thể xem hồ sơ và thực hiện đánh giá.`,
+    link: "/invitation-to-review",
+    metadata: { proposalId, decisionNumber }
+  };
+}
