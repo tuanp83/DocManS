@@ -12,6 +12,9 @@ import {
   loadProposalDistribution,
   loadTrends,
   isFilterableType,
+  NO_OFFICER,
+  SCOPE_KEYS,
+  SCOPE_LABELS,
   trendFrom,
   PRODUCT_FORM_LABELS,
   PRODUCT_STATUS_LABELS,
@@ -19,9 +22,11 @@ import {
   type Bucket,
   type DashboardFilters,
   type DrillDownFilters,
+  type OfficerBucket,
   type ProductStats,
   type ProjectDistribution,
   type ProposalDistribution,
+  type ScopeKey,
   type Trends
 } from "@/lib/dashboard-api";
 import { getProposalLevelLabel } from "@/lib/proposal-classification";
@@ -55,6 +60,10 @@ const PROGRESS_SERIES: Series[] = [
   { key: "actual", label: "Thực tế (bình quân)", color: "var(--series-2)" }
 ];
 const SINGLE: Series[] = [{ key: "count", label: "Số lượng", color: "var(--series-1)" }];
+const OFFICER_SERIES: Series[] = [
+  { key: "count", label: "Đề tài", color: "var(--series-1)" },
+  { key: "behind", label: "Chậm tiến độ", color: "var(--status-critical)" }
+];
 
 const RANGES = [
   { value: "3", label: "3 tháng" },
@@ -73,7 +82,7 @@ function readUrlState() {
   const filters: DashboardFilters = {};
   for (const key of DASHBOARD_FILTER_KEYS) {
     const value = params.get(key);
-    if (value) filters[key] = value;
+    if (value) (filters as Record<string, string>)[key] = value;
   }
   const range = params.get("range");
   return { filters, range: RANGES.some((item) => item.value === range) ? (range as string) : "6" };
@@ -115,6 +124,44 @@ function BucketTable({ rows, columns }: { rows: Array<Record<string, string | nu
       <tbody>
         {rows.map((row, index) => (
           <tr key={index}>{columns.map((column) => <td key={column.key} className={column.numeric ? "num" : undefined}>{row[column.key]}</td>)}</tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+type OfficerRow = { key: string; label: string; projects: number; overdue: number; behind: number; lateReports: number; proposals: number; pending: number };
+
+/** Gộp nhóm chuyên viên của đề tài và hồ sơ; "chưa có người phụ trách" luôn ở cuối. */
+function mergeOfficers(projectBuckets: OfficerBucket[], proposalBuckets: OfficerBucket[]): OfficerRow[] {
+  const rows = new Map<string, OfficerRow>();
+  const row = (bucket: OfficerBucket) => rows.get(bucket.key) ?? { key: bucket.key, label: bucket.label, projects: 0, overdue: 0, behind: 0, lateReports: 0, proposals: 0, pending: 0 };
+  for (const bucket of projectBuckets) rows.set(bucket.key, { ...row(bucket), projects: bucket.count, overdue: bucket.overdue ?? 0, behind: bucket.behind ?? 0, lateReports: bucket.lateReports ?? 0 });
+  for (const bucket of proposalBuckets) rows.set(bucket.key, { ...row(bucket), proposals: bucket.count, pending: bucket.pending ?? 0 });
+  return [...rows.values()].sort((left, right) => Number(left.key === NO_OFFICER) - Number(right.key === NO_OFFICER) || right.projects + right.proposals - (left.projects + left.proposals) || left.label.localeCompare(right.label, "vi"));
+}
+
+function OfficerTable({ rows, onOpen }: { rows: OfficerRow[]; onOpen: (officerId: string, metric: "projects" | "proposals", extra: DrillDownFilters, title: string) => void }) {
+  const cell = (row: OfficerRow, value: number, metric: "projects" | "proposals", extra: DrillDownFilters, title: string) =>
+    value ? <button type="button" className="dash-cell-link" onClick={() => onOpen(row.key, metric, extra, `${title} — ${row.label}`)}>{value.toLocaleString("vi-VN")}</button> : "0";
+  return (
+    <table className="data-table drill-table">
+      <thead>
+        <tr>
+          <th>Chuyên viên</th><th className="num">Đề tài</th><th className="num">Quá hạn</th><th className="num">Chậm tiến độ</th><th className="num">Báo cáo trễ</th><th className="num">Hồ sơ</th><th className="num">Hồ sơ đang xét</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.key}>
+            <td>{row.label}</td>
+            <td className="num">{cell(row, row.projects, "projects", {}, "Đề tài")}</td>
+            <td className="num">{cell(row, row.overdue, "projects", { overdue: "true" }, "Đề tài quá hạn")}</td>
+            <td className="num">{row.behind.toLocaleString("vi-VN")}</td>
+            <td className="num">{row.lateReports.toLocaleString("vi-VN")}</td>
+            <td className="num">{cell(row, row.proposals, "proposals", {}, "Hồ sơ")}</td>
+            <td className="num">{row.pending.toLocaleString("vi-VN")}</td>
+          </tr>
         ))}
       </tbody>
     </table>
@@ -173,7 +220,8 @@ export function DashboardAnalytics() {
       year: options.years,
       unitId: options.units.map((item) => item.value),
       level: options.levels.flat().map((bucket) => bucket.key),
-      field: options.fields.flat().map((bucket) => bucket.key)
+      field: options.fields.flat().map((bucket) => bucket.key),
+      scope: SCOPE_KEYS
     };
     const invalid = (Object.keys(filters) as Array<keyof DashboardFilters>).filter((key) => filters[key] && !allowed[key].includes(filters[key] as string));
     if (invalid.length) setFilters((current) => { const next = { ...current }; for (const key of invalid) delete next[key]; return next; });
@@ -225,6 +273,7 @@ export function DashboardAnalytics() {
       filters.unitId ? unitName(filters.unitId) : null,
       filters.level ? labels.level(filters.level) : null,
       filters.field ? labels.field(filters.field) : null,
+      filters.scope ? SCOPE_LABELS[filters.scope] : null,
       ...extra
     ].filter(Boolean);
     return parts.length ? `Bộ lọc: ${parts.join(" · ")}.` : "Toàn bộ phạm vi bạn được xem.";
@@ -237,13 +286,16 @@ export function DashboardAnalytics() {
 
   const setFilter = (key: keyof DashboardFilters, value: string) => setFilters((current) => {
     const next = { ...current };
-    if (value) next[key] = value; else delete next[key];
+    if (value) (next as Record<string, string>)[key] = value; else delete next[key];
     return next;
   });
 
   // Nhóm "Chưa phân loại" (khoá rỗng) không lọc được ở API: hiện như hàng thường, không phải nút.
   const bucketRows = (buckets: Bucket[], label: (bucket: Bucket) => string, value: (bucket: Bucket) => number = (bucket) => bucket.count): HBarRow[] =>
     buckets.map((bucket) => ({ key: bucket.key, label: label(bucket), values: { count: value(bucket) }, clickable: bucket.key !== "" }));
+
+  const officerRows = mergeOfficers(projects?.byOfficer ?? [], proposals?.byOfficer ?? []);
+  const officerLabel = (key: string) => officerRows.find((row) => row.key === key)?.label ?? "chuyên viên";
 
   const trendPoints = (trends?.series ?? []).map((point) => ({ key: point.date, label: shortDay(point.date), note: point.live ? "hiện tại" : undefined, values: point.health as Record<string, number> }));
   const progressPoints = (trends?.series ?? []).map((point) => ({ key: point.date, label: shortDay(point.date), note: point.live ? "hiện tại" : undefined, values: { planned: point.averagePlannedPercent, actual: point.averageActualPercent } }));
@@ -286,6 +338,13 @@ export function DashboardAnalytics() {
           <select id="dash-field" value={filters.field ?? ""} onChange={(event) => setFilter("field", event.target.value)}>
             <option value="">Tất cả</option>
             {fieldOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+          </select>
+        </div>
+        <div className="filter-field">
+          <label htmlFor="dash-scope">Tính chất</label>
+          <select id="dash-scope" value={filters.scope ?? ""} onChange={(event) => setFilter("scope", event.target.value)}>
+            <option value="">Tất cả</option>
+            {SCOPE_KEYS.map((key) => <option key={key} value={key}>{SCOPE_LABELS[key]}</option>)}
           </select>
         </div>
         {Object.keys(filters).length ? <button type="button" className="button small" onClick={() => setFilters({})}>Xoá bộ lọc</button> : null}
@@ -358,6 +417,39 @@ export function DashboardAnalytics() {
               table={<BucketTable columns={[{ key: "label", label: "Trạng thái" }, { key: "count", label: "Số đề tài", numeric: true }]} rows={projects.byStatus.map((bucket) => ({ label: labels.status(bucket.key, "projects"), count: bucket.count }))} />}
             >
               <HBarChart rows={bucketRows(projects.byStatus, (bucket) => labels.status(bucket.key, "projects"))} series={SINGLE} format={(value) => value.toLocaleString("vi-VN")} onSelect={(status) => openDrill("projects", { status }, `Đề tài: ${labels.status(status, "projects").toLowerCase()}`)} />
+            </ChartCard>
+          </div>
+
+          <h2 className="dash-section-title">Theo tính chất và chuyên viên phụ trách</h2>
+          <div className="dash-grid">
+            <ChartCard
+              refreshing={refreshing}
+              title="Đề tài theo tính chất"
+              subtitle="Quân sự / Dân sự theo hồ sơ đề xuất gốc."
+              table={<BucketTable columns={[{ key: "label", label: "Tính chất" }, { key: "count", label: "Số đề tài", numeric: true }, { key: "budget", label: "Kinh phí", numeric: true }]} rows={projects.byScope.map((bucket) => ({ label: bucket.label, count: bucket.count, budget: formatMoney(bucket.totalBudget ?? 0) }))} />}
+            >
+              <HBarChart rows={bucketRows(projects.byScope, (bucket) => bucket.label)} series={SINGLE} format={(value) => value.toLocaleString("vi-VN")} onSelect={(scope) => openDrill("projects", { scope: scope as ScopeKey }, `Đề tài ${SCOPE_LABELS[scope as ScopeKey]?.toLowerCase() ?? ""}`, [SCOPE_LABELS[scope as ScopeKey]])} />
+            </ChartCard>
+            <ChartCard
+              refreshing={refreshing}
+              title="Hồ sơ theo tính chất"
+              table={<BucketTable columns={[{ key: "label", label: "Tính chất" }, { key: "count", label: "Số hồ sơ", numeric: true }]} rows={proposals.byScope.map((bucket) => ({ label: bucket.label, count: bucket.count }))} />}
+            >
+              <HBarChart rows={bucketRows(proposals.byScope, (bucket) => bucket.label)} series={SINGLE} format={(value) => value.toLocaleString("vi-VN")} onSelect={(scope) => openDrill("proposals", { scope: scope as ScopeKey }, `Hồ sơ ${SCOPE_LABELS[scope as ScopeKey]?.toLowerCase() ?? ""}`, [SCOPE_LABELS[scope as ScopeKey]])} />
+            </ChartCard>
+            <ChartCard
+              wide
+              refreshing={refreshing}
+              title="Theo chuyên viên phụ trách"
+              subtitle="Số đề tài, đề tài quá hạn, chậm tiến độ (Cần chú ý / Chậm tiến độ) và hồ sơ đang xét của từng chuyên viên. Bấm tên để xem danh sách đề tài."
+              table={<OfficerTable rows={officerRows} onOpen={(officerId, metric, extra, title) => openDrill(metric, { officerId, ...extra }, title, [officerLabel(officerId)])} />}
+            >
+              <HBarChart
+                rows={officerRows.map((row) => ({ key: row.key, label: row.label, values: { count: row.projects, behind: row.behind } }))}
+                series={OFFICER_SERIES}
+                format={(value) => value.toLocaleString("vi-VN")}
+                onSelect={(officerId) => openDrill("projects", { officerId }, `Đề tài do ${officerLabel(officerId)} phụ trách`, [officerLabel(officerId)])}
+              />
             </ChartCard>
           </div>
 

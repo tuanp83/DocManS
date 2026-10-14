@@ -30,6 +30,8 @@ export class DashboardExportService {
       { header: "Tên đề tài", key: "title", width: 50 },
       { header: "Chủ nhiệm đề tài", key: "owner", width: 25 },
       { header: "Đơn vị chủ trì", key: "unit", width: 30 },
+      { header: "Tính chất", key: "scope", width: 12 },
+      { header: "Chuyên viên phụ trách", key: "officer", width: 25 },
       { header: "Kinh phí duyệt (VNĐ)", key: "budget", width: 20 },
       { header: "Trạng thái", key: "status", width: 20 },
       { header: "Ngày nộp", key: "submittedAt", width: 20 },
@@ -53,6 +55,8 @@ export class DashboardExportService {
         title: p.title,
         owner: p.owner?.displayName || p.owner?.username || "—",
         unit: p.hostOrganizationUnit?.name || "—",
+        scope: p.militaryScope === "military" ? "Quân sự" : p.militaryScope === "civilian" ? "Dân sự" : "—",
+        officer: p.officer?.name || "—",
         // Các Phó Giám đốc chỉ theo dõi không xem kinh phí từng đề tài.
         budget: hideBudget ? "—" : budget,
         status: PROPOSAL_STATUS_LABELS[p.status] ?? p.status,

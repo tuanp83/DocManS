@@ -12,6 +12,7 @@ import {
   COMMON_FILTERS,
   DRILL_DOWN_FILTERS,
   DRILL_DOWN_METRICS,
+  NO_OFFICER,
   parseDashboardQuery,
   PRODUCT_FORMS,
   PRODUCT_STATUSES,
@@ -49,6 +50,10 @@ export type DashboardProject = {
   maxDaysOverdue: number;
   lateReports: number;
   piName: string | null;
+  proposalId: string | null;
+  /** Tính chất (Quân sự / Dân sự) lấy từ hồ sơ gốc. */
+  militaryScope: string | null;
+  officer: { id: string; name: string | null } | null;
   finance: { totalBudget: number; totalDisbursed: number; totalSettled: number } | null;
   products: Array<{ id: string; position: number; title: string; productForm: number; status: string }>;
 };
@@ -92,6 +97,9 @@ export function toDashboardProject(response: AnyRecord, now = new Date()): Dashb
     maxDaysOverdue: tracked ? toNumber(summary.maxDaysOverdue) : 0,
     lateReports: tracked ? toNumber(summary.lateReports) : 0,
     piName: pi ? (pi.user?.displayName ?? pi.name ?? null) : null,
+    proposalId: response.proposalId ?? null,
+    militaryScope: text(scope.militaryScope),
+    officer: response.officer?.officerUserId ? { id: response.officer.officerUserId, name: response.officer.officerName ?? null } : null,
     finance: response.finance ? { totalBudget: toNumber(response.finance.totalBudget), totalDisbursed: toNumber(response.finance.totalDisbursed), totalSettled: toNumber(response.finance.totalSettled) } : null,
     products: (response.products ?? []).map((product: AnyRecord) => ({ id: product.id, position: product.position, title: product.title, productForm: product.productForm, status: product.status }))
   };
@@ -105,6 +113,8 @@ function matchesProject(project: DashboardProject, filters: DashboardFilters) {
   if (filters.status !== undefined && project.status !== filters.status) return false;
   if (filters.health !== undefined && project.health !== filters.health) return false;
   if (filters.overdue !== undefined && project.overdue !== filters.overdue) return false;
+  if (filters.scope !== undefined && (project.militaryScope ?? "none") !== filters.scope) return false;
+  if (filters.officerId !== undefined && (project.officer?.id ?? NO_OFFICER) !== filters.officerId) return false;
   return true;
 }
 
@@ -123,8 +133,25 @@ function matchesProposal(proposal: DashboardProposalRecord, filters: DashboardFi
   if (filters.year !== undefined && proposalYear(proposal) !== filters.year) return false;
   if (filters.status !== undefined && proposal.status !== filters.status) return false;
   if (filters.overdue !== undefined && proposalOverdue(proposal, now) !== filters.overdue) return false;
+  if (filters.scope !== undefined && (proposal.militaryScope ?? "none") !== filters.scope) return false;
+  if (filters.officerId !== undefined && (proposal.officer?.id ?? NO_OFFICER) !== filters.officerId) return false;
   return true;
 }
+
+const SCOPE_LABELS: Record<string, string> = { military: "Quân sự", civilian: "Dân sự", none: "Chưa phân loại" };
+
+/** Gom theo tính chất; khoá "none" = chưa phân loại (khớp bộ lọc scope=none). */
+function byScope<T>(rows: T[], scopeOf: (row: T) => string | null | undefined, extra?: (bucket: AnyRecord, row: T) => void) {
+  return countBy(rows, (row) => scopeOf(row) ?? "none", (row) => SCOPE_LABELS[scopeOf(row) ?? "none"] ?? String(scopeOf(row)), extra);
+}
+
+/** Gom theo chuyên viên phụ trách; khoá "none" = chưa có người phụ trách. */
+function byOfficer<T>(rows: T[], officerOf: (row: T) => { id: string; name: string | null } | null | undefined, extra?: (bucket: AnyRecord, row: T) => void) {
+  return countBy(rows, (row) => officerOf(row)?.id ?? NO_OFFICER, (row) => (officerOf(row) ? (officerOf(row)!.name ?? officerOf(row)!.id) : "Chưa có người phụ trách"), extra);
+}
+
+/** Đề tài chậm tiến độ: sức khoẻ Vàng/Đỏ (SPI thấp, mốc hoặc báo cáo trễ). */
+const isBehind = (project: DashboardProject) => project.health === "amber" || project.health === "red";
 
 type DeliverableRow = { id: string; proposalId: string; type: string; title: string; status: string; publishedAt: Date | null; proposal: DashboardProposalRecord };
 
@@ -171,7 +198,7 @@ export class DashboardAnalyticsService {
     this.assertActor(actor);
     // Đề tài có phân công chuyên viên mâu thuẫn (409) bị bỏ qua thay vì làm hỏng toàn bộ dashboard.
     const responses = await this.projects.listProjects(actor, { skipUnresolved: true });
-    const projects = responses.map((response: AnyRecord) => toDashboardProject(response, now));
+    const projects = await this.withMilitaryScope(responses.map((response: AnyRecord) => toDashboardProject(response, now)));
     if (!isResearchOversightAuthority(actor) || !projects.length) return projects;
     // Các Phó Giám đốc chỉ theo dõi không đọc kinh phí từng đề tài (project.finance.read), nhưng được xem báo cáo
     // kinh phí tổng hợp: nạp kinh phí để cộng vào số tổng, còn các dòng chi tiết để trống (drillDown).
@@ -183,6 +210,16 @@ export class DashboardAnalyticsService {
     });
   }
 
+  /** Tính chất đề tài không nằm trong ảnh chụp phạm vi: đọc từ hồ sơ gốc (một truy vấn). */
+  private async withMilitaryScope(projects: DashboardProject[]) {
+    const missing = projects.filter((project) => !project.militaryScope && project.proposalId);
+    const client = (this.prisma as any).researchProposal;
+    if (!missing.length || !client?.findMany) return projects;
+    const rows = (await client.findMany({ where: { id: { in: missing.map((project) => project.proposalId) } }, select: { id: true, militaryScope: true } })) as Array<{ id: string; militaryScope: string | null }>;
+    const byId = new Map(rows.map((row) => [row.id, row.militaryScope ?? null]));
+    return projects.map((project) => (project.militaryScope || !project.proposalId ? project : { ...project, militaryScope: byId.get(project.proposalId) ?? null }));
+  }
+
   async readableProposals(actor: SafeUserContext | undefined, now = new Date()) {
     this.assertActor(actor);
     return this.dashboard.findReadableProposals(actor, now);
@@ -192,7 +229,7 @@ export class DashboardAnalyticsService {
 
   async distribution(actor: SafeUserContext | undefined, rawQuery: unknown) {
     this.assertActor(actor);
-    const query = parseDashboardQuery(rawQuery, ["subject", ...COMMON_FILTERS, "status"]);
+    const query = parseDashboardQuery(rawQuery, ["subject", ...COMMON_FILTERS, "status", "officerId"]);
     if (!query.subject) throw new BadRequestException({ code: "DASHBOARD_QUERY_INVALID", field: "subject", message: "Cần chọn subject=projects hoặc subject=proposals." });
     const now = new Date();
     if (query.subject === "projects") {
@@ -211,12 +248,20 @@ export class DashboardAnalyticsService {
           totalBudget: finance.reduce((sum, project) => sum + project.finance!.totalBudget, 0),
           totalDisbursed: finance.reduce((sum, project) => sum + project.finance!.totalDisbursed, 0),
           totalSettled: finance.reduce((sum, project) => sum + project.finance!.totalSettled, 0),
-          overdue: rows.filter((project) => project.overdue).length
+          overdue: rows.filter((project) => project.overdue).length,
+          behind: rows.filter(isBehind).length
         },
         byUnit: countBy(rows, (project) => project.unitId, (project) => project.unitName, money),
         byLevel: countBy(rows, (project) => project.level, undefined, money),
         byField: countBy(rows, (project) => project.field, undefined, money),
         byStatus: countBy(rows, (project) => project.status),
+        byScope: byScope(rows, (project) => project.militaryScope, money),
+        // Theo chuyên viên phụ trách: số đề tài, số quá hạn, số chậm tiến độ (Vàng/Đỏ), số báo cáo trễ.
+        byOfficer: byOfficer(rows, (project) => project.officer, (bucket, project) => {
+          bucket.overdue = (bucket.overdue ?? 0) + (project.overdue ? 1 : 0);
+          bucket.behind = (bucket.behind ?? 0) + (isBehind(project) ? 1 : 0);
+          bucket.lateReports = (bucket.lateReports ?? 0) + project.lateReports;
+        }),
         byYear: countBy(rows, (project) => (project.year === null ? null : String(project.year))).sort((left, right) => left.key.localeCompare(right.key)),
         byHealth: HEALTH_KEYS.map((key) => ({ key, label: key, count: rows.filter((project) => project.health === key).length })),
         // Bản đồ nhiệt đơn vị × sức khoẻ.
@@ -244,6 +289,11 @@ export class DashboardAnalyticsService {
       byLevel: countBy(rows, (proposal) => proposal.proposalTypeCode ?? null, undefined, approvedMoney),
       byField: countBy(rows, (proposal) => proposal.researchFieldCode ?? null, undefined, approvedMoney),
       byStatus: countBy(rows, (proposal) => proposal.status),
+      byScope: byScope(rows, (proposal) => proposal.militaryScope, approvedMoney),
+      byOfficer: byOfficer(rows, (proposal) => proposal.officer, (bucket, proposal) => {
+        bucket.pending = (bucket.pending ?? 0) + (PENDING_STATUSES.includes(proposal.status) ? 1 : 0);
+        bucket.overdue = (bucket.overdue ?? 0) + (proposalOverdue(proposal, now) ? 1 : 0);
+      }),
       byYear: countBy(rows, (proposal) => String(proposalYear(proposal) ?? "")).sort((left, right) => left.key.localeCompare(right.key))
     };
   }
@@ -252,7 +302,7 @@ export class DashboardAnalyticsService {
 
   private async readableDeliverables(actor: SafeUserContext, filters: DashboardFilters, now: Date): Promise<DeliverableRow[]> {
     // Giao của hai quyền: đọc được hồ sơ (canReadProposal) VÀ đọc được sản phẩm đầu ra của hồ sơ đó.
-    const proposals = (await this.readableProposals(actor, now)).filter((proposal) => canReadProposalDeliverables(actor, proposal) && matchesProposal(proposal, { unitId: filters.unitId, level: filters.level, field: filters.field, year: filters.year }, now));
+    const proposals = (await this.readableProposals(actor, now)).filter((proposal) => canReadProposalDeliverables(actor, proposal) && matchesProposal(proposal, { unitId: filters.unitId, level: filters.level, field: filters.field, year: filters.year, scope: filters.scope }, now));
     if (!proposals.length) return [];
     const byId = new Map(proposals.map((proposal) => [proposal.id, proposal]));
     const rows = await (this.prisma as any).proposalDeliverable.findMany({
@@ -296,7 +346,7 @@ export class DashboardAnalyticsService {
 
   async trends(actor: SafeUserContext | undefined, rawQuery: unknown) {
     this.assertActor(actor);
-    const query = parseDashboardQuery(rawQuery, ["from", "to", "unitId", "level", "field"]);
+    const query = parseDashboardQuery(rawQuery, ["from", "to", "unitId", "level", "field", "scope"]);
     const now = new Date();
     const today = localDayIndex(now);
     const toIndex = query.to ? dayIndexOf(query.to) : today;
@@ -322,6 +372,8 @@ export class DashboardAnalyticsService {
       if (query.unitId !== undefined && row.hostOrganizationUnitId !== query.unitId) continue;
       if (query.level !== undefined && row.level !== query.level) continue;
       if (query.field !== undefined && row.researchFieldCode !== query.field) continue;
+      // Tính chất không có trong ảnh chụp: lấy theo hồ sơ gốc của đề tài.
+      if (query.scope !== undefined && (readable.get(row.projectId)!.militaryScope ?? "none") !== query.scope) continue;
       const date = (row.snapshotDate instanceof Date ? row.snapshotDate : new Date(row.snapshotDate)).toISOString().slice(0, 10);
       const point = points.get(date) ?? { date, live: false, rows: [] };
       const finance = financeVisible.has(row.projectId);
@@ -332,7 +384,7 @@ export class DashboardAnalyticsService {
     // Điểm "hiện tại" tính trực tiếp, để biểu đồ có số liệu ngay cả trước lần chụp đầu tiên.
     const todayIso = snapshotDateOf(now).toISOString().slice(0, 10);
     if (fromIndex <= today && today <= toIndex && !points.has(todayIso)) {
-      const live = projects.filter((project) => matchesProject(project, { unitId: query.unitId, level: query.level, field: query.field }));
+      const live = projects.filter((project) => matchesProject(project, { unitId: query.unitId, level: query.level, field: query.field, scope: query.scope }));
       points.set(todayIso, { date: todayIso, live: true, rows: live.map((project) => ({ projectId: project.id, status: project.status, health: project.health, spi: project.spi, plannedPercent: project.plannedPercent, actualPercent: project.actualPercent, maxDaysOverdue: project.maxDaysOverdue, lateReports: project.lateReports, totalBudget: project.finance?.totalBudget ?? null, totalDisbursed: project.finance?.totalDisbursed ?? null })) });
     }
 
@@ -358,7 +410,7 @@ export class DashboardAnalyticsService {
         totalDisbursed: point.rows.reduce((sum, row) => sum + (row.totalDisbursed ?? 0), 0)
       };
     });
-    return { from: isoDay(fromIndex), to: isoDay(toIndex), filters: { unitId: query.unitId, level: query.level, field: query.field }, series };
+    return { from: isoDay(fromIndex), to: isoDay(toIndex), filters: { unitId: query.unitId, level: query.level, field: query.field, scope: query.scope }, series };
   }
 
   // ---- Danh sách chi tiết --------------------------------------------------------------------------------
@@ -383,7 +435,7 @@ export class DashboardAnalyticsService {
           id: project.id, code: project.code, title: project.title, unit: { id: project.unitId, name: project.unitName }, piName: project.piName,
           status: project.status, level: project.level, field: project.field, health: project.health, spi: project.spi,
           plannedPercent: project.plannedPercent, actualPercent: project.actualPercent, daysOverdue: project.maxDaysOverdue, lateReports: project.lateReports,
-          overdue: project.overdue, startDate: project.startDate, endDate: project.endDate,
+          overdue: project.overdue, startDate: project.startDate, endDate: project.endDate, militaryScope: project.militaryScope, officerName: project.officer?.name ?? null,
           totalBudget: hideFinanceRows ? null : project.finance?.totalBudget ?? null, totalDisbursed: hideFinanceRows ? null : project.finance?.totalDisbursed ?? null,
           link: `/projects/${encodeURIComponent(project.id)}`
         }));
@@ -398,6 +450,7 @@ export class DashboardAnalyticsService {
           id: proposal.id, code: proposal.code ?? null, title: proposal.title, unit: { id: proposal.hostOrganizationUnitId, name: proposal.hostOrganizationUnit?.name ?? proposal.hostOrganizationUnitId },
           ownerName: proposal.owner?.displayName ?? proposal.owner?.username ?? null, status: proposal.status, level: proposal.proposalTypeCode ?? null, field: proposal.researchFieldCode ?? null,
           submittedAt: proposal.submittedAt?.toISOString?.() ?? null, endDate: proposal.endDate?.toISOString?.() ?? null, overdue: proposalOverdue(proposal, now),
+          militaryScope: proposal.militaryScope ?? null, officerName: proposal.officer?.name ?? null,
           link: `/proposals/${encodeURIComponent(proposal.id)}`
         }));
       return { metric, filters, ...paginate(rows, page, pageSize) };
@@ -405,7 +458,7 @@ export class DashboardAnalyticsService {
 
     if (metric === "products") {
       const rows = (await this.readableProjects(actor, now))
-        .filter((project) => matchesProject(project, { unitId: filters.unitId, level: filters.level, field: filters.field, year: filters.year }))
+        .filter((project) => matchesProject(project, { unitId: filters.unitId, level: filters.level, field: filters.field, year: filters.year, scope: filters.scope }))
         .flatMap((project) => project.products.map((product) => ({ project, product })))
         .filter(({ product }) => (filters.form === undefined || product.productForm === filters.form) && (filters.productStatus === undefined || product.status === filters.productStatus))
         .sort((left, right) => String(left.project.code ?? left.project.id).localeCompare(String(right.project.code ?? right.project.id)) || left.product.position - right.product.position)
