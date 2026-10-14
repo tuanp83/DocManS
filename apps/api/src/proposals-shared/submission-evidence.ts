@@ -84,9 +84,12 @@ export async function assertCurrentCompletenessEvidence(prisma: EventReader, pro
 type RoundAssignment = { id: string; status: string; reviewedSubmissionEventId?: string | null };
 type RoundReview = { id: string; assignmentId: string; status: string; submissionEventId?: string | null };
 
-/** Phân công thuộc vòng hiện tại (không tính phân công đã thu hồi và phân công của lần nộp cũ). */
+/**
+ * Phân công thuộc vòng hiện tại: đang hiệu lực hoặc đã hoàn thành, của đúng lần nộp. Không tính phân công đã thu
+ * hồi, bị từ chối, lời mời hội đồng chưa có quyết định, và phân công của lần nộp cũ.
+ */
 export function currentRoundAssignments<T extends RoundAssignment>(assignments: T[], submissionEventId: string) {
-  return assignments.filter((assignment) => assignment.reviewedSubmissionEventId === submissionEventId && assignment.status !== "revoked" && assignment.status !== "declined");
+  return assignments.filter((assignment) => assignment.reviewedSubmissionEventId === submissionEventId && (assignment.status === "assigned" || assignment.status === "completed"));
 }
 
 /** Phiếu của vòng hiện tại: ghi cho đúng lần nộp và thuộc một phân công của vòng. */

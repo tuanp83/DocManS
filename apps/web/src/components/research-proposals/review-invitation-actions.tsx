@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
-import { acceptReviewInvitation, declineReviewInvitation } from "@/lib/proposal-evaluations-api";
+import { acceptReviewInvitation, declineReviewInvitation, type ProposalReviewAssignment } from "@/lib/proposal-evaluations-api";
 
 /**
- * Nút Đồng ý / Từ chối lời mời phản biện. Đồng ý mở hồ sơ và phiếu chấm; từ chối bắt buộc lý do và
- * báo cho chuyên viên QLKH để mời người khác. Máy chủ kiểm tra lại người được mời và trạng thái lời mời.
+ * Nút Đồng ý / Từ chối lời mời phản biện hoặc lời mời vào hội đồng. Đồng ý lời mời phản biện mở hồ sơ ngay;
+ * lời mời hội đồng mở hồ sơ khi lãnh đạo ký quyết định thành lập. Từ chối bắt buộc lý do và báo chuyên viên QLKH. Máy chủ kiểm tra lại người được mời và trạng thái lời mời.
  */
 export function ReviewInvitationActions({
   proposalId,
@@ -19,7 +19,7 @@ export function ReviewInvitationActions({
   assignmentId: string;
   proposalTitle: string;
   compact?: boolean;
-  onResponded: (response: "accept" | "decline") => void | Promise<void>;
+  onResponded: (response: "accept" | "decline", assignment: ProposalReviewAssignment) => void | Promise<void>;
 }) {
   const [busy, setBusy] = useState<"" | "accept" | "decline">("");
   const [error, setError] = useState("");
@@ -27,11 +27,11 @@ export function ReviewInvitationActions({
 
   async function handleAccept() {
     setError("");
-    if (!window.confirm(`Đồng ý nhận phản biện hồ sơ "${proposalTitle}"? Sau khi đồng ý bạn sẽ xem được hồ sơ và chấm phiếu đánh giá.`)) return;
+    if (!window.confirm(`Đồng ý tham gia đánh giá hồ sơ "${proposalTitle}"?`)) return;
     setBusy("accept");
     try {
-      await acceptReviewInvitation(proposalId, assignmentId);
-      await onResponded("accept");
+      const assignment = await acceptReviewInvitation(proposalId, assignmentId);
+      await onResponded("accept", assignment);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Không thể xác nhận lời mời.");
     } finally {
@@ -41,7 +41,7 @@ export function ReviewInvitationActions({
 
   async function handleDecline() {
     setError("");
-    const reason = window.prompt(`Lý do từ chối phản biện hồ sơ "${proposalTitle}":`);
+    const reason = window.prompt(`Lý do từ chối tham gia đánh giá hồ sơ "${proposalTitle}":`);
     if (reason === null) return;
     if (!reason.trim()) {
       setError("Cần nhập lý do từ chối.");
@@ -49,8 +49,8 @@ export function ReviewInvitationActions({
     }
     setBusy("decline");
     try {
-      await declineReviewInvitation(proposalId, assignmentId, reason.trim());
-      await onResponded("decline");
+      const assignment = await declineReviewInvitation(proposalId, assignmentId, reason.trim());
+      await onResponded("decline", assignment);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Không thể từ chối lời mời.");
     } finally {

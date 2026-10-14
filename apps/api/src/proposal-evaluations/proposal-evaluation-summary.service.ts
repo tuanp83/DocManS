@@ -8,6 +8,7 @@ import { ProposalReviewAccessService } from "../proposals-shared/proposal-review
 import { ProposalParticipationService } from "../research-proposals/proposal-participation.service.js";
 import {
   getRecommendationLabel,
+  isRoundActiveStatus,
   REVIEW_ASSIGNMENT_STATUS,
   REVIEW_MAX_TOTAL_SCORE,
   REVIEW_RECOMMENDATIONS,
@@ -141,6 +142,12 @@ export class ProposalEvaluationSummaryService {
       declinedAssignments: round.evidence
         ? round.allAssignments
             .filter((assignment) => assignment.status === REVIEW_ASSIGNMENT_STATUS.declined && assignment.reviewedSubmissionEventId === round.evidence?.eventId)
+            .map((assignment) => this.assignments.toAssignmentResponse(assignment, []))
+        : [],
+      // Lời mời hội đồng theo tờ trình (chưa có quyết định thành lập): chuyên viên theo dõi ai đã nhận lời.
+      councilInvitations: round.evidence
+        ? round.allAssignments
+            .filter((assignment) => assignment.status === REVIEW_ASSIGNMENT_STATUS.invited && assignment.reviewedSubmissionEventId === round.evidence?.eventId)
             .map((assignment) => this.assignments.toAssignmentResponse(assignment, []))
         : [],
       reviews: round.reviews
@@ -329,10 +336,10 @@ export class ProposalEvaluationSummaryService {
 
   /**
    * Completion is measured against assignments that are still part of the round: a revoked or
-   * declined assignment must not hold the proposal back, and a completed one counts as done.
+   * declined assignment, or a council invitation not yet decided, must not hold the proposal back, and a completed one counts as done.
    */
   summarizeProgress(assignments: ReviewAssignmentRecord[], reviews: ProposalReviewRecord[]) {
-    const active = assignments.filter((assignment) => assignment.status !== REVIEW_ASSIGNMENT_STATUS.revoked && assignment.status !== REVIEW_ASSIGNMENT_STATUS.declined);
+    const active = assignments.filter((assignment) => isRoundActiveStatus(assignment.status));
     const submitted = reviews.filter((review) => review.status === REVIEW_STATUS.submitted && active.some((assignment) => assignment.id === review.assignmentId));
     const submittedAssignmentIds = new Set(submitted.map((review) => review.assignmentId));
     // Thư ký hội đồng không chấm phiếu, nên không bao giờ "chờ phiếu".

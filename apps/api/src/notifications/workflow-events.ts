@@ -25,6 +25,7 @@ export const NOTIFICATION_TYPES = {
   reviewInvitation: "INVITATION_TO_REVIEW",
   reviewInvitationAccepted: "REVIEW_INVITATION_ACCEPTED",
   reviewInvitationDeclined: "REVIEW_INVITATION_DECLINED",
+  reviewCouncilEstablished: "REVIEW_COUNCIL_ESTABLISHED",
   supplementRequested: "SUPPLEMENT_REQUESTED",
   supplementDue: "SUPPLEMENT_DUE",
   proposalDecision: "PROPOSAL_DECISION",

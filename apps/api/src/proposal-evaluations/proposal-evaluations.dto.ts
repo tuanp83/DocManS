@@ -1,6 +1,7 @@
 import { BadRequestException, type PipeTransform } from "@nestjs/common";
 // @ts-ignore: runtime package is JavaScript; repository consumers use its TypeScript source contract.
 import { isContextVersionTokenV1, type ContextVersionTokenV1 } from "@rtms/permissions";
+import { readApproveCouncilInput, readCouncilMinutesInput, readProposeCouncilInput, readRejectCouncilInput } from "./council-input.js";
 import { REVIEW_RECOMMENDATIONS, type ReviewRecommendation } from "../proposals-shared/proposal-review-access.js";
 import { readOptionalDate } from "../proposals-shared/proposal-validation.js";
 
@@ -222,3 +223,22 @@ export const approveProposalBudgetPipe: PipeTransform<unknown, ApproveProposalBu
   }
 };
 
+
+/**
+ * Hội đồng đánh giá: chuẩn hoá thân yêu cầu bằng đúng các hàm service dùng (council-input.ts), chỉ chuyển tiếp
+ * các trường đã kiểm tra; contextVersion (nếu có) phải đúng định dạng.
+ */
+function councilPipe(read: (input: Record<string, unknown>) => Record<string, unknown>): PipeTransform<unknown, Record<string, unknown>> {
+  return {
+    transform(value: unknown) {
+      const input = value === undefined || value === null || value === "" ? {} : assertRecord(value);
+      if (input.contextVersion !== undefined && !isContextVersionTokenV1(input.contextVersion)) throw new BadRequestException({ message: "contextVersion của hồ sơ không hợp lệ." });
+      return { ...read(input), ...(input.contextVersion !== undefined ? { contextVersion: input.contextVersion } : {}) };
+    }
+  };
+}
+
+export const proposeCouncilPipe = councilPipe(readProposeCouncilInput);
+export const approveCouncilPipe = councilPipe(readApproveCouncilInput);
+export const rejectCouncilPipe = councilPipe(readRejectCouncilInput);
+export const councilMinutesPipe = councilPipe(readCouncilMinutesInput);

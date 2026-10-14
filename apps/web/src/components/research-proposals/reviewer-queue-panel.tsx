@@ -49,11 +49,13 @@ export function ReviewerQueuePanel() {
   const [searchQuery, setSearchQuery] = useState("");
   const [notice, setNotice] = useState("");
 
-  async function reloadAfterResponse(response: "accept" | "decline") {
+  async function reloadAfterResponse(response: "accept" | "decline", assignment: { awaitingCouncilDecision?: boolean }) {
     setNotice(
-      response === "accept"
-        ? "Đã đồng ý nhận phản biện. Bấm \"Vào đánh giá\" để xem hồ sơ và chấm phiếu."
-        : "Đã từ chối lời mời phản biện. Chuyên viên quản lý khoa học đã được thông báo."
+      response === "decline"
+        ? "Đã từ chối lời mời. Chuyên viên quản lý khoa học đã được thông báo."
+        : assignment.awaitingCouncilDecision
+          ? "Đã nhận lời tham gia hội đồng. Bạn xem được hồ sơ khi lãnh đạo ký quyết định thành lập hội đồng."
+          : "Đã đồng ý nhận phản biện. Bấm \"Vào đánh giá\" để xem hồ sơ và chấm phiếu."
     );
     setAssignments(await loadMyReviewAssignments());
   }
@@ -423,10 +425,10 @@ export function ReviewerQueuePanel() {
                           <StatusBadge status={assignment.proposal.status} />
                         </td>
                         <td>
-                          {assignment.invitationPending ? (
+                          {assignment.invitationPending || assignment.awaitingCouncilDecision ? (
                             <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: "600", color: "#1d4ed8" }}>
                               <Clock size={14} />
-                              Chờ xác nhận lời mời
+                              {assignment.invitationPending ? "Chờ xác nhận lời mời" : "Chờ quyết định thành lập hội đồng"}
                             </span>
                           ) : isSubmitted ? (
                             <div>
@@ -472,6 +474,8 @@ export function ReviewerQueuePanel() {
                               compact
                               onResponded={reloadAfterResponse}
                             />
+                          ) : assignment.awaitingCouncilDecision ? (
+                            <span style={{ fontSize: "12px", color: "#64748b" }}>Đã nhận lời</span>
                           ) : (
                             <div style={{ display: "inline-flex", gap: "8px" }}>
                               <Link
@@ -520,7 +524,7 @@ export function ReviewerQueuePanel() {
                     </span>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
                       <span className="record-meta">
-                        {assignment.invitationPending ? "Chờ xác nhận lời mời" : `Phiếu: ${isSubmitted ? "Đã gửi" : "Chưa gửi"}`}
+                        {assignment.invitationPending ? "Chờ xác nhận lời mời" : assignment.awaitingCouncilDecision ? "Chờ quyết định thành lập hội đồng" : `Phiếu: ${isSubmitted ? "Đã gửi" : "Chưa gửi"}`}
                       </span>
                       {assignment.invitationPending ? (
                         <ReviewInvitationActions
@@ -530,7 +534,7 @@ export function ReviewerQueuePanel() {
                           compact
                           onResponded={reloadAfterResponse}
                         />
-                      ) : (
+                      ) : assignment.awaitingCouncilDecision ? null : (
                         <Link
                           href={`/proposals/${assignment.proposal.id}`}
                           className="button primary"

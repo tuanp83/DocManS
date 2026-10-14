@@ -23,10 +23,12 @@ export type ProposalReviewAssignment = {
   reviewerUnit: string;
   assignmentRole: ReviewAssignmentRole;
   assignmentRoleLabel: string;
-  status: "assigned" | "revoked" | "completed" | "declined";
+  status: "assigned" | "revoked" | "completed" | "declined" | "invited";
   statusLabel: string;
   /** Lời mời chưa được người phản biện đồng ý hoặc từ chối. */
   invitationPending: boolean;
+  /** Đã nhận lời tham gia hội đồng, chờ lãnh đạo ký quyết định thành lập (chưa xem được hồ sơ). */
+  awaitingCouncilDecision?: boolean;
   acceptedAt: string;
   declinedAt: string;
   declineReason: string;
@@ -142,6 +144,8 @@ export type ProposalReviewProgress = ReviewProgressCounts & {
   assignments: ProposalReviewAssignment[];
   /** Lời mời bị từ chối trong vòng hiện tại (chỉ người điều phối nhận được). */
   declinedAssignments?: ProposalReviewAssignment[];
+  /** Lời mời hội đồng theo tờ trình, chưa có quyết định thành lập. */
+  councilInvitations?: ProposalReviewAssignment[];
   reviews: SubmittedProposalReview[];
   evaluationSummary: ProposalEvaluationSummary | null;
   recommendations: ReviewRecommendationOption[];

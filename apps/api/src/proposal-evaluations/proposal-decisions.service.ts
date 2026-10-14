@@ -25,7 +25,9 @@ import { ProposalReviewAssignmentsService, retireStaleOpenAssignments } from "./
 import { ProposalReviewsService, REVIEW_SUBMITTED_NOTE } from "./proposal-reviews.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { label, NOTIFICATION_TYPES, proposalLink, researchManagersInScope, type WorkflowEvent } from "../notifications/workflow-events.js";
-import { reviewInvitationEvent } from "./evaluation-notifications.js";
+import { councilEstablishedEvent, reviewInvitationEvent } from "./evaluation-notifications.js";
+import { readApproveCouncilInput, readCouncilMembers, readCouncilMinutesInput, readProposeCouncilInput, readRejectCouncilInput, type CouncilMemberInput } from "./council-input.js";
+import { isRoundActiveStatus } from "../proposals-shared/proposal-review-access.js";
 
 export const PROPOSAL_DECISIONS = {
   approved: "approved",
@@ -436,185 +438,157 @@ export class ProposalDecisionsService {
   }
 
   /**
-   * Stage 1: Scientific management staff (Trưởng phòng KHQS) creates and submits a proposal for Council formation.
-   * Enforces fail-closed Conflict-of-Interest (COI) check for all council candidates.
+   * Stage 1: Chuyên viên/Trưởng phòng QLKH lập tờ trình thành lập hội đồng.
+   *   - save: lưu nháp, chưa mời ai.
+   *   - invite: lưu và gửi lời mời cho thành viên chưa được mời; thành viên đồng ý/từ chối như lời mời phản biện.
+   *   - submit: trình lãnh đạo; chỉ được khi đủ thành phần và mọi thành viên đã nhận lời, nên quyết định thành lập
+   *     chỉ gồm người đã đồng ý.
+   * Chỉ loại người tham gia đề tài (chủ nhiệm, thành viên, thư ký) — không giới hạn đơn vị.
    */
   async proposeCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
-    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
-    assertScientificManagementScope(actor, proposal);
+    let invitedNow: CouncilInvitee[] = [];
+    let invitedFor: { code: string | null; title: string } = { code: null, title: "" };
+    const result = await this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
+      invitedNow = [];
+      invitedFor = { code: proposal.code ?? null, title: proposal.title };
+      assertScientificManagementScope(actor, proposal);
+      await this.assertNoDecisionConflict(actor, proposal);
+      const { action, members, meetingDate, meetingLocation, tentativeAgenda } = readProposeCouncilInput(input);
+      assertProposalStatus(proposal, ["submitted", "resubmitted", "under_review"], "Chỉ lập tờ trình hội đồng khi hồ sơ đã nộp hoặc đang đánh giá.");
 
-    const conflict = await this.resolveDecisionConflict(actor, proposal);
-    if (conflict.conflicted) {
-      throw new BadRequestException({ message: conflict.viewerMessage, reasonCode: conflict.reasonCode });
-    }
+      const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
+      if (currentCouncil.status === "approved") {
+        throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Hội đồng đã được lãnh đạo duyệt, không thể sửa tờ trình." });
+      }
+      if (currentCouncil.status === "submitted") {
+        throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Tờ trình đang chờ lãnh đạo duyệt; chỉ sửa được sau khi lãnh đạo trả lại." });
+      }
 
-    const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
-    // Hội đồng đã được lãnh đạo duyệt (đã tạo phân công) thì không sửa tờ trình được nữa.
-    if (currentCouncil.status === "approved") {
-      throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Hội đồng đã được lãnh đạo duyệt, không thể sửa tờ trình." });
-    }
-
-    const members = Array.isArray(input.members) ? (input.members as Array<Record<string, unknown>>) : [];
-    // Validate COI for each member
-    for (const member of members) {
-      const userId = typeof member.userId === "string" ? member.userId : "";
-      if (userId) {
-        const memConflict = await resolveActorConflict({ participation: this.participation, reviewAccess: this.reviewAccess }, userId, proposal.id);
-        if (memConflict.conflicted) {
-          throw new BadRequestException({
-            message: `Thành viên ${member.displayName || userId} có xung đột lợi ích (${memConflict.reason}), không thể tham gia Hội đồng.`
-          });
+      for (const member of members) {
+        if (!member.userId) continue;
+        const memberConflict = await this.participation.evaluateConflict(member.userId, proposal.id);
+        if (memberConflict.conflicted) {
+          throw new BadRequestException({ message: `Thành viên ${member.displayName} là người tham gia đề tài (${memberConflict.reason}), không thể tham gia Hội đồng.` });
         }
       }
-    }
 
-    const isDirectSubmit = input.submitToLeadership === true || input.status === "submitted";
-    // Thành phần hội đồng: 2–3 phản biện, 3–5 thành viên (chủ tịch, phó chủ tịch, uỷ viên), 1 thư ký.
-    // Bản nháp chỉ bị chặn khi vượt mức; khi trình lãnh đạo phải đủ.
-    const compositionProblems = councilMetadataProblems(members, isDirectSubmit);
-    if (compositionProblems.length) {
-      throw new BadRequestException({ message: `Thành phần hội đồng chưa đúng quy định: ${compositionProblems.join(" ")}` });
-    }
-    const updatedCouncil = {
-      ...currentCouncil,
-      // Chỉ nháp hoặc trình lãnh đạo; không nhận trạng thái tuỳ ý từ client (ví dụ "approved").
-      status: isDirectSubmit ? "submitted" : "draft",
-      proposedAt: new Date().toISOString(),
-      proposedById: actor.id,
-      proposedByName: actor.displayName,
-      meetingDate: typeof input.meetingDate === "string" ? input.meetingDate : (currentCouncil.meetingDate as string) || "",
-      meetingLocation: typeof input.meetingLocation === "string" ? input.meetingLocation : (currentCouncil.meetingLocation as string) || "",
-      tentativeAgenda: typeof input.tentativeAgenda === "string" ? input.tentativeAgenda : (currentCouncil.tentativeAgenda as string) || "",
-      members
-    };
+      // Thành phần: 2–3 phản biện, 3–5 thành viên (chủ tịch, phó chủ tịch, uỷ viên), 1 thư ký. Nháp và gửi lời mời
+      // chỉ bị chặn khi vượt mức; khi trình lãnh đạo phải đủ và mọi người phải gắn tài khoản.
+      const compositionProblems = councilMetadataProblems(members, action === "submit");
+      if (compositionProblems.length) {
+        throw new BadRequestException({ message: `Thành phần hội đồng chưa đúng quy định: ${compositionProblems.join(" ")}` });
+      }
 
-    await tx.researchProposal.update({
-      where: { id: proposalId },
-      data: { councilMetadata: updatedCouncil as any }
+      const now = new Date();
+      if (action !== "save") {
+        const evidence = await assertCurrentCompletenessEvidence(tx, proposal);
+        invitedNow = await syncCouncilInvitations(tx, actor, proposal.id, members, evidence.eventId, meetingDate ? new Date(meetingDate) : null, now);
+        if (action === "submit") {
+          const problems = await councilAcceptanceProblems(tx, proposal.id, members, evidence.eventId);
+          if (problems.length) throw new BadRequestException({ code: "COUNCIL_NOT_ACCEPTED", message: `Chưa trình lãnh đạo được: ${problems.join(" ")}` });
+        }
+      }
+
+      const updatedCouncil = {
+        ...currentCouncil,
+        status: action === "submit" ? "submitted" : "draft",
+        proposedAt: now.toISOString(),
+        proposedById: actor.id,
+        proposedByName: actor.displayName,
+        meetingDate,
+        meetingLocation,
+        tentativeAgenda,
+        members,
+        // Đánh dấu tờ trình theo quy trình mời trước: lúc duyệt, mọi thành viên phải đã nhận lời.
+        invitationsSentAt: action === "save" ? currentCouncil.invitationsSentAt : now.toISOString()
+      };
+
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { councilMetadata: updatedCouncil as never } });
+      await auditLog.record({
+        action: "propose-council",
+        result: "success",
+        actorId: actor.id,
+        targetEntity: "research-proposal",
+        targetEntityId: proposalId,
+        username: actor.username,
+        reason: JSON.stringify({ proposalId, memberCount: members.length, status: updatedCouncil.status, councilAction: action, invited: invitedNow.map((item) => item.userId) })
+      });
+
+      return { success: true, proposalId, councilMetadata: updatedCouncil };
     });
-
-    await auditLog.record({
-      action: "propose-council",
-      result: "success",
-      actorId: actor.id,
-      targetEntity: "research-proposal",
-      targetEntityId: proposalId,
-      username: actor.username,
-      reason: JSON.stringify({ proposalId, memberCount: members.length, status: updatedCouncil.status })
-    });
-
-    return {
-      success: true,
-      proposalId,
-      councilMetadata: updatedCouncil
-    };
-    });
+    await this.notifyAfterCommit(() => invitedNow.map((item) => reviewInvitationEvent(proposalId, invitedFor, item.userId, item.role, item.dueDate)));
+    return result;
   }
 
   /**
-   * Stage 1: Retrieve eligible scientists and candidate profiles for Council formation.
-   * Evaluates Conflict of Interest (COI) for each scientist against the proposal.
+   * Stage 1: danh sách nhà khoa học để chọn vào hội đồng (một truy vấn, lọc ở CSDL). Chỉ người có tài khoản
+   * mới nhận và trả lời được lời mời. Chặn người tham gia đề tài theo tài khoản; trùng tên với người tham gia
+   * chưa gắn tài khoản và cùng đơn vị chủ trì chỉ là cảnh báo.
    */
   async getCouncilCandidates(actor: SafeUserContext, proposalId: string) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
     assertCanReadEvaluation(actor, proposal);
 
     const [proposalMembers, hostOrgUnit] = await Promise.all([
-      this.prisma.proposalMember.findMany({
-        where: { proposalId }
-      }).catch(() => []),
-      proposal.hostOrganizationUnitId
-        ? this.prisma.organizationUnit.findUnique({
-            where: { id: proposal.hostOrganizationUnitId }
-          }).catch(() => null)
-        : null
+      this.prisma.proposalMember.findMany({ where: { proposalId } }).catch(() => []) as Promise<Array<{ userId?: string | null; name?: string | null; status?: string | null; participationRole?: string | null }>>,
+      proposal.hostOrganizationUnitId ? this.prisma.organizationUnit.findUnique({ where: { id: proposal.hostOrganizationUnitId } }).catch(() => null) : null
     ]);
+    const activeMembers = proposalMembers.filter((member) => !member.status || member.status === "ACTIVE");
+    const participantIds = new Set(activeMembers.map((member) => member.userId).filter((id): id is string => Boolean(id)));
+    const unlinkedNames = new Set(activeMembers.filter((member) => !member.userId && member.name).map((member) => member.name!.trim().toLowerCase()));
 
-    const profiles = await this.prisma.researcherProfile.findMany({
-      where: {
-        status: "ACTIVE"
-      },
+    const profiles = (await this.prisma.researcherProfile.findMany({
+      where: { status: "ACTIVE", linkedUserId: { not: null }, linkedUser: { is: { status: "active" } } },
       include: {
         academicRankCatalogItem: true,
         academicDegreeCatalogItem: true,
         managementOrganizationUnit: true,
-        linkedUser: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            systemRole: true,
-            unit: true
-          }
-        }
+        linkedUser: { select: { id: true, username: true, displayName: true, systemRole: true, unit: true } }
       },
-      orderBy: { fullName: "asc" }
-    });
+      orderBy: { fullName: "asc" },
+      take: 1000
+    } as never)) as unknown as Array<{
+      id: string; linkedUserId: string | null; fullName: string; title?: string | null; militaryRank?: string | null; position?: string | null; profileType?: string | null;
+      managementOrganizationUnitId?: string | null; managementOrganizationUnit?: { name: string } | null;
+      academicRankCatalogItem?: { name: string } | null; academicDegreeCatalogItem?: { name: string } | null;
+      linkedUser?: { username: string | null; systemRole: string | null; unit: string | null } | null;
+    }>;
 
-    const candidates = [];
-    for (const p of profiles) {
+    const candidates = profiles.map((p) => {
       let isConflicted = false;
       let isWarning = false;
-      let coiStatus: "CLEAN" | "WARNING_SAME_UNIT" | "BLOCKED_DIRECT_PARTICIPANT" = "CLEAN";
-      let conflictReason: string | undefined = undefined;
-
-      // 1. Kiểm tra nếu là Chủ nhiệm đề tài (PI)
+      let coiStatus: "CLEAN" | "WARNING_SAME_UNIT" | "WARNING_NAME_MATCH" | "BLOCKED_DIRECT_PARTICIPANT" = "CLEAN";
+      let conflictReason: string | undefined;
       if (p.linkedUserId && p.linkedUserId === proposal.ownerId) {
         isConflicted = true;
         coiStatus = "BLOCKED_DIRECT_PARTICIPANT";
         conflictReason = "Là Chủ nhiệm đề tài (xung đột trực tiếp, không được tham gia Hội đồng)";
-      }
-      // 2. Kiểm tra nếu là thành viên tham gia nghiên cứu đề tài
-      else if (
-        proposalMembers.some(
-          (m) => (p.linkedUserId && m.userId === p.linkedUserId) || (m.name && m.name.toLowerCase() === p.fullName.toLowerCase())
-        )
-      ) {
+      } else if (p.linkedUserId && participantIds.has(p.linkedUserId)) {
         isConflicted = true;
         coiStatus = "BLOCKED_DIRECT_PARTICIPANT";
-        conflictReason = "Là thành viên trong nhóm nghiên cứu đề tài (xung đột trực tiếp)";
-      }
-      // 3. Kiểm tra nếu đã được phân công phản biện vòng độc lập
-      else if (p.linkedUserId) {
-        const conflict = await resolveActorConflict(
-          { participation: this.participation, reviewAccess: this.reviewAccess },
-          p.linkedUserId,
-          proposal.id
-        );
-        if (conflict.conflicted) {
-          isConflicted = true;
-          coiStatus = "BLOCKED_DIRECT_PARTICIPANT";
-          conflictReason = conflict.reason || "Có xung đột lợi ích với đề tài";
-        }
-      }
-
-      // 4. Kiểm tra nếu cùng đơn vị chủ trì (Khoa/Bộ môn) với đề tài
-      if (!isConflicted) {
-        const candUnitId = p.managementOrganizationUnitId;
+        conflictReason = "Là thành viên hoặc thư ký đề tài (xung đột trực tiếp)";
+      } else if (unlinkedNames.has(p.fullName.trim().toLowerCase())) {
+        isWarning = true;
+        coiStatus = "WARNING_NAME_MATCH";
+        conflictReason = "Trùng tên với người trong nhóm nghiên cứu (chưa gắn tài khoản) — kiểm tra lại trước khi mời";
+      } else {
         const hostUnitName = hostOrgUnit?.name;
         const candUnitName = p.managementOrganizationUnit?.name || p.linkedUser?.unit;
-        const isSameUnit =
-          (candUnitId && candUnitId === proposal.hostOrganizationUnitId) ||
-          (hostUnitName && candUnitName && hostUnitName === candUnitName);
-
+        const isSameUnit = (p.managementOrganizationUnitId && p.managementOrganizationUnitId === proposal.hostOrganizationUnitId) || (hostUnitName && candUnitName && hostUnitName === candUnitName);
         if (isSameUnit) {
           isWarning = true;
           coiStatus = "WARNING_SAME_UNIT";
           conflictReason = `Cùng đơn vị với chủ nhiệm đề tài (${hostUnitName || "đơn vị chủ trì"}) - cần cân nhắc tính khách quan`;
         }
       }
-
-      const academicTitle = p.title || p.academicRankCatalogItem?.name || p.academicDegreeCatalogItem?.name || "Nhà khoa học";
-      const unit = p.managementOrganizationUnit?.name || p.linkedUser?.unit || (p.profileType === "EXTERNAL" ? "Đơn vị ngoài" : "Học viện Quân y");
-
-      candidates.push({
+      return {
         id: p.id,
         userId: p.linkedUserId,
         fullName: p.fullName,
         username: p.linkedUser?.username || "",
         systemRole: p.linkedUser?.systemRole || "",
-        academicTitle,
-        unit,
+        academicTitle: p.title || p.academicRankCatalogItem?.name || p.academicDegreeCatalogItem?.name || "Nhà khoa học",
+        unit: p.managementOrganizationUnit?.name || p.linkedUser?.unit || (p.profileType === "EXTERNAL" ? "Đơn vị ngoài" : "Học viện Quân y"),
         militaryRank: p.militaryRank || "",
         position: p.position || "",
         profileType: p.profileType,
@@ -622,259 +596,232 @@ export class ProposalDecisionsService {
         isWarning,
         coiStatus,
         conflictReason
-      });
-    }
+      };
+    });
 
-    return {
-      proposalId,
-      candidates
-    };
+    return { proposalId, candidates };
   }
 
-
-
   /**
-   * Stage 1: Leadership approves Council proposal and signs the official Council Establishment Decision.
-   * Atomically transitions proposal to under_review and activates reviewer assignments.
+   * Stage 1: Lãnh đạo duyệt tờ trình và ký quyết định thành lập hội đồng. Lời mời đã được nhận lời chuyển thành
+   * phân công có hiệu lực (giữ thời điểm nhận lời, không phải đồng ý lại); hồ sơ chuyển sang "Đang đánh giá" qua
+   * bước kiểm tra trạng thái và có ghi vào dòng thời gian.
    */
   async approveCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
-    // Người được tạo phân công trong lần thử thành công cuối cùng (giao dịch có thể được thử lại).
-    let invited: Array<{ userId: string; role: string; dueDate: Date | null }> = [];
-    let invitedFor: { code: string | null; title: string } = { code: null, title: "" };
+    // Người cần thông báo theo lần thử thành công cuối cùng (giao dịch có thể được thử lại).
+    let invited: CouncilInvitee[] = [];
+    let established: string[] = [];
+    let notifyFor: { code: string | null; title: string; decisionNumber: string } = { code: null, title: "", decisionNumber: "" };
     const result = await this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
-    invited = [];
-    invitedFor = { code: proposal.code ?? null, title: proposal.title };
-    assertApprovalAuthority(actor);
+      invited = [];
+      established = [];
+      assertApprovalAuthority(actor);
+      await this.assertNoDecisionConflict(actor, proposal);
 
-    const conflict = await this.resolveDecisionConflict(actor, proposal);
-    if (conflict.conflicted) {
-      throw new BadRequestException({ message: conflict.viewerMessage, reasonCode: conflict.reasonCode });
-    }
+      const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
+      // Duyệt hội đồng chỉ cho tờ trình đã gửi, khi hồ sơ còn trong bước đánh giá và gói đánh giá chưa chốt/trình:
+      // thêm phân công sau khi gói đã chốt sẽ làm gói không còn khớp vòng đánh giá.
+      assertProposalStatus(proposal, ["submitted", "resubmitted", "under_review"], "Chỉ duyệt hội đồng khi hồ sơ đã nộp hoặc đang đánh giá.");
+      if (currentCouncil.status !== "submitted") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ duyệt được tờ trình hội đồng đã gửi lãnh đạo." });
+      const existingSummary = (await tx.proposalEvaluationSummary.findFirst({ where: { proposalId } })) as { status: string } | null;
+      if (existingSummary && existingSummary.status !== "draft") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Bản tổng hợp đánh giá đã chốt hoặc đã trình; không thay đổi hội đồng được nữa." });
 
-    const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
-    // Duyệt hội đồng chỉ cho tờ trình đã gửi, khi hồ sơ còn trong bước đánh giá và gói đánh giá chưa chốt/trình:
-    // thêm phân công sau khi gói đã chốt sẽ làm gói không còn khớp vòng đánh giá.
-    assertProposalStatus(proposal, ["submitted", "resubmitted", "under_review"], "Chỉ duyệt hội đồng khi hồ sơ đã nộp hoặc đang đánh giá.");
-    if (currentCouncil.status !== "submitted") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ duyệt được tờ trình hội đồng đã gửi lãnh đạo." });
-    const existingSummary = await tx.proposalEvaluationSummary.findFirst({ where: { proposalId } }) as { status: string } | null;
-    if (existingSummary && existingSummary.status !== "draft") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Bản tổng hợp đánh giá đã chốt hoặc đã trình; không thay đổi hội đồng được nữa." });
-    const proposalCode = proposal.code || proposal.id.slice(0, 8).toUpperCase();
-    const decisionNumber = (typeof input.decisionNumber === "string" && input.decisionNumber.trim())
-      ? input.decisionNumber.trim()
-      : `QĐ-TLHĐ-${proposalCode.replace(/[^a-zA-Z0-9]/g, "")}/HVQY`;
+      const { decisionNumber: requestedNumber, approvalNote } = readApproveCouncilInput(input);
+      const proposalCode = proposal.code || proposal.id.slice(0, 8).toUpperCase();
+      const decisionNumber = requestedNumber || `QĐ-TLHĐ-${proposalCode.replace(/[^a-zA-Z0-9]/g, "")}/HVQY`;
+      notifyFor = { code: proposal.code ?? null, title: proposal.title, decisionNumber };
 
-    const members = Array.isArray(input.members)
-      ? (input.members as Array<Record<string, unknown>>)
-      : (Array.isArray(currentCouncil.members) ? (currentCouncil.members as Array<Record<string, unknown>>) : []);
-    const compositionProblems = councilMetadataProblems(members, true);
-    if (compositionProblems.length) {
-      throw new BadRequestException({ message: `Thành phần hội đồng chưa đúng quy định: ${compositionProblems.join(" ")}` });
-    }
-
-    const updatedCouncil: Record<string, unknown> = {
-      ...currentCouncil,
-      status: "approved",
-      decisionNumber,
-      decidedAt: new Date().toISOString(),
-      decidedById: actor.id,
-      decidedByName: actor.displayName,
-      approvalNote: typeof input.approvalNote === "string" ? input.approvalNote.trim() : "",
-      members
-    };
-
-    {
-      // If proposal is in submitted state, move to under_review
-      if (proposal.status === "submitted" || proposal.status === "resubmitted") {
-        await tx.researchProposal.update({
-          where: { id: proposalId },
-          data: {
-            status: "under_review",
-            councilMetadata: updatedCouncil as any
-          }
-        });
-      } else {
-        await tx.researchProposal.update({
-          where: { id: proposalId },
-          data: { councilMetadata: updatedCouncil as any }
-        });
+      // Lãnh đạo duyệt đúng danh sách đã trình (những người đã nhận lời), không thay danh sách ở bước này.
+      const members = readCouncilMembers(currentCouncil.members);
+      const compositionProblems = councilMetadataProblems(members, true);
+      if (compositionProblems.length) {
+        throw new BadRequestException({ message: `Thành phần hội đồng chưa đúng quy định: ${compositionProblems.join(" ")}` });
       }
 
-      // Tạo phân công đánh giá theo quyết định thành lập hội đồng, đối chiếu với phân công đang có hiệu lực:
-      // không tạo trùng, không đổi vai trò ngầm, không vượt giới hạn (2–3 phản biện, 3–5 thành viên, 1 thư ký),
-      // và kiểm tra xung đột lợi ích với danh sách được duyệt (có thể khác danh sách đã đề xuất).
-      // Phân công tạo từ hội đồng gắn với lần nộp đã được kiểm tra đầy đủ (vòng hiện tại).
-      // Luôn cần kết quả kiểm tra đầy đủ của lần nộp hiện tại: duyệt hội đồng mở vòng đánh giá.
       const evidence = await assertCurrentCompletenessEvidence(tx, proposal);
-      const live = await tx.proposalReviewAssignment.findMany({ where: { proposalId, reviewedSubmissionEventId: evidence.eventId, status: { in: ["assigned", "completed"] } } });
-      const toCreate: Array<{ userId: string; role: ReturnType<typeof councilMetadataRoleToAssignmentRole> }> = [];
-      for (const m of members) {
-        const userId = typeof m.userId === "string" ? m.userId : "";
-        if (!userId) continue;
-        const role = councilMetadataRoleToAssignmentRole(m.role);
+      const now = new Date();
+      const dueDate = typeof currentCouncil.meetingDate === "string" && currentCouncil.meetingDate ? new Date(currentCouncil.meetingDate) : null;
+      const rows = (await tx.proposalReviewAssignment.findMany({
+        where: { proposalId, reviewedSubmissionEventId: evidence.eventId, status: { in: ["assigned", "completed", "invited"] } }
+      })) as Array<{ id: string; reviewerUserId: string; assignmentRole: string; status: string; acceptedAt?: Date | null }>;
+      // Tờ trình lập trước quy trình mời (chưa gửi lời mời): giữ cách cũ — tạo phân công kèm lời mời sau khi duyệt.
+      const legacy = !currentCouncil.invitationsSentAt;
+      const live = rows.filter((row) => isRoundActiveStatus(row.status));
+      const toActivate: typeof rows = [];
+      const toCreate: CouncilInvitee[] = [];
+      for (const member of members) {
+        const userId = member.userId!;
+        const role = councilMetadataRoleToAssignmentRole(member.role);
         const memberConflict = await this.participation.evaluateConflict(userId, proposalId);
         if (memberConflict.conflicted) {
-          throw new BadRequestException({ message: `Thành viên ${m.displayName || userId} có xung đột lợi ích (${memberConflict.reason}), không thể tham gia Hội đồng.` });
+          throw new BadRequestException({ message: `Thành viên ${member.displayName} là người tham gia đề tài (${memberConflict.reason}), không thể tham gia Hội đồng.` });
         }
-        const existing = live.find((assignment: { reviewerUserId: string }) => assignment.reviewerUserId === userId);
+        const existing = live.find((row) => row.reviewerUserId === userId);
         if (existing) {
           if (councilRoleOf(existing.assignmentRole) !== role) {
-            throw new BadRequestException({ message: `${m.displayName || userId} đang được phân công với vai trò khác trong vòng đánh giá; cần thu hồi phân công cũ trước khi duyệt hội đồng.` });
+            throw new BadRequestException({ message: `${member.displayName} đang được phân công với vai trò khác trong vòng đánh giá; cần thu hồi phân công cũ trước khi duyệt hội đồng.` });
           }
           continue;
         }
-        toCreate.push({ userId, role });
+        const invitation = rows.find((row) => row.status === "invited" && row.reviewerUserId === userId && councilRoleOf(row.assignmentRole) === role);
+        if (invitation?.acceptedAt) toActivate.push(invitation);
+        else if (legacy && !invitation) toCreate.push({ userId, role, dueDate });
+        else throw new BadRequestException({ code: "COUNCIL_NOT_ACCEPTED", message: `${member.displayName} chưa nhận lời tham gia hội đồng; trả lại tờ trình để chuyên viên hoàn tất lời mời.` });
       }
       const roster = [
-        ...live.map((assignment: { id: string; reviewerUserId: string; assignmentRole: string; status: string }) => assignment),
+        ...live,
+        ...toActivate.map((row) => ({ ...row, status: "assigned" })),
         ...toCreate.map((item, index) => ({ id: `new-${index}`, reviewerUserId: item.userId, assignmentRole: item.role, status: "assigned" }))
       ];
       const rosterProblems = councilCompositionProblems(roster, false);
       if (rosterProblems.length) {
         throw new BadRequestException({ message: `Phân công sau khi duyệt hội đồng sẽ vượt quy định: ${rosterProblems.join(" ")}` });
       }
-      const assignedAt = new Date();
-      for (const item of toCreate) {
-        await retireStaleOpenAssignments(tx, proposalId, item.userId, evidence.eventId, assignedAt);
-        await tx.proposalReviewAssignment.create({
-          data: {
-            proposalId,
-            reviewedSubmissionEventId: evidence.eventId,
-            reviewerUserId: item.userId,
-            assignmentRole: item.role,
-            status: "assigned",
-            assignedById: actor.id,
-            assignedAt,
-            effectiveFrom: assignedAt,
-            dueDate: updatedCouncil.meetingDate ? new Date(updatedCouncil.meetingDate as string) : null
-          }
-        });
-        invited.push({ userId: item.userId, role: item.role, dueDate: updatedCouncil.meetingDate ? new Date(updatedCouncil.meetingDate as string) : null });
+
+      for (const invitation of toActivate) {
+        await retireStaleOpenAssignments(tx, proposalId, invitation.reviewerUserId, evidence.eventId, now);
+        await tx.proposalReviewAssignment.update({ where: { id: invitation.id }, data: { status: "assigned", effectiveFrom: now, dueDate } as never });
+        established.push(invitation.reviewerUserId);
       }
-    }
+      for (const item of toCreate) {
+        await retireStaleOpenAssignments(tx, proposalId, item.userId, evidence.eventId, now);
+        await tx.proposalReviewAssignment.create({
+          data: { proposalId, reviewedSubmissionEventId: evidence.eventId, reviewerUserId: item.userId, assignmentRole: item.role, status: "assigned", assignedById: actor.id, assignedAt: now, effectiveFrom: now, dueDate } as never
+        });
+        invited.push(item);
+      }
+      // Lời mời còn lại của vòng không thuộc hội đồng được duyệt thì thu hồi.
+      await tx.proposalReviewAssignment.updateMany({
+        where: { proposalId, reviewedSubmissionEventId: evidence.eventId, status: "invited" },
+        data: { status: "revoked", revokedAt: now, effectiveUntil: now } as never
+      });
 
-    await auditLog.record({
-      action: "approve-council",
-      result: "success",
-      actorId: actor.id,
-      targetEntity: "research-proposal",
-      targetEntityId: proposalId,
-      username: actor.username,
-      reason: JSON.stringify({ proposalId, decisionNumber, approvalNote: input.approvalNote })
-    });
+      const updatedCouncil: Record<string, unknown> = {
+        ...currentCouncil,
+        status: "approved",
+        decisionNumber,
+        decidedAt: now.toISOString(),
+        decidedById: actor.id,
+        decidedByName: actor.displayName,
+        approvalNote,
+        members
+      };
+      await tx.researchProposal.update({
+        where: { id: proposalId },
+        data: {
+          councilMetadata: updatedCouncil as never,
+          // Quyền xem hồ sơ của các thành viên thay đổi.
+          authorizationRelationshipVersion: { increment: 1 },
+          authorizationDelegationVersion: { increment: 1 },
+          authorizationContextUpdatedAt: now
+        } as never
+      });
+      // Hồ sơ mới nộp chuyển sang "Đang đánh giá" qua kiểm tra trạng thái, có dòng thời gian như mọi chuyển trạng thái.
+      if (proposal.status === PROPOSAL_STATUS.submitted || proposal.status === PROPOSAL_STATUS.resubmitted) {
+        await updateProposalStatusGuarded(tx as never, proposalId, proposal.status, PROPOSAL_STATUS.underReview);
+        await tx.proposalSubmissionEvent.create({
+          data: { proposalId, actorId: actor.id, fromStatus: proposal.status, toStatus: PROPOSAL_STATUS.underReview, submittedAt: now, note: `Lãnh đạo duyệt hội đồng (${decisionNumber}), mở vòng đánh giá` } as never
+        });
+      }
 
-    return {
-      success: true,
-      proposalId,
-      councilMetadata: updatedCouncil
-    };
+      await auditLog.record({
+        action: "approve-council",
+        result: "success",
+        actorId: actor.id,
+        targetEntity: "research-proposal",
+        targetEntityId: proposalId,
+        username: actor.username,
+        reason: JSON.stringify({ proposalId, decisionNumber, approvalNote, activated: established, createdInvitations: invited.map((item) => item.userId) })
+      });
+
+      return { success: true, proposalId, councilMetadata: updatedCouncil };
     });
-    await this.notifyAfterCommit(() => invited.map((item) => reviewInvitationEvent(proposalId, invitedFor, item.userId, item.role, item.dueDate)));
+    await this.notifyAfterCommit(() => [
+      ...invited.map((item) => reviewInvitationEvent(proposalId, notifyFor, item.userId, item.role, item.dueDate)),
+      ...(established.length ? [councilEstablishedEvent(proposalId, notifyFor, established, notifyFor.decisionNumber)] : [])
+    ]);
     return result;
   }
 
   /**
-   * Stage 1: Leadership requests adjustments or returns Council proposal to staff.
+   * Stage 1: Lãnh đạo trả lại tờ trình để điều chỉnh. Chỉ tờ trình đang chờ duyệt; hội đồng đã duyệt (đã có
+   * phân công hiệu lực) không trả lại được. Lời mời đã nhận lời được giữ để chuyên viên trình lại.
    */
   async rejectCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
     return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
-    assertApprovalAuthority(actor);
+      assertApprovalAuthority(actor);
+      await this.assertNoDecisionConflict(actor, proposal);
 
-    const conflict = await this.resolveDecisionConflict(actor, proposal);
-    if (conflict.conflicted) {
-      throw new BadRequestException({ message: conflict.viewerMessage, reasonCode: conflict.reasonCode });
-    }
+      const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
+      if (currentCouncil.status !== "submitted") {
+        throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ trả lại được tờ trình hội đồng đang chờ duyệt." });
+      }
+      const { reason } = readRejectCouncilInput(input);
+      const rejectionReason = reason || "Lãnh đạo yêu cầu điều chỉnh cơ cấu nhân sự Hội đồng.";
+      const updatedCouncil = {
+        ...currentCouncil,
+        status: "rejected",
+        rejectionReason,
+        rejectedAt: new Date().toISOString(),
+        rejectedById: actor.id,
+        rejectedByName: actor.displayName
+      };
 
-    const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
-    const rejectionReason = typeof input.reason === "string" && input.reason.trim()
-      ? input.reason.trim()
-      : "Lãnh đạo yêu cầu điều chỉnh cơ cấu nhân sự Hội đồng.";
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { councilMetadata: updatedCouncil as never } });
+      await auditLog.record({
+        action: "reject-council",
+        result: "success",
+        actorId: actor.id,
+        targetEntity: "research-proposal",
+        targetEntityId: proposalId,
+        username: actor.username,
+        reason: JSON.stringify({ proposalId, rejectionReason })
+      });
 
-    const updatedCouncil = {
-      ...currentCouncil,
-      status: "rejected",
-      rejectionReason,
-      rejectedAt: new Date().toISOString(),
-      rejectedById: actor.id,
-      rejectedByName: actor.displayName
-    };
-
-    await tx.researchProposal.update({
-      where: { id: proposalId },
-      data: { councilMetadata: updatedCouncil as any }
-    });
-
-    await auditLog.record({
-      action: "reject-council",
-      result: "success",
-      actorId: actor.id,
-      targetEntity: "research-proposal",
-      targetEntityId: proposalId,
-      username: actor.username,
-      reason: JSON.stringify({ proposalId, rejectionReason })
-    });
-
-    return {
-      success: true,
-      proposalId,
-      councilMetadata: updatedCouncil
-    };
+      return { success: true, proposalId, councilMetadata: updatedCouncil };
     });
   }
 
   /**
-   * Stage 2: Staff or Council Secretary records the official evaluation minutes & conclusion.
+   * Stage 2: chuyên viên QLKH phụ trách hoặc thư ký hội đồng của chính hồ sơ ghi biên bản và kết luận phiên họp,
+   * sau khi hội đồng đã được thành lập.
    */
   async recordCouncilMinutes(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
     return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
-    assertScientificManagementScope(actor, proposal);
+      const access = await this.reviewAccess.resolveForProposal(actor.id, proposalId);
+      const isCouncilSecretary = access.isAssignedReviewer && access.assignmentRole === "committee_secretary";
+      if (!isCouncilSecretary) assertScientificManagementScope(actor, proposal);
 
-    const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
-    const conclusion = (typeof input.conclusion === "string" ? input.conclusion : "approved") as "approved" | "revision_required" | "rejected";
-    const conclusionLabel = conclusion === "approved"
-      ? "Đạt yêu cầu (Đề nghị phê duyệt)"
-      : conclusion === "revision_required"
-      ? "Đạt nhưng cần chỉnh sửa bổ sung"
-      : "Không đạt yêu cầu";
+      const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
+      if (currentCouncil.status !== "approved") {
+        throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ ghi biên bản khi hội đồng đã được lãnh đạo quyết định thành lập." });
+      }
+      const minutes = readCouncilMinutesInput(input);
+      const conclusionLabel = minutes.conclusion === "approved" ? "Đạt yêu cầu (Đề nghị phê duyệt)" : minutes.conclusion === "revision_required" ? "Đạt nhưng cần chỉnh sửa bổ sung" : "Không đạt yêu cầu";
+      const now = new Date().toISOString();
+      const councilMinutes = {
+        ...minutes,
+        meetingConductedAt: minutes.meetingConductedAt || now,
+        conclusionLabel,
+        recordedById: actor.id,
+        recordedByName: actor.displayName,
+        recordedByRole: isCouncilSecretary ? "committee_secretary" : "research_management",
+        recordedAt: now
+      };
+      const updatedCouncil = { ...currentCouncil, councilMinutes };
 
-    const councilMinutes = {
-      meetingConductedAt: typeof input.meetingConductedAt === "string" ? input.meetingConductedAt : new Date().toISOString(),
-      attendance: Array.isArray(input.attendance) ? input.attendance : [],
-      conclusion,
-      conclusionLabel,
-      averageScore: Number(input.averageScore) || 0,
-      summaryComments: typeof input.summaryComments === "string" ? input.summaryComments.trim() : "",
-      modificationsRequired: typeof input.modificationsRequired === "string" ? input.modificationsRequired.trim() : "",
-      minutesAttachment: input.minutesAttachment || null,
-      recordedById: actor.id,
-      recordedByName: actor.displayName,
-      recordedAt: new Date().toISOString()
-    };
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { councilMetadata: updatedCouncil as never } });
+      await auditLog.record({
+        action: "record-council-minutes",
+        result: "success",
+        actorId: actor.id,
+        targetEntity: "research-proposal",
+        targetEntityId: proposalId,
+        username: actor.username,
+        reason: JSON.stringify({ proposalId, conclusion: minutes.conclusion, averageScore: minutes.averageScore, recordedByRole: councilMinutes.recordedByRole })
+      });
 
-    const updatedCouncil = {
-      ...currentCouncil,
-      councilMinutes
-    };
-
-    await tx.researchProposal.update({
-      where: { id: proposalId },
-      data: { councilMetadata: updatedCouncil as any }
-    });
-
-    await auditLog.record({
-      action: "record-council-minutes",
-      result: "success",
-      actorId: actor.id,
-      targetEntity: "research-proposal",
-      targetEntityId: proposalId,
-      username: actor.username,
-      reason: JSON.stringify({ proposalId, conclusion, averageScore: input.averageScore })
-    });
-
-    return {
-      success: true,
-      proposalId,
-      councilMetadata: updatedCouncil
-    };
+      return { success: true, proposalId, councilMetadata: updatedCouncil };
     });
   }
 
@@ -1272,4 +1219,67 @@ const IRB_CERTIFICATE_NUMBER: DocumentNumberKind = {
 
 function documentNumberTaken(kind: DocumentNumberKind) {
   return new ConflictException({ code: kind.takenCode, message: kind.takenMessage });
+}
+
+type CouncilInvitee = { userId: string; role: ReturnType<typeof councilMetadataRoleToAssignmentRole>; dueDate: Date | null };
+type CouncilRow = { id: string; reviewerUserId: string; assignmentRole: string; status: string; acceptedAt?: Date | null; reviewedSubmissionEventId?: string | null };
+
+// Kiểu lỏng có chủ ý: chạy được với client giao dịch và CSDL giả lập trong test.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CouncilClient = any;
+
+/**
+ * Đồng bộ lời mời hội đồng với danh sách trong tờ trình (vòng đánh giá hiện tại):
+ *   - Người mới (có tài khoản) nhận lời mời "invited"; người đã được mời đúng vai trò giữ nguyên câu trả lời.
+ *   - Người bị bỏ khỏi danh sách, đổi vai trò, hoặc lời mời của lần nộp cũ: thu hồi lời mời.
+ *   - Người đã từ chối không bị mời lại tự động: chuyên viên thay người khác.
+ * Trả về những người vừa được mời để gửi thông báo sau khi giao dịch commit.
+ */
+async function syncCouncilInvitations(tx: CouncilClient, actor: SafeUserContext, proposalId: string, members: CouncilMemberInput[], submissionEventId: string, dueDate: Date | null, now: Date) {
+  const rows = (await tx.proposalReviewAssignment.findMany({ where: { proposalId, status: { in: ["invited", "assigned", "completed", "declined"] } } })) as CouncilRow[];
+  const wanted = new Map<string, CouncilInvitee["role"]>();
+  for (const member of members) if (member.userId) wanted.set(member.userId, councilMetadataRoleToAssignmentRole(member.role));
+
+  for (const row of rows.filter((item) => item.status === "invited")) {
+    if (row.reviewedSubmissionEventId !== submissionEventId || wanted.get(row.reviewerUserId) !== councilRoleOf(row.assignmentRole)) {
+      await tx.proposalReviewAssignment.update({ where: { id: row.id }, data: { status: "revoked", revokedAt: now, effectiveUntil: now } });
+    }
+  }
+
+  const created: CouncilInvitee[] = [];
+  for (const [userId, role] of wanted) {
+    const current = rows.filter((row) => row.reviewerUserId === userId && row.reviewedSubmissionEventId === submissionEventId);
+    const live = current.find((row) => isRoundActiveStatus(row.status));
+    if (live) {
+      if (councilRoleOf(live.assignmentRole) !== role) throw new BadRequestException({ message: "Một thành viên đang được phân công với vai trò khác trong vòng đánh giá; cần thu hồi phân công cũ trước." });
+      continue;
+    }
+    if (current.some((row) => (row.status === "invited" || row.status === "declined") && councilRoleOf(row.assignmentRole) === role)) continue;
+    const profiles = tx.researcherProfile;
+    const profile = profiles?.findFirst ? await profiles.findFirst({ where: { linkedUserId: userId }, select: { id: true } }) : null;
+    await tx.proposalReviewAssignment.create({
+      data: { proposalId, reviewedSubmissionEventId: submissionEventId, reviewerUserId: userId, researcherProfileId: profile?.id ?? null, assignmentRole: role, status: "invited", assignedById: actor.id, assignedAt: now, effectiveFrom: now, dueDate }
+    });
+    created.push({ userId, role, dueDate });
+  }
+  return created;
+}
+
+/** Lý do chưa trình được: ai chưa nhận lời, ai đã từ chối (rỗng = mọi thành viên đã nhận lời). */
+async function councilAcceptanceProblems(tx: CouncilClient, proposalId: string, members: CouncilMemberInput[], submissionEventId: string) {
+  const rows = (await tx.proposalReviewAssignment.findMany({ where: { proposalId, reviewedSubmissionEventId: submissionEventId, status: { in: ["invited", "assigned", "completed", "declined"] } } })) as CouncilRow[];
+  const pending: string[] = [];
+  const declined: string[] = [];
+  for (const member of members) {
+    const role = councilMetadataRoleToAssignmentRole(member.role);
+    const mine = rows.filter((row) => row.reviewerUserId === member.userId && councilRoleOf(row.assignmentRole) === role);
+    if (mine.some((row) => isRoundActiveStatus(row.status) || (row.status === "invited" && row.acceptedAt))) continue;
+    if (mine.some((row) => row.status === "invited")) pending.push(member.displayName);
+    else if (mine.some((row) => row.status === "declined")) declined.push(member.displayName);
+    else pending.push(member.displayName);
+  }
+  const problems: string[] = [];
+  if (pending.length) problems.push(`Chờ nhận lời: ${pending.join(", ")}.`);
+  if (declined.length) problems.push(`Đã từ chối (cần thay người khác): ${declined.join(", ")}.`);
+  return problems;
 }

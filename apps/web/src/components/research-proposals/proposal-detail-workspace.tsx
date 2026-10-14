@@ -121,16 +121,16 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
   async function loadInvitation() {
     try {
       const mine = await loadMyReviewAssignments();
-      setInvitation(mine.find((item) => item.proposal.id === proposalId && item.invitationPending) ?? null);
+      setInvitation(mine.find((item) => item.proposal.id === proposalId && (item.invitationPending || item.awaitingCouncilDecision)) ?? null);
     } catch {
       setInvitation(null);
     }
   }
 
-  async function handleInvitationResponse(response: "accept" | "decline") {
+  async function handleInvitationResponse(response: "accept" | "decline", assignment: { awaitingCouncilDecision?: boolean }) {
     setInvitation(null);
     if (response === "decline") setDeclined(true);
-    setMessage(response === "accept" ? "Đã đồng ý nhận phản biện. Bạn có thể xem hồ sơ và chấm phiếu đánh giá." : "");
+    setMessage(response === "accept" && !assignment.awaitingCouncilDecision ? "Đã đồng ý nhận phản biện. Bạn có thể xem hồ sơ và chấm phiếu đánh giá." : "");
     await refresh();
   }
 
@@ -461,21 +461,29 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
   }
 
   const invitationCard = invitation ? (
-    <SectionCard title="Lời mời phản biện" subtitle="Bạn cần đồng ý nhận phản biện trước khi xem hồ sơ và chấm phiếu đánh giá">
+    <SectionCard
+      title={invitation.status === "invited" ? "Lời mời tham gia hội đồng đánh giá" : "Lời mời phản biện"}
+      subtitle={
+        invitation.awaitingCouncilDecision
+          ? "Bạn đã nhận lời. Hồ sơ đề tài sẽ mở khi lãnh đạo ký quyết định thành lập hội đồng."
+          : "Bạn chỉ xem được tên đề tài cho đến khi đồng ý tham gia đánh giá."
+      }
+    >
       <div className="grid" style={{ gap: "6px" }}>
         <span className="record-title">{invitation.proposal.title}</span>
-        <span className="record-meta">Mã hồ sơ: {invitation.proposal.code || "Chưa cấp mã"}</span>
         <span className="record-meta">Vai trò: {invitation.assignmentRoleLabel}</span>
         <span className="record-meta">Hạn đánh giá: {invitation.dueDate ? formatIntakeDate(invitation.dueDate) : "Không đặt hạn"}</span>
         <span className="record-meta">Người mời: {invitation.assignedByDisplayName}</span>
-        <div style={{ marginTop: "8px" }}>
-          <ReviewInvitationActions
-            proposalId={proposalId}
-            assignmentId={invitation.id}
-            proposalTitle={invitation.proposal.title}
-            onResponded={handleInvitationResponse}
-          />
-        </div>
+        {invitation.invitationPending ? (
+          <div style={{ marginTop: "8px" }}>
+            <ReviewInvitationActions
+              proposalId={proposalId}
+              assignmentId={invitation.id}
+              proposalTitle={invitation.proposal.title}
+              onResponded={handleInvitationResponse}
+            />
+          </div>
+        ) : null}
       </div>
     </SectionCard>
   ) : null;

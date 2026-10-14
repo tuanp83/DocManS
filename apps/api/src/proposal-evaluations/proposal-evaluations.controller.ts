@@ -4,6 +4,10 @@ import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.
 import { PROPOSAL_DECISIONS, ProposalDecisionsService } from "./proposal-decisions.service.js";
 import { ProposalEvaluationSummaryService } from "./proposal-evaluation-summary.service.js";
 import {
+  approveCouncilPipe,
+  councilMinutesPipe,
+  proposeCouncilPipe,
+  rejectCouncilPipe,
   acceptReviewInvitationPipe,
   declineReviewInvitationPipe,
   type RespondReviewInvitationDto,
@@ -208,7 +212,7 @@ export class ProposalEvaluationsController {
   async proposeCouncil(
     @Req() request: RequestWithCurrentUser,
     @Param("id") id: string,
-    @Body() body: Record<string, unknown>
+    @Body(proposeCouncilPipe) body: Record<string, unknown>
   ) {
     return this.decisions.proposeCouncil(request.currentUser!, id, body);
   }
@@ -217,7 +221,7 @@ export class ProposalEvaluationsController {
   async approveCouncil(
     @Req() request: RequestWithCurrentUser,
     @Param("id") id: string,
-    @Body() body: Record<string, unknown>
+    @Body(approveCouncilPipe) body: Record<string, unknown>
   ) {
     return this.decisions.approveCouncil(request.currentUser!, id, body);
   }
@@ -226,7 +230,7 @@ export class ProposalEvaluationsController {
   async rejectCouncil(
     @Req() request: RequestWithCurrentUser,
     @Param("id") id: string,
-    @Body() body: Record<string, unknown>
+    @Body(rejectCouncilPipe) body: Record<string, unknown>
   ) {
     return this.decisions.rejectCouncil(request.currentUser!, id, body);
   }
@@ -235,7 +239,7 @@ export class ProposalEvaluationsController {
   async recordCouncilMinutes(
     @Req() request: RequestWithCurrentUser,
     @Param("id") id: string,
-    @Body() body: Record<string, unknown>
+    @Body(councilMinutesPipe) body: Record<string, unknown>
   ) {
     return this.decisions.recordCouncilMinutes(request.currentUser!, id, body);
   }
