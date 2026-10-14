@@ -298,6 +298,36 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 }
   ],
+  // Phó GĐ phụ trách Khoa học: ký thành lập hội đồng, gia hạn/điều chỉnh không đổi kinh phí.
+  SCIENCE_DEPUTY_DIRECTOR: [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
+    { href: "/proposals", label: "Giám sát hồ sơ đề xuất", icon: Files },
+    { href: "/approvals", label: "Hồ sơ chờ ký", icon: FileClock },
+    { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
+    { href: "/reports", label: "Báo cáo", icon: BarChart3 }
+  ],
+  // Phó phòng KHQS: theo dõi tiến độ, số lượng đề tài (chỉ xem).
+  RESEARCH_MANAGEMENT_DEPUTY_HEAD: [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/proposals", label: "Theo dõi hồ sơ đề xuất", icon: Files },
+    { href: "/reviews", label: "Đánh giá hồ sơ", icon: FileSearch },
+    { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
+    { href: "/reports", label: "Báo cáo", icon: BarChart3 },
+    { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
+    { href: "/notifications", label: "Thông báo", icon: Bell }
+  ],
+  // Trưởng ban QLKH: rà soát việc của chuyên viên, trình Trưởng phòng.
+  RESEARCH_BOARD_HEAD: [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
+    { href: "/proposals", label: "Quản lý đề tài", icon: Files },
+    { href: "/researcher-profiles", label: "Hồ sơ nhà khoa học", icon: UserRoundSearch },
+    { href: "/reviews", label: "Đánh giá hồ sơ", icon: FileSearch },
+    { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
+    { href: "/reports", label: "Báo cáo", icon: BarChart3 },
+    { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen }
+  ],
   RESEARCH_MANAGEMENT_HEAD: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },

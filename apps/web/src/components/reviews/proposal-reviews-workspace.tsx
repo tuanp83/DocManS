@@ -84,7 +84,7 @@ export function ProposalReviewsWorkspace() {
 
   // Trang điều phối dành cho Trưởng phòng (mọi hồ sơ trong phạm vi đơn vị) và chuyên viên QLKH (hồ sơ mình phụ
   // trách, giao theo mảng). Kiểm tra ở component bọc ngoài, trước mọi hook của màn hình chính.
-  if (account && account.systemRole !== "RESEARCH_MANAGEMENT_HEAD" && account.systemRole !== "RESEARCH_MANAGEMENT_STAFF") {
+  if (account && !["RESEARCH_MANAGEMENT_HEAD", "RESEARCH_MANAGEMENT_DEPUTY_HEAD", "RESEARCH_BOARD_HEAD", "RESEARCH_MANAGEMENT_STAFF"].includes(account.systemRole)) {
     return (
       <div className="card p-8 border border-amber-200 bg-amber-50/60 rounded-xl max-w-2xl mx-auto my-12 text-center shadow-sm">
         <div className="inline-flex p-3 bg-amber-100 text-amber-800 rounded-full mb-4">
@@ -111,7 +111,7 @@ function ReviewsWorkspaceContent() {
   const [loading, setLoading] = useState(true);
   const [selectedProposalId, setSelectedProposalId] = useState<string>("");
   const [overview, setOverview] = useState<CoordinationRow[]>([]);
-  const [viewerRole, setViewerRole] = useState<"head" | "officer">("officer");
+  const [viewerRole, setViewerRole] = useState<"head" | "department" | "officer">("officer");
   const [loadError, setLoadError] = useState("");
   const [officerOptions, setOfficerOptions] = useState<PortfolioOfficer[]>([]);
   const [officerChanging, setOfficerChanging] = useState("");
@@ -280,7 +280,7 @@ function ReviewsWorkspaceContent() {
           <div style={{ background: "rgba(255, 255, 255, 0.1)", backdropFilter: "blur(4px)", padding: "14px 18px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.15)" }}>
             <div style={{ fontSize: "12px", opacity: 0.85 }}>Hồ sơ đang điều phối</div>
             <div style={{ fontSize: "24px", fontWeight: 800, marginTop: "4px" }}>{stats.total}</div>
-            <div style={{ fontSize: "11px", opacity: 0.75, marginTop: "2px" }}>{viewerRole === "head" ? "Trong phạm vi đơn vị" : "Hồ sơ đồng chí phụ trách"}</div>
+            <div style={{ fontSize: "11px", opacity: 0.75, marginTop: "2px" }}>{viewerRole === "officer" ? "Hồ sơ đồng chí phụ trách" : "Trong phạm vi đơn vị"}</div>
           </div>
           <div style={{ background: "rgba(255, 255, 255, 0.1)", backdropFilter: "blur(4px)", padding: "14px 18px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.15)" }}>
             <div style={{ fontSize: "12px", opacity: 0.85 }}>Đang trong giai đoạn đánh giá</div>
@@ -483,7 +483,7 @@ function ReviewsWorkspaceContent() {
                 <option value="military">Quân sự</option>
                 <option value="civilian">Dân sự</option>
               </select>
-              {viewerRole === "head" ? (
+              {viewerRole !== "officer" ? (
                 <select aria-label="Chuyên viên phụ trách" value={officerFilter} onChange={(e) => setOfficerFilter(e.target.value)} style={{ padding: "6px 10px", fontSize: "13px", borderRadius: "6px", border: "1px solid #cbd5e1" }}>
                   <option value="all">Mọi chuyên viên</option>
                   <option value="none">Chưa có người phụ trách ({stats.unassigned})</option>
@@ -516,7 +516,7 @@ function ReviewsWorkspaceContent() {
             ) : filteredRows.length === 0 ? (
               <p className="state-message">
                 {overview.length === 0
-                  ? viewerRole === "head"
+                  ? viewerRole !== "officer"
                     ? "Chưa có hồ sơ nào ở bước tiếp nhận hoặc đánh giá trong phạm vi đơn vị."
                     : "Đồng chí chưa được giao phụ trách hồ sơ nào. Trưởng phòng giao theo mảng hoặc giao từng hồ sơ."
                   : "Không có hồ sơ khớp bộ lọc."}

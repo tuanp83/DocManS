@@ -471,20 +471,21 @@ export class AdminUsersService {
   }
 
   private toRoleLabel(systemRole: SystemRole) {
-    return systemRole === "SYSTEM_ADMIN"
-      ? "Quản trị hệ thống"
-      : systemRole === "RESEARCH_MANAGEMENT_STAFF"
-        ? "Chuyên viên quản lý khoa học"
-        : systemRole === "RESEARCH_MANAGEMENT_HEAD"
-          ? "Trưởng phòng quản lý khoa học"
-        : systemRole === "LEADERSHIP_APPROVAL_AUTHORITY"
-          ? "Lãnh đạo phê duyệt"
-          : systemRole === "RESEARCH_OVERSIGHT_AUTHORITY"
-            ? "Lãnh đạo giám sát nghiên cứu"
-          : systemRole === "RESEARCHER_INTERNAL_USER"
-            ? "Người dùng nghiên cứu nội bộ"
-            : "Nhà nghiên cứu bên ngoài";
+    const labels: Record<string, string> = {
+      SYSTEM_ADMIN: "Quản trị hệ thống",
+      LEADERSHIP_APPROVAL_AUTHORITY: "Giám đốc Học viện",
+      SCIENCE_DEPUTY_DIRECTOR: "Phó Giám đốc phụ trách Khoa học",
+      RESEARCH_OVERSIGHT_AUTHORITY: "Phó Giám đốc",
+      RESEARCH_MANAGEMENT_HEAD: "Trưởng phòng KHQS",
+      RESEARCH_MANAGEMENT_DEPUTY_HEAD: "Phó phòng KHQS",
+      RESEARCH_BOARD_HEAD: "Trưởng ban QLKH",
+      RESEARCH_MANAGEMENT_STAFF: "Chuyên viên quản lý khoa học",
+      RESEARCHER_INTERNAL_USER: "Người dùng nghiên cứu nội bộ",
+      EXTERNAL_RESEARCHER_USER: "Nhà nghiên cứu bên ngoài"
+    };
+    return labels[systemRole] ?? systemRole;
   }
+
 
   private async findActiveOrganizationUnit(id: string) {
     const organizationUnit = await this.prisma.organizationUnit.findUnique({ where: { id } });

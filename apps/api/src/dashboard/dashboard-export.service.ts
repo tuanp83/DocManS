@@ -4,6 +4,7 @@ import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
 import { DashboardService } from "./dashboard.service.js";
+import { isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
 
 
 @Injectable()
@@ -16,6 +17,7 @@ export class DashboardExportService {
   async exportProposalsToExcel(actor: SafeUserContext | undefined): Promise<Buffer> {
     // Same visibility filter as the proposal list and dashboard totals; fails closed without an actor.
     const proposals = await this.dashboard.findReadableProposals(actor);
+    const hideBudget = isResearchOversightAuthority(actor);
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "DocManS";
@@ -51,7 +53,8 @@ export class DashboardExportService {
         title: p.title,
         owner: p.owner?.displayName || p.owner?.username || "—",
         unit: p.hostOrganizationUnit?.name || "—",
-        budget: budget,
+        // Các Phó Giám đốc chỉ theo dõi không xem kinh phí từng đề tài.
+        budget: hideBudget ? "—" : budget,
         status: PROPOSAL_STATUS_LABELS[p.status] ?? p.status,
         submittedAt: p.submittedAt ? new Intl.DateTimeFormat("vi-VN").format(p.submittedAt) : "—"
       });

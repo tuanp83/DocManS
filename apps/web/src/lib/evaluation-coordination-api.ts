@@ -25,7 +25,8 @@ export type CoordinationRow = {
   summaryStatus: string;
 };
 
-export type CoordinationOverview = { viewerRole: "head" | "officer"; truncated: boolean; proposals: CoordinationRow[] };
+/** head: Trưởng phòng (điều phối, giao người); department: Phó phòng/Trưởng ban (xem tất cả); officer: chuyên viên. */
+export type CoordinationOverview = { viewerRole: "head" | "department" | "officer"; truncated: boolean; proposals: CoordinationRow[] };
 
 export type PortfolioRule = { id?: string; proposalLevel: string | null; militaryScope: string | null; label?: string };
 

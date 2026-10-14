@@ -57,7 +57,7 @@ const users = [
       "scrypt:user-vicedirector:aa956b2ea39e44840e51e3003262a3181e6fbc299756ffb303e0610017a8baf94daadd2c9f83726f5330ec2dbf161e0bb9eb4877498a8e376de028ab0db4a819",
     displayName: "TS. Phó Giám Đốc",
     status: "active",
-    systemRole: "LEADERSHIP_APPROVAL_AUTHORITY",
+    systemRole: "SCIENCE_DEPUTY_DIRECTOR",
     unit: "Ban Giám Đốc"
   },
   {
@@ -87,7 +87,7 @@ const users = [
       "scrypt:user-reviewer:b0782812a1c75cef9db6596a7c88ae497fac0d08b7c7230c908d3c413fc08c2bed386eccfc0cbc10a64a088f1ad9bf6a2f6507410ea3d833bbb0907d958ac12a",
     displayName: "TS. Đỗ Minh Trung",
     status: "active",
-    systemRole: "RESEARCH_MANAGEMENT_HEAD",
+    systemRole: "RESEARCH_BOARD_HEAD",
     unit: "Trưởng Ban QLKH, Phòng KHQS"
   },
   {
@@ -99,7 +99,17 @@ const users = [
     status: "active",
     systemRole: "RESEARCH_OVERSIGHT_AUTHORITY",
     unit: "Ban Giám Đốc"
-  },
+  }
+  {
+    id: "user-deputy-head",
+    username: "pphong",
+    passwordHash:
+      "scrypt:user-deputy-head:05ac259839c95140cb0abb6fe3c1a1b658541e14dd887e35ba0d675f8a79f65413ff09395dcefe272280d4ccb06b73037073797d9d0597f9cef1b9d7266ccf50",
+    displayName: "TS. Lê Văn Phó",
+    status: "active",
+    systemRole: "RESEARCH_MANAGEMENT_DEPUTY_HEAD",
+    unit: "Phó phòng KHQS"
+  },,
   {
     id: "user-researcher1",
     username: "researcher1",
@@ -359,11 +369,21 @@ const additionalOrganizationScopes = {
   "user-staff-hdtien2": allUnitIds
 };
 
+// Loại đơn vị theo tên (cùng quy tắc apps/api/src/organization/unit-positions.ts).
+function inferUnitType(name) {
+  const normalized = name.trim().toLowerCase();
+  if (normalized.startsWith("viện")) return "INSTITUTE";
+  if (normalized.startsWith("phòng")) return "DEPARTMENT";
+  if (normalized.startsWith("khoa")) return "FACULTY";
+  if (normalized.startsWith("bộ môn")) return "DIVISION";
+  return "OTHER";
+}
+
 for (const [id, code, name] of organizationUnits) {
   await prisma.organizationUnit.upsert({
     where: { code },
     update: { name, status: "active" },
-    create: { id, code, name, status: "active" }
+    create: { id, code, name, status: "active", unitType: inferUnitType(name) }
   });
 }
 

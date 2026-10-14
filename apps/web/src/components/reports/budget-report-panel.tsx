@@ -25,6 +25,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { loadResearchProposals, type ResearchProposal } from "@/lib/research-proposals-api";
 import { useSession } from "@/components/auth/session-provider";
+import { BudgetSummaryPanel } from "@/components/reports/budget-summary-panel";
 import { formatVndNumber, numberToVietnameseWords } from "@/lib/vietnamese-currency";
 import {
   PROPOSAL_LEVEL_LABELS,
@@ -57,7 +58,14 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: "Không duyệt"
 };
 
+/** Các Phó Giám đốc chỉ theo dõi xem báo cáo kinh phí tổng hợp; các vai trò khác xem chi tiết từng hồ sơ. */
 export function BudgetReportPanel() {
+  const { account } = useSession();
+  if (account?.systemRole === "RESEARCH_OVERSIGHT_AUTHORITY") return <BudgetSummaryPanel />;
+  return <BudgetReportDetailPanel />;
+}
+
+function BudgetReportDetailPanel() {
   const { account } = useSession();
   const [state, setState] = useState<LoadState>("loading");
   const [proposals, setProposals] = useState<ResearchProposal[]>([]);

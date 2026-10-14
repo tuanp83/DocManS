@@ -10,6 +10,7 @@ import { ProposalParticipationService } from "../research-proposals/proposal-par
 import { DECIDABLE_STATUSES, PROPOSAL_STATUS, PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
 import {
   assertApprovalAuthority,
+  assertCouncilSigningAuthority,
   assertCanManageIRB,
   assertCanReadEvaluation,
   assertEvaluationCoordinator,
@@ -619,7 +620,7 @@ export class ProposalDecisionsService {
     const result = await this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
       invited = [];
       established = [];
-      assertApprovalAuthority(actor);
+      assertCouncilSigningAuthority(actor);
       await this.assertNoDecisionConflict(actor, proposal);
 
       const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
@@ -753,7 +754,7 @@ export class ProposalDecisionsService {
    */
   async rejectCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
     return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
-      assertApprovalAuthority(actor);
+      assertCouncilSigningAuthority(actor);
       await this.assertNoDecisionConflict(actor, proposal);
 
       const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
@@ -963,7 +964,7 @@ export class ProposalDecisionsService {
 
   async approveIrbCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
     return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
-    assertApprovalAuthority(actor);
+    assertCouncilSigningAuthority(actor);
     await this.assertNoDecisionConflict(actor, proposal);
 
     const current = (proposal.irbMetadata as Record<string, unknown>) || {};

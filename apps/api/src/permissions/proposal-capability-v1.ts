@@ -5,7 +5,7 @@ import type { SafeUserContext } from "../auth/auth.types.js";
 import { evaluateProposalConflict, type ProposalParticipation } from "../proposals-shared/proposal-participation.js";
 import type { ProposalReviewAccess } from "../proposals-shared/proposal-review-access.js";
 import type { ProposalManagementOfficerResolution } from "../proposals-shared/proposal-management-officer.service.js";
-import { isInternalResearcherEligible, isResearchOversightAuthority, isResearchManagementHead, isResearchManagementStaff } from "../proposals-shared/proposal-access.js";
+import { isAcademyLeadership, isInternalResearcherEligible, isResearchBoardHead, isResearchDepartmentLeadership, isResearchManagementDeputyHead, isResearchOversightAuthority, isResearchManagementHead, isResearchManagementStaff, isScienceDeputyDirector } from "../proposals-shared/proposal-access.js";
 import { publicAuthorizationReasonV1 } from "./authorization-v1.service.js";
 
 type ProposalCapabilityInput = {
@@ -66,8 +66,11 @@ export function projectProposalViewerAuthorizationV1(input: ProposalCapabilityIn
   const accessReasons = [
     isCurrentOfficer(input) ? "PROPOSAL_MANAGEMENT_OFFICER" : "",
     isResearchManagementHead(input.actor) ? "RESEARCH_MANAGEMENT_HEAD_OVERSIGHT" : "",
+    isResearchManagementDeputyHead(input.actor) ? "RESEARCH_MANAGEMENT_DEPUTY_HEAD_OVERSIGHT" : "",
+    isResearchBoardHead(input.actor) ? "RESEARCH_BOARD_HEAD_OVERSIGHT" : "",
     isResearchOversightAuthority(input.actor) ? "RESEARCH_OVERSIGHT_AUTHORITY_OVERSIGHT" : "",
     input.actor.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY" ? "LEADERSHIP_APPROVAL_AUTHORITY_OVERSIGHT" : "",
+    isScienceDeputyDirector(input.actor) ? "SCIENCE_DEPUTY_DIRECTOR_OVERSIGHT" : "",
     input.participation?.isParticipant ? input.participation.role : "",
     input.reviewAccess?.isAssignedReviewer ? "REVIEWER_ASSIGNMENT" : ""
   ].filter(Boolean);
@@ -125,7 +128,7 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
   if (action === "proposal.review.progress.read") {
     if (!inScope(input)) return blocked("ORG_SCOPE_DENIED");
     if (!["submitted", "resubmitted", "supplement_requested", "under_review", "ready_for_approval", "approved", "rejected"].includes(input.proposal.status)) return blocked("WORKFLOW_STATE_DENIED");
-    if (isResearchManagementHead(input.actor) || isResearchOversightAuthority(input.actor) || input.actor.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY") return null;
+    if (isResearchDepartmentLeadership(input.actor) || isResearchOversightAuthority(input.actor) || isAcademyLeadership(input.actor)) return null;
     if (!isResearchManagementStaff(input.actor) || !isCurrentOfficer(input)) return blocked("ACTION_NOT_GRANTED");
     if (!input.participation || input.participation.role === "unknown" || !input.reviewAccess || input.reviewAccess.conflictUnresolved) return blocked("CONTEXT_UNRESOLVED");
     return hasReviewOrParticipationConflict(input) ? blocked("CONFLICT_DENIED") : null;

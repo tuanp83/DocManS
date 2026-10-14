@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { NotificationsService } from "../notifications/notifications.service.js";
-import { label, leadershipUserIds, NOTIFICATION_TYPES, projectLink, vnDate, type WorkflowEvent } from "../notifications/workflow-events.js";
+import { label, councilSignerUserIds, leadershipUserIds, NOTIFICATION_TYPES, projectLink, vnDate, type WorkflowEvent } from "../notifications/workflow-events.js";
 import { randomUUID } from "node:crypto";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
@@ -823,7 +823,7 @@ export class ApprovedProjectsService {
       const now = await readTransactionClockV1(tx);
       const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: "ready_for_head_decision", preparedById: currentActor.id, preparedAt: now, appraisal: { validationNote: input.note ?? "Đã kiểm tra hành chính" } } });
       await this.recordRequestAction(tx, currentActor, project, request, "prepare", "ready_for_head_decision", { note: input.note ?? null });
-      notify({ type: NOTIFICATION_TYPES.projectRequestAwaitingDecision, userIds: await leadershipUserIds(tx), excludeUserIds: [currentActor.id, ...this.projectRecipients(project).team], title: `Đề nghị gia hạn chờ phê duyệt: ${project.title}`, message: `Chuyên viên đã thẩm định và trình đề nghị gia hạn của đề tài ${label(project)}. Vui lòng xem xét, quyết định.`, link: projectLink(project.id), metadata: { projectId: project.id, requestId: request.id } });
+      notify({ type: NOTIFICATION_TYPES.projectRequestAwaitingDecision, userIds: await councilSignerUserIds(tx), excludeUserIds: [currentActor.id, ...this.projectRecipients(project).team], title: `Đề nghị gia hạn chờ phê duyệt: ${project.title}`, message: `Chuyên viên đã thẩm định và trình đề nghị gia hạn của đề tài ${label(project)}. Vui lòng xem xét, quyết định.`, link: projectLink(project.id), metadata: { projectId: project.id, requestId: request.id } });
       return updated;
     });
   }

@@ -1,4 +1,5 @@
 import { currentSubmissionFromEvents, findCurrentSubmission, hasCompletenessCheckForEvent, readCompletenessState, type SubmissionEventLike } from "../proposals-shared/submission-evidence.js";
+import { isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
 import { autoAssignPortfolioOfficer, defaultMilitaryScope, readMilitaryScope } from "../proposals-shared/management-portfolio.js";
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
@@ -267,7 +268,7 @@ export class ResearchProposalsService {
       .map((proposal) =>
         this.toProposalResponse(proposal, actor, participationByProposal.get(proposal.id), reviewAccessByProposal.get(proposal.id), completenessChecked.has(proposal.id), managementOfficerByProposal.get(proposal.id), summaryStatusByProposal.get(proposal.id) ?? null)
       );
-    results = await this.attachProjectClosure(results);
+    results = await this.attachProjectClosure(results, actor);
 
     if (query) {
       const kw = query.keyword?.trim().toLowerCase();
@@ -332,7 +333,7 @@ export class ResearchProposalsService {
    * `disbursementMetadata` / `acceptanceCouncilMetadata`, nên lấy số liệu từ đề tài khi đã có đề tài;
    * đề xuất chưa lập đề tài giữ dữ liệu cũ (sẽ được chuyển sang khi tạo đề tài).
    */
-  private async attachProjectClosure<T extends { id: string }>(results: T[]): Promise<T[]> {
+  private async attachProjectClosure<T extends { id: string }>(results: T[], actor?: SafeUserContext): Promise<T[]> {
     const client = this.prisma as unknown as { approvedProject?: { findMany: (args: unknown) => Promise<any[]> } };
     if (!results.length || typeof client.approvedProject?.findMany !== "function") return results;
     const projects = await client.approvedProject.findMany({
@@ -349,7 +350,7 @@ export class ResearchProposalsService {
       return {
         ...item,
         project: { id: project.id, status: project.status },
-        disbursementMetadata: finance ? { totalBudget: Number(finance.totalBudget), totalDisbursed: Number(finance.totalDisbursed), totalSettled: Number(finance.totalSettled), settlementStatus: finance.settlementStatus } : null,
+        disbursementMetadata: finance && !isResearchOversightAuthority(actor) ? { totalBudget: Number(finance.totalBudget), totalDisbursed: Number(finance.totalDisbursed), totalSettled: Number(finance.totalSettled), settlementStatus: finance.settlementStatus } : null,
         acceptanceCouncilMetadata: round && round.status !== "RETURNED" ? { status: legacyStatus[round.status] ?? round.status, roundStatus: project.status === "pending_superior_acceptance" ? "PENDING_SUPERIOR" : project.status === "failed" ? "FAILED" : project.status === "accepted" || project.status === "closed" ? (round.status === "FAILED" ? "FAILED" : "PASSED") : round.status, round: round.round, decisionNumber: round.decisionNumber ?? undefined, evaluationResult: round.evaluationResult ?? undefined, resolution: round.resolution ?? undefined } : null
       };
     });
@@ -1468,10 +1469,11 @@ export class ResearchProposalsService {
       summary: proposal.summary ?? "",
       startDate: proposal.startDate?.toISOString() ?? "",
       endDate: proposal.endDate?.toISOString() ?? "",
-      budgetMetadata: proposal.budgetMetadata ?? {},
+      // Các Phó Giám đốc chỉ theo dõi xem báo cáo kinh phí tổng hợp, không xem kinh phí từng hồ sơ.
+      budgetMetadata: isResearchOversightAuthority(actor) ? {} : proposal.budgetMetadata ?? {},
       councilMetadata: proposal.councilMetadata ?? null,
       acceptanceCouncilMetadata: proposal.acceptanceCouncilMetadata ?? null,
-      disbursementMetadata: proposal.disbursementMetadata ?? null,
+      disbursementMetadata: isResearchOversightAuthority(actor) ? null : proposal.disbursementMetadata ?? null,
       irbMetadata: proposal.irbMetadata ?? null,
       status: proposal.status,
       submittedAt: proposal.submittedAt?.toISOString() ?? "",
