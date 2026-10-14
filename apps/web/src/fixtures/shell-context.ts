@@ -125,6 +125,13 @@ export const routeDefinitions: Record<string, RouteDefinition> = {
     summaryTitle: "Tổng hợp điều hành",
     summaryBody: "Chỉ số và danh sách trong phân hệ này được điều chỉnh theo vai trò, đơn vị và phạm vi nghiệp vụ hiện hành."
   },
+  "/submissions": {
+    eyebrow: "Phòng Khoa học quân sự",
+    title: "Tờ trình qua Phòng KHQS",
+    description: "Chuyên viên lập → Trưởng ban QLKH rà soát → Trưởng phòng KHQS duyệt → Ban giám đốc ký.",
+    summaryTitle: "Luồng trình duyệt",
+    summaryBody: "Mọi thủ tục lên Ban giám đốc đi qua Trưởng ban và Trưởng phòng; trả lại ở bước nào cũng về chuyên viên."
+  },
   "/approvals": {
     eyebrow: "Phê duyệt",
     title: "Hồ sơ chờ phê duyệt",
@@ -321,6 +328,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
   RESEARCH_BOARD_HEAD: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
+    { href: "/submissions", label: "Tờ trình", icon: FileClock },
     { href: "/proposals", label: "Quản lý đề tài", icon: Files },
     { href: "/researcher-profiles", label: "Hồ sơ nhà khoa học", icon: UserRoundSearch },
     { href: "/reviews", label: "Đánh giá hồ sơ", icon: FileSearch },
@@ -331,6 +339,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
   RESEARCH_MANAGEMENT_HEAD: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
+    { href: "/submissions", label: "Tờ trình", icon: FileClock },
     { href: "/proposals", label: "Quản lý đề tài", icon: Files },
     { href: "/researcher-profiles", label: "Hồ sơ nhà khoa học", icon: UserRoundSearch },
     { href: "/intakes", label: "Đợt tiếp nhận", icon: CalendarRange },
@@ -343,6 +352,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
   RESEARCH_MANAGEMENT_STAFF: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
+    { href: "/submissions", label: "Tờ trình", icon: FileClock },
     { href: "/proposals", label: "Quản lý đề tài", icon: Files },
     { href: "/researcher-profiles", label: "Hồ sơ nhà khoa học", icon: UserRoundSearch },
     { href: "/intakes", label: "Đợt tiếp nhận", icon: CalendarRange },

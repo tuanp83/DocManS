@@ -9,7 +9,8 @@ export const PROJECT_ACTIONS: PermissionActionV1[] = [
   "project.read", "project.monitor", "project.setup.configure", "project.setup.confirm", "project.officer.assign", "project.officer.revoke",
   "project.report.draft", "project.report.submit", "project.report.review", "project.report.request-supplement", "project.report.accept",
   "project.evidence.contribute",
-  "project.adjustment.create", "project.adjustment.edit-draft", "project.adjustment.submit", "project.adjustment.review", "project.adjustment.request-supplement", "project.adjustment.approve", "project.adjustment.reject",
+  "project.adjustment.create", "project.adjustment.edit-draft", "project.adjustment.submit", "project.adjustment.review", "project.adjustment.request-supplement",
+  "project.adjustment.prepare", "project.adjustment.approve", "project.adjustment.reject",
   "project.extension.create", "project.extension.edit-draft", "project.extension.submit", "project.extension.validate", "project.extension.prepare", "project.extension.request-supplement", "project.extension.approve", "project.extension.reject",
   "project.history.read",
   "project.progress.update", "project.health.assess",
@@ -76,7 +77,15 @@ export type ProjectCapabilityInput = {
   report?: { status: string; authorId: string };
   /** Vòng nghiệm thu gần nhất và biên bản thanh lý (nếu có). */
   closure?: { acceptanceStatus: string | null; liquidationStatus: string | null; superiorStatus?: string | null };
+  /** Bước hiện tại của các tờ trình đang mở (loại thủ tục → BOARD_REVIEW | HEAD_REVIEW | LEADERSHIP). */
+  routing?: Record<string, string>;
 };
+
+/** Ban giám đốc chỉ ký khi tờ trình (nếu có) đã tới bước của mình; thủ tục trình trước khi có luồng này vẫn ký như cũ. */
+function routedToLeadership(input: { routing?: Record<string, string> }, kind: string) {
+  const stage = input.routing?.[kind];
+  return stage === undefined || stage === "LEADERSHIP";
+}
 
 // Ánh xạ vai trò của nhánh này: xem project-roles.ts.
 function isStaff(actor: SafeUserContext) { return isProjectStaff(actor); }
@@ -167,15 +176,17 @@ function projectActionDenial(action: PermissionActionV1, input: ProjectCapabilit
   if (action.startsWith("project.adjustment.")) {
     if (["project.adjustment.create", "project.adjustment.edit-draft", "project.adjustment.submit"].includes(action)) return input.canPi && input.isPi ? null : blocked(input.inExecution ? "ACTION_NOT_GRANTED" : "WORKFLOW_STATE_DENIED");
     if (action === "project.adjustment.review") return input.canOperate && (!input.request || (input.request.requestType === "adjustment" && input.request.status === "submitted")) ? null : blocked(input.request && input.request.requestType === "adjustment" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
-    if (action === "project.adjustment.request-supplement") return input.canOperate && (!input.request || (input.request.requestType === "adjustment" && ["submitted", "under_staff_review"].includes(input.request.status))) ? null : blocked(input.request && input.request.requestType === "adjustment" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
-    if (action === "project.adjustment.approve" || action === "project.adjustment.reject") return input.canOperate && (!input.request || (input.request.requestType === "adjustment" && input.request.status === "under_staff_review")) ? null : blocked(input.request && input.request.requestType === "adjustment" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
+    // Chuyên viên thẩm định rồi trình (qua Trưởng ban, Trưởng phòng); Ban giám đốc quyết định (Giám đốc hoặc Phó GĐ KH).
+    if (action === "project.adjustment.prepare") return input.canOperate && (!input.request || (input.request.requestType === "adjustment" && input.request.status === "under_staff_review")) ? null : blocked(input.request && input.request.requestType === "adjustment" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
+    if (action === "project.adjustment.request-supplement") return (input.canOperate && (!input.request || (input.request.requestType === "adjustment" && ["submitted", "under_staff_review"].includes(input.request.status)))) || (input.canHeadDecide && !!input.request && input.request.requestType === "adjustment" && input.request.status === "ready_for_head_decision") ? null : blocked(input.request && input.request.requestType === "adjustment" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
+    if (action === "project.adjustment.approve" || action === "project.adjustment.reject") return input.canHeadDecide && routedToLeadership(input, "PROJECT_ADJUSTMENT") && (!input.request || (input.request.requestType === "adjustment" && input.request.status === "ready_for_head_decision")) ? null : blocked(input.request && input.request.requestType === "adjustment" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
   }
   if (action.startsWith("project.extension.")) {
     if (["project.extension.create", "project.extension.edit-draft", "project.extension.submit"].includes(action)) return input.canPi && input.isPi ? null : blocked(input.inExecution ? "ACTION_NOT_GRANTED" : "WORKFLOW_STATE_DENIED");
     if (action === "project.extension.validate") return input.canOperate && (!input.request || (input.request.requestType === "extension" && input.request.status === "submitted")) ? null : blocked(input.request && input.request.requestType === "extension" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
     if (action === "project.extension.prepare") return input.canOperate && (!input.request || (input.request.requestType === "extension" && input.request.status === "under_staff_validation")) ? null : blocked(input.request && input.request.requestType === "extension" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
     if (action === "project.extension.request-supplement") return (input.canOperate && !!input.request && input.request.requestType === "extension" && ["submitted", "under_staff_validation"].includes(input.request.status)) || (input.canHeadDecide && !!input.request && input.request.requestType === "extension" && input.request.status === "ready_for_head_decision") ? null : blocked(input.request && input.request.requestType === "extension" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
-    if (action === "project.extension.approve" || action === "project.extension.reject") return input.canHeadDecide && (!input.request || (input.request.requestType === "extension" && input.request.status === "ready_for_head_decision")) ? null : blocked(input.request && input.request.requestType === "extension" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
+    if (action === "project.extension.approve" || action === "project.extension.reject") return input.canHeadDecide && routedToLeadership(input, "PROJECT_EXTENSION") && (!input.request || (input.request.requestType === "extension" && input.request.status === "ready_for_head_decision")) ? null : blocked(input.request && input.request.requestType === "extension" ? "WORKFLOW_STATE_DENIED" : "ACTION_NOT_GRANTED");
   }
   return blocked("ACTION_NOT_GRANTED");
 }
@@ -203,7 +214,7 @@ function closureActionDenial(action: PermissionActionV1, input: DenialInput): { 
     case "project.acceptance.revision.submit": return gate(pi, pending && acceptance === R.revisionRequired);
     case "project.acceptance.return": return gate(input.canOperate, pending && acceptance === R.submitted);
     case "project.acceptance.council.propose": return gate(input.canOperate, pending && (acceptance === R.submitted || acceptance === R.councilProposed));
-    case "project.acceptance.council.establish": return gate(input.canHeadDecide, pending && acceptance === R.councilProposed);
+    case "project.acceptance.council.establish": return gate(input.canHeadDecide, pending && acceptance === R.councilProposed && routedToLeadership(input, "ACCEPTANCE_COUNCIL"));
     case "project.acceptance.minutes.record": return gate(input.canOperate, pending && acceptance === R.councilEstablished);
     case "project.acceptance.revision.confirm": return gate(input.canOperate, pending && acceptance === R.revisionSubmitted);
     // Các Phó Giám đốc chỉ theo dõi xem báo cáo kinh phí tổng hợp, không xem chi tiết kinh phí từng đề tài.
@@ -213,7 +224,7 @@ function closureActionDenial(action: PermissionActionV1, input: DenialInput): { 
       return gate(manager, status !== PROJECT_STATUSES.closed && liquidation !== LIQUIDATION_STATUSES.approved);
     }
     case "project.liquidation.prepare": return gate(input.canOperate, concluded && liquidation !== LIQUIDATION_STATUSES.approved);
-    case "project.liquidation.approve": return gate(input.canDirectorDecide === true, concluded && liquidation === LIQUIDATION_STATUSES.draft);
+    case "project.liquidation.approve": return gate(input.canDirectorDecide === true, concluded && liquidation === LIQUIDATION_STATUSES.draft && routedToLeadership(input, "LIQUIDATION"));
     case "project.close": return gate(input.canOperate, concluded && liquidation === LIQUIDATION_STATUSES.approved);
     // Sản phẩm (nội dung công việc): chuyên viên lập danh sách khi chuẩn bị / đang thực hiện; chủ nhiệm nộp minh chứng;
     // chuyên viên lập tổ chuyên gia và ghi kết quả. Trạng thái từng sản phẩm được kiểm tra ở service.

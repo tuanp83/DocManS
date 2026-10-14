@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { routeToLeadership } from "./helpers/approval-routing.mjs";
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { BadRequestException, ConflictException, ForbiddenException } from "@nestjs/common";
@@ -177,6 +178,8 @@ describe("Council and IRB writes on real PostgreSQL", () => {
     assert.equal((await readIrb(proposal.id)).council.status, "submitted");
     assert.equal(await auditCount(proposal.id, "approve-irb-council"), 0);
 
+    // Tờ trình IRB qua Trưởng ban QLKH và Trưởng phòng KHQS trước khi lãnh đạo ký (không đổi phiên bản hồ sơ).
+    await routeToLeadership(db, { kind: "IRB_COUNCIL", subjectId: proposal.id });
     const approved = await decisions.approveIrbCouncil(leader, proposal.id, { contextVersion: proposed.contextVersion });
     assert.equal(approved.irb.council.status, "approved");
     assert.equal(await auditCount(proposal.id, "approve-irb-council"), 1);

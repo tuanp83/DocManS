@@ -177,7 +177,11 @@ export type CouncilMinutes = {
 };
 
 export type CouncilMetadata = {
-  status: "draft" | "submitted" | "approved" | "rejected";
+  /** returned: Phòng KHQS (Trưởng ban/Trưởng phòng) trả lại chuyên viên; rejected: Ban giám đốc không phê duyệt. */
+  status: "draft" | "submitted" | "approved" | "rejected" | "returned";
+  returnReason?: string;
+  returnedByName?: string;
+  rejectedByName?: string;
   /** Đã gửi lời mời thành viên theo tờ trình (quy trình mời trước khi trình). */
   invitationsSentAt?: string;
   decisionNumber?: string;

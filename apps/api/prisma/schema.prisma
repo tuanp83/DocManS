@@ -44,6 +44,8 @@ model User {
   assignedProposalManagementOfficers   ProposalManagementOfficer[]    @relation("ProposalManagementOfficerAssigner")
   managementPortfolios                 ManagementPortfolio[]          @relation("ManagementPortfolioOfficer")
   unitPositions                        UnitPosition[]                 @relation("UnitPositionHolder")
+  approvalSubmissions                  ApprovalSubmission[]           @relation("ApprovalSubmissionSubmitter")
+  approvalSteps                        ApprovalStep[]                 @relation("ApprovalStepActor")
   assignedUnitPositions                UnitPosition[]                 @relation("UnitPositionAssigner")
   createdManagementPortfolios          ManagementPortfolio[]          @relation("ManagementPortfolioCreator")
   proposalReviews                      ProposalReview[]               @relation("ProposalReviewReviewer")
@@ -619,6 +621,48 @@ model ManagementPortfolio {
 
   @@index([officerUserId])
   @@map("management_portfolios")
+}
+
+/// Hồ sơ trình qua Phòng KHQS trước khi lên Ban giám đốc: chuyên viên lập → Trưởng ban QLKH trình → Trưởng phòng
+/// duyệt → Ban giám đốc ký. Trả lại ở bước nào cũng về chuyên viên. `signer`: DIRECTOR (chỉ Giám đốc) hoặc
+/// DIRECTOR_OR_SCIENCE_DEPUTY (Giám đốc hoặc Phó GĐ phụ trách Khoa học). Quy tắc: proposals-shared/approval-routing.ts.
+model ApprovalSubmission {
+  id                     String         @id @default(uuid())
+  kind                   String
+  subjectType            String         @map("subject_type")
+  subjectId              String         @map("subject_id")
+  subjectRef             String         @default("") @map("subject_ref")
+  title                  String
+  hostOrganizationUnitId String         @map("host_organization_unit_id")
+  stage                  String
+  status                 String         @default("PENDING")
+  signer                 String
+  submittedById          String         @map("submitted_by_id")
+  submittedBy            User           @relation("ApprovalSubmissionSubmitter", fields: [submittedById], references: [id], onDelete: Restrict)
+  lastNote               String?        @map("last_note")
+  closedAt               DateTime?      @map("closed_at")
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+  steps                  ApprovalStep[]
+
+  @@index([subjectType, subjectId, kind])
+  @@index([stage, status])
+  @@map("approval_submissions")
+}
+
+model ApprovalStep {
+  id           String             @id @default(uuid())
+  submissionId String             @map("submission_id")
+  submission   ApprovalSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  stage        String
+  action       String
+  actorId      String             @map("actor_id")
+  actor        User               @relation("ApprovalStepActor", fields: [actorId], references: [id], onDelete: Restrict)
+  note         String?
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  @@index([submissionId])
+  @@map("approval_steps")
 }
 
 model ProposalAttachment {

@@ -1,4 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { Optional } from "@nestjs/common";
+import { NotificationsService } from "../notifications/notifications.service.js";
+import type { WorkflowEvent } from "../notifications/workflow-events.js";
+import { APPROVAL_KINDS, boardReviewEvent, openApprovalSubmission } from "../proposals-shared/approval-routing.js";
 import { councilCompositionProblems, councilReady, isScoringRole } from "../proposals-shared/evaluation-council-rules.js";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
@@ -65,7 +69,8 @@ export class ProposalEvaluationSummaryService {
     private readonly assignments: ProposalReviewAssignmentsService,
     private readonly reviews: ProposalReviewsService,
     private readonly participation: ProposalParticipationService,
-    private readonly reviewAccess: ProposalReviewAccessService
+    private readonly reviewAccess: ProposalReviewAccessService,
+    @Optional() private readonly notifications?: NotificationsService
   ) {}
 
   private transactional = false;
@@ -253,7 +258,18 @@ export class ProposalEvaluationSummaryService {
 
   /** Bước 3 — trình lãnh đạo bản đã chốt, không sửa nội dung; hồ sơ chuyển "chờ phê duyệt". */
   async submitEvaluationPackage(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}): Promise<any> {
-    if (!this.transactional) return this.mutate(actor, proposalId, input.contextVersion, (service, currentActor) => service.submitEvaluationPackage(currentActor, proposalId, input));
+    if (!this.transactional) {
+      const { routing, ...result } = await this.mutate(actor, proposalId, input.contextVersion, (service, currentActor) => service.submitEvaluationPackage(currentActor, proposalId, input));
+      // Gói đánh giá đi qua Trưởng ban QLKH và Trưởng phòng KHQS trước khi tới Giám đốc: báo Trưởng ban sau khi commit.
+      if (this.notifications && routing?.userIds?.length) {
+        try {
+          await this.notifications.dispatch([routing]);
+        } catch {
+          // Thông báo là phụ trợ.
+        }
+      }
+      return result;
+    }
     const proposal = await this.loadForConsolidation(actor, proposalId, "submit-evaluation-package");
     const existing = await this.findSummary(proposalId);
     if (!existing || existing.status !== EVALUATION_SUMMARY_STATUS.finalized) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Bản tổng hợp phải được chốt trước khi trình lãnh đạo." });
@@ -299,7 +315,9 @@ export class ProposalEvaluationSummaryService {
       } as never
     });
     await this.prisma.auditLog.create({ data: { action: "mark-ready-for-approval", result: "success", actorId: actor.id, targetEntity: "proposal-evaluation-summary", targetEntityId: record.id, username: actor.username, reason: JSON.stringify({ proposalId, revision: existing.revision ?? 0, submittedReviews: progress.submittedCount, fromStatus: PROPOSAL_STATUS.underReview, toStatus: PROPOSAL_STATUS.readyForApproval }) } });
-    return { evaluationSummary: this.toSummaryResponse(record), proposalStatus: PROPOSAL_STATUS.readyForApproval };
+    const submission = await openApprovalSubmission(this.prisma, actor, { kind: APPROVAL_KINDS.decisionPackage, subjectType: "proposal", subjectId: proposalId }, { title: proposal.title, hostOrganizationUnitId: proposal.hostOrganizationUnitId });
+    const routing = (await boardReviewEvent(this.prisma, submission)) as WorkflowEvent;
+    return { evaluationSummary: this.toSummaryResponse(record), proposalStatus: PROPOSAL_STATUS.readyForApproval, routing };
   }
 
   async findSummary(proposalId: string) {

@@ -38,7 +38,7 @@ describe("Story 1.8 proposal capability UI source behavior", () => {
     }
     const evaluationSource = await readFile(new URL("../apps/web/src/components/research-proposals/proposal-evaluation-panel.tsx", import.meta.url), "utf8");
     // Tổng hợp ba bước, mỗi bước theo đúng capability máy chủ trả về.
-    assert.match(evaluationSource, /Trình lãnh đạo phê duyệt/);
+    assert.match(evaluationSource, /Trình Trưởng ban rà soát/);
     assert.match(evaluationSource, /Chốt bản tổng hợp/);
     assert.match(evaluationSource, /canFinalize \?/);
     assert.match(evaluationSource, /canSubmitPackage \?/);

@@ -4,6 +4,7 @@ import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { label, councilSignerUserIds, leadershipUserIds, NOTIFICATION_TYPES, projectLink, researchManagersInScope, vnDate } from "../notifications/workflow-events.js";
 import { readTransactionClockV1 } from "../permissions/authorization-v1.service.js";
+import { APPROVAL_KINDS, assertReadyForLeadership, boardReviewEvent, closeApprovalSubmission, openApprovalSubmission } from "../proposals-shared/approval-routing.js";
 import { readAcceptanceMembers, readAcceptanceScores, readCouncilType, readOptionalText, readResolution, type AcceptanceMemberInput } from "../proposal-evaluations/acceptance-council.js";
 import { computeDisbursementTotals, readApprovedBudget, readDisbursementInput, stampMilestoneDates } from "../proposal-evaluations/disbursement.js";
 import { ApprovedProjectsService, closureFacts, openAcceptanceRound, type NotifyFn } from "./approved-projects.service.js";
@@ -211,9 +212,9 @@ export class ProjectClosureService {
       };
       await tx.projectAcceptance.update({ where: { id: round.id }, data });
       await this.record(tx, currentActor, project, "project.acceptance.council.propose", "Đề xuất hội đồng nghiệm thu", { acceptanceId: round.id, councilType: data.councilType, members: members.map((member) => ({ profileId: member.profileId, role: member.role })) }, now);
-      if (round.status !== R.councilProposed) {
-        notify({ type: NOTIFICATION_TYPES.acceptanceCouncilProposed, userIds: await councilSignerUserIds(tx), excludeUserIds: [currentActor.id, ...this.projects.projectRecipients(project).team], title: `Đề xuất hội đồng nghiệm thu: ${project.title}`, message: `Chuyên viên đã đề xuất hội đồng nghiệm thu đề tài ${label(project)}. Vui lòng xem xét, ký quyết định thành lập.`, link: projectLink(projectId), metadata: { projectId, acceptanceId: round.id } });
-      }
+      // Mỗi lần đề xuất (kể cả sửa lại) là một tờ trình mới qua Trưởng ban QLKH và Trưởng phòng KHQS.
+      const submission = await openApprovalSubmission(tx, currentActor, { kind: APPROVAL_KINDS.acceptanceCouncil, subjectType: "project", subjectId: projectId, subjectRef: round.id }, { title: project.title, hostOrganizationUnitId: project.hostOrganizationUnitId });
+      notify((await boardReviewEvent(tx, submission)) as never);
       return this.reload(tx, currentActor, projectId);
     });
   }
@@ -226,12 +227,14 @@ export class ProjectClosureService {
         this.assertAllowed(loaded.capability, "project.acceptance.council.establish");
         await this.projects.assertNoEvaluationConflict(tx, currentActor.id, project.proposalId);
         const round = this.currentRound(project, [R.councilProposed]);
+        await assertReadyForLeadership(tx, currentActor, { kind: APPROVAL_KINDS.acceptanceCouncil, subjectType: "project", subjectId: projectId, subjectRef: round.id });
         const decisionDate = readDay(input.decisionDate, "Ngày quyết định") ?? await readTransactionClockV1(tx);
         const requested = typeof input.decisionNumber === "string" ? input.decisionNumber.trim() : "";
         if (requested.length > 100) throw new BadRequestException({ message: "Số quyết định không được vượt quá 100 ký tự." });
         const decisionNumber = await this.documentNumber(tx, ACCEPTANCE_DECISION_NUMBER, requested, decisionDate, (number) => this.acceptanceNumberTaken(tx, number, round.id, project.proposalId));
         const now = await readTransactionClockV1(tx);
         await tx.projectAcceptance.update({ where: { id: round.id }, data: { status: R.councilEstablished, decisionNumber, decisionDate, establishedById: currentActor.id, establishedAt: now } });
+        await closeApprovalSubmission(tx, currentActor, { kind: APPROVAL_KINDS.acceptanceCouncil, subjectType: "project", subjectId: projectId, subjectRef: round.id }, "APPROVED", `Quyết định số ${decisionNumber}`);
         await this.record(tx, currentActor, project, "project.acceptance.council.establish", `Quyết định thành lập hội đồng nghiệm thu số ${decisionNumber}`, { acceptanceId: round.id, decisionNumber }, now);
         const recipients = this.projects.projectRecipients(project, loaded.officer);
         const councilUserIds = (Array.isArray(round.councilMembers) ? round.councilMembers : []).map((member: AnyRecord) => member.userId).filter(Boolean);
@@ -344,7 +347,9 @@ export class ProjectClosureService {
       await tx.projectLiquidation.upsert({ where: { projectId }, create: { projectId, ...data }, update: data });
       await tx.approvedProject.update({ where: { id: projectId }, data: { aggregateVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
       await this.record(tx, currentActor, project, "project.liquidation.prepare", existed ? "Cập nhật dự thảo biên bản thanh lý" : "Lập biên bản thanh lý", { ...totals, recoveredAmount, outstanding: totals.totalDisbursed - totals.totalSettled - recoveredAmount }, now);
-      if (!existed) notify({ type: NOTIFICATION_TYPES.liquidationPrepared, userIds: await leadershipUserIds(tx), excludeUserIds: [currentActor.id, ...this.projects.projectRecipients(project).team], title: `Biên bản thanh lý chờ phê duyệt: ${project.title}`, message: `Chuyên viên đã lập biên bản thanh lý đề tài ${label(project)}. Vui lòng xem xét, phê duyệt.`, link: projectLink(projectId), metadata: { projectId } });
+      // Dự thảo thanh lý (lập mới hoặc sửa) trình qua Trưởng ban QLKH và Trưởng phòng KHQS lên Giám đốc.
+      const submission = await openApprovalSubmission(tx, currentActor, { kind: APPROVAL_KINDS.liquidation, subjectType: "project", subjectId: projectId }, { title: project.title, hostOrganizationUnitId: project.hostOrganizationUnitId });
+      notify((await boardReviewEvent(tx, submission)) as never);
       return this.reload(tx, currentActor, projectId);
     });
   }
@@ -358,6 +363,7 @@ export class ProjectClosureService {
         await this.projects.assertNoEvaluationConflict(tx, currentActor.id, project.proposalId);
         const liquidation = project.liquidation;
         if (!liquidation || liquidation.status !== LIQUIDATION_STATUSES.draft) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chưa có dự thảo biên bản thanh lý." });
+        await assertReadyForLeadership(tx, currentActor, { kind: APPROVAL_KINDS.liquidation, subjectType: "project", subjectId: projectId });
         // Tệp kèm dự thảo có thể đã bị xoá sau khi lập: kiểm tra lại trước khi khoá vĩnh viễn.
         await this.assertProjectFiles(tx, projectId, Array.isArray(liquidation.evidenceFileIds) ? liquidation.evidenceFileIds : [], LIQUIDATION_RECORD_PURPOSE);
         const finance = await tx.projectFinance.findUnique({ where: { projectId } });
@@ -375,6 +381,7 @@ export class ProjectClosureService {
         await tx.projectLiquidation.update({ where: { projectId }, data: { status: LIQUIDATION_STATUSES.approved, liquidationNumber, liquidationDate, totalDisbursed: BigInt(totalDisbursed), totalSettled: BigInt(totalSettled), approvedBudget: BigInt(this.approvedBudget(project, finance)), approvedById: currentActor.id, approvedAt: now } });
         await tx.approvedProject.update({ where: { id: projectId }, data: { aggregateVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
         await this.record(tx, currentActor, project, "project.liquidation.approve", `Phê duyệt biên bản thanh lý số ${liquidationNumber}`, { liquidationNumber, totalDisbursed, totalSettled, recoveredAmount: recovered }, now);
+        await closeApprovalSubmission(tx, currentActor, { kind: APPROVAL_KINDS.liquidation, subjectType: "project", subjectId: projectId }, "APPROVED", `Biên bản thanh lý số ${liquidationNumber}`);
         const recipients = this.projects.projectRecipients(project, loaded.officer);
         notify({ type: NOTIFICATION_TYPES.liquidationApproved, userIds: [...recipients.pi, ...recipients.officer], excludeUserIds: [currentActor.id], title: `Đã phê duyệt thanh lý: ${project.title}`, message: `Biên bản thanh lý số ${liquidationNumber} của đề tài ${label(project)} đã được phê duyệt. Chuyên viên phụ trách có thể đóng đề tài.`, link: projectLink(projectId), metadata: { projectId, liquidationNumber } });
         return this.reload(tx, currentActor, projectId);

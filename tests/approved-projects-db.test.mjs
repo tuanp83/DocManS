@@ -3,6 +3,7 @@ import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { createMigratedDatabase } from "./helpers/disposable-database.mjs";
+import { routeToLeadership } from "./helpers/approval-routing.mjs";
 import { PrismaService } from "../dist/apps/api/infrastructure/prisma/prisma.service.js";
 import { AuditLogService } from "../dist/apps/api/auth/audit-log.service.js";
 import { AuthStore } from "../dist/apps/api/auth/auth.store.js";
@@ -154,10 +155,13 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     await projects.validateExtension(staff, id, { contextVersion: await context(staff, id), requestId: extension.id });
     await projects.prepareExtension(staff, id, { contextVersion: await context(staff, id), requestId: extension.id, note: "Hồ sơ đầy đủ" });
     await assert.rejects(projects.decideRequest(staff, id, "extension", "approve", { contextVersion: await context(staff, id), requestId: extension.id }), ForbiddenException);
+    // Tờ trình gia hạn phải qua Trưởng ban QLKH và Trưởng phòng KHQS trước khi Ban giám đốc quyết định.
+    await assert.rejects(projects.decideRequest(leader, id, "extension", "approve", { contextVersion: await context(leader, id), requestId: extension.id }), /chưa tới Ban giám đốc/);
+    await routeToLeadership(db, { kind: "PROJECT_EXTENSION", subjectId: id });
     await projects.decideRequest(leader, id, "extension", "approve", { contextVersion: await context(leader, id), requestId: extension.id, reason: "Đồng ý gia hạn" });
     assert.equal((await db.approvedProject.findUnique({ where: { id } })).endDate.toISOString().slice(0, 10), "2032-03-31");
 
-    // Adjustment: decided by the assigned officer, never by leadership.
+    // Điều chỉnh: chuyên viên phụ trách thẩm định và trình; Ban giám đốc quyết định sau khi qua Phòng KHQS.
     const adjustment = await projects.createAdjustment(pi, id, { contextVersion: await context(pi, id), proposedValues: { scope: { summary: "Tóm tắt điều chỉnh" } }, reason: "Điều chỉnh phạm vi" });
     // Một bản sửa rỗng không được thay thế nội dung đề nghị đã có.
     const isEmptyAdjustment = (error) => error instanceof BadRequestException && error.getResponse().code === "ADJUSTMENT_EMPTY";
@@ -165,8 +169,11 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     assert.deepEqual((await db.projectRequest.findUnique({ where: { id: adjustment.id } })).proposedValues, { scope: { summary: "Tóm tắt điều chỉnh" } });
     await projects.submitRequest(pi, id, "adjustment", { contextVersion: await context(pi, id), requestId: adjustment.id });
     await projects.reviewAdjustment(staff, id, { contextVersion: await context(staff, id), requestId: adjustment.id });
-    await assert.rejects(projects.decideRequest(leader, id, "adjustment", "approve", { contextVersion: await context(leader, id), requestId: adjustment.id }), ForbiddenException);
-    await projects.decideRequest(staff, id, "adjustment", "approve", { contextVersion: await context(staff, id), requestId: adjustment.id, reason: "Hợp lý" });
+    await assert.rejects(projects.decideRequest(staff, id, "adjustment", "approve", { contextVersion: await context(staff, id), requestId: adjustment.id }), BadRequestException);
+    await projects.prepareAdjustment(staff, id, { contextVersion: await context(staff, id), requestId: adjustment.id, note: "Hợp lý" });
+    await assert.rejects(projects.decideRequest(staff, id, "adjustment", "approve", { contextVersion: await context(staff, id), requestId: adjustment.id }), ForbiddenException);
+    await routeToLeadership(db, { kind: "PROJECT_ADJUSTMENT", subjectId: id });
+    await projects.decideRequest(leader, id, "adjustment", "approve", { contextVersion: await context(leader, id), requestId: adjustment.id, reason: "Hợp lý" });
     assert.equal((await db.projectRequest.findUnique({ where: { id: adjustment.id } })).status, "approved");
 
     // "Đề tài của tôi": chủ nhiệm thấy đề tài; chuyên viên phụ trách (không tham gia) thấy ở danh sách theo dõi nhưng không ở "của tôi".
@@ -255,6 +262,7 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     await projects.submitRequest(pi, id, "extension", { contextVersion: await context(pi, id), requestId: extension.id });
     await projects.validateExtension(staff, id, { contextVersion: await context(staff, id), requestId: extension.id });
     await projects.prepareExtension(staff, id, { contextVersion: await context(staff, id), requestId: extension.id, note: "Đủ hồ sơ" });
+    await routeToLeadership(db, { kind: "PROJECT_EXTENSION", subjectId: id });
     await projects.decideRequest(leader, id, "extension", "approve", { contextVersion: await context(leader, id), requestId: extension.id, reason: "Đồng ý" });
     const baselines = await db.projectPlanBaseline.findMany({ where: { projectId: id }, orderBy: { version: "asc" } });
     assert.deepEqual(baselines.map((item) => [item.version, item.source]), [[1, "setup"], [2, "extension"]]);
