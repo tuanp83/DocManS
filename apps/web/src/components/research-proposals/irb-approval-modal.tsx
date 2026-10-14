@@ -54,7 +54,9 @@ export function IRBApprovalModal({
 }: IRBApprovalModalProps) {
   // Display hints only — the backend checks role and the proposal's organization scope.
   const isScientificManagement = currentUserRole === "RESEARCH_MANAGEMENT_STAFF" || currentUserRole === "RESEARCH_MANAGEMENT_HEAD";
+  // Ký thành lập hội đồng IRB: Giám đốc hoặc Phó GĐ phụ trách Khoa học. Cấp giấy chứng nhận: Giám đốc hoặc cán bộ QLKH.
   const isLeadership = currentUserRole === "LEADERSHIP_APPROVAL_AUTHORITY";
+  const canSignCouncil = isLeadership || currentUserRole === "SCIENCE_DEPUTY_DIRECTOR";
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -148,7 +150,7 @@ export function IRBApprovalModal({
   };
 
   const handleApproveCouncil = async () => {
-    if (!isLeadership) return;
+    if (!canSignCouncil) return;
     setSaving(true);
     setMessage(null);
     try {
@@ -322,7 +324,7 @@ export function IRBApprovalModal({
                   Trình duyệt Hội đồng
                 </button>
               )}
-              {councilStatus === "submitted" && isLeadership && (
+              {councilStatus === "submitted" && canSignCouncil && (
                 <button onClick={handleApproveCouncil} disabled={saving} className="cmd-btn rose">
                   Giám đốc phê duyệt Hội đồng
                 </button>

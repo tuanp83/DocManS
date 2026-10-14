@@ -19,6 +19,8 @@ export type InternalUser = {
   mustChangePassword?: boolean;
   credentialVersion: number;
   researcherProfileId?: string;
+  /** Chức danh tại đơn vị, ví dụ "Trưởng khoa – Khoa Nội". Chỉ để hiển thị, không phân quyền. */
+  positions?: string[];
 };
 
 export type OrganizationScope = {
@@ -36,6 +38,8 @@ export type SafeUserContext = {
   organizationScopes: OrganizationScope[];
   mustChangePassword?: boolean;
   researcherProfileId?: string;
+  /** Chức danh tại đơn vị, ví dụ "Trưởng khoa – Khoa Nội". Chỉ để hiển thị, không phân quyền. */
+  positions?: string[];
 };
 
 export type AuthSession = {

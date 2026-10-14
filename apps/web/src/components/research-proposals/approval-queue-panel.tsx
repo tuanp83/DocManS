@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSession } from "@/components/auth/session-provider";
 import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
@@ -64,6 +65,9 @@ export function ApprovalQueuePanel() {
 
   // Tab chuyển đổi: "council" (Duyệt Hội đồng) | "proposal" (Duyệt đề tài) | "budget" (Duyệt kinh phí)
   const [activeTab, setActiveTab] = useState<"council" | "proposal" | "budget">("council");
+  // Phó GĐ phụ trách Khoa học chỉ ký thành lập hội đồng; phê duyệt đề tài và kinh phí là của Giám đốc.
+  const { account } = useSession();
+  const isDirector = account?.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY";
 
   // Bộ lọc
   const [keyword, setKeyword] = useState("");
@@ -432,6 +436,7 @@ export function ApprovalQueuePanel() {
         </button>
 
         {/* TAB 2: DUYỆT ĐỀ TÀI */}
+        {isDirector ? (
         <button
           type="button"
           onClick={() => setActiveTab("proposal")}
@@ -467,8 +472,10 @@ export function ApprovalQueuePanel() {
             {totalWaitingProposals}
           </span>
         </button>
+        ) : null}
 
         {/* TAB 3: DUYỆT KINH PHÍ */}
+        {isDirector ? (
         <button
           type="button"
           onClick={() => setActiveTab("budget")}
@@ -504,6 +511,7 @@ export function ApprovalQueuePanel() {
             {totalWaitingBudgets}
           </span>
         </button>
+        ) : null}
       </div>
 
       {/* =========================================================================
@@ -769,7 +777,7 @@ export function ApprovalQueuePanel() {
       {/* =========================================================================
           TAB 2: MỤC 2 - DUYỆT ĐỀ TÀI (NỘI DUNG / DANH MỤC)
           ========================================================================= */}
-      {activeTab === "proposal" && (
+      {activeTab === "proposal" && isDirector && (
         <>
           <SectionCard
             title="Chờ duyệt đề tài"
@@ -844,7 +852,7 @@ export function ApprovalQueuePanel() {
       {/* =========================================================================
           TAB 3: MỤC 3 - DUYỆT KINH PHÍ
           ========================================================================= */}
-      {activeTab === "budget" && (
+      {activeTab === "budget" && isDirector && (
         <>
           <SectionCard
             title="Chờ duyệt kinh phí đề tài"

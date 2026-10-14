@@ -743,7 +743,7 @@ describe("admin foundation API behavior", () => {
     );
   });
 
-  it("lists exactly the seven immutable system roles and still manages organization units", async () => {
+  it("lists exactly the ten immutable system roles and still manages organization units", async () => {
     const prisma = createAdminPrisma();
     const auditLog = createAuditLog();
     const service = new AdminUsersService(prisma, auditLog, createPasswordService());
@@ -755,8 +755,11 @@ describe("admin foundation API behavior", () => {
     assert.deepEqual(roles.map((role) => role.code), [
       "SYSTEM_ADMIN",
       "RESEARCH_MANAGEMENT_HEAD",
+      "RESEARCH_MANAGEMENT_DEPUTY_HEAD",
+      "RESEARCH_BOARD_HEAD",
       "RESEARCH_MANAGEMENT_STAFF",
       "LEADERSHIP_APPROVAL_AUTHORITY",
+      "SCIENCE_DEPUTY_DIRECTOR",
       "RESEARCH_OVERSIGHT_AUTHORITY",
       "RESEARCHER_INTERNAL_USER",
       "EXTERNAL_RESEARCHER_USER"

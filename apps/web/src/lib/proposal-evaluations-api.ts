@@ -457,6 +457,8 @@ export type CouncilCandidate = {
   position?: string;
   profileType: string;
   isConflicted: boolean;
+  /** Chức danh tại đơn vị của tài khoản (chỉ để hiển thị). */
+  unitPositions?: string[];
   conflictSeverity?: "BLOCKED_DIRECT_PARTICIPANT" | "WARNING_SAME_UNIT";
   conflictReason?: string;
 };

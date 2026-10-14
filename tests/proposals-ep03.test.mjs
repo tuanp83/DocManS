@@ -1868,6 +1868,31 @@ describe("Mời thành viên hội đồng trước khi trình lãnh đạo", ()
     assert.equal(established.userIds.length, 6);
   });
 
+  it("Phó GĐ phụ trách Khoa học ký thành lập hội đồng nhưng không phê duyệt đề tài; Phó GĐ chỉ theo dõi không thấy kinh phí hồ sơ", async () => {
+    const scienceDeputy = { ...leadershipUser, id: "user-pgd-kh", username: "pgiamdoc", displayName: "Phó GĐ KH", systemRole: "SCIENCE_DEPUTY_DIRECTOR" };
+    const otherDeputy = { ...leadershipUser, id: "user-pgd", username: "ttlan", displayName: "Phó GĐ", systemRole: "RESEARCH_OVERSIGHT_AUTHORITY" };
+    ACCOUNTS.push(scienceDeputy, otherDeputy);
+    try {
+      const services = createServices();
+      const proposal = await createSubmittedProposal(services);
+      const members = roster();
+      await inviteAndAcceptCouncil(services, proposal, members);
+      await services.decisions.proposeCouncil(staffUser, proposal.id, { members, action: "submit" });
+      await assert.rejects(() => services.decisions.approveCouncil(otherDeputy, proposal.id, {}), ForbiddenException);
+      const signed = await services.decisions.approveCouncil(scienceDeputy, proposal.id, {});
+      assert.equal(signed.councilMetadata.status, "approved");
+      await assert.rejects(() => services.decisions.decide(scienceDeputy, proposal.id, "approve", { note: "x" }), /Chỉ Giám đốc/);
+      await assert.rejects(() => services.decisions.approveBudget(scienceDeputy, proposal.id, { approvedBudget: 100000000 }), /Chỉ Giám đốc/);
+
+      const viewed = await services.proposalService.getProposal(otherDeputy, proposal.id);
+      assert.deepEqual(viewed.budgetMetadata, {});
+      assert.equal(viewed.disbursementMetadata, null);
+      assert.equal((await services.proposalService.getProposal(staffUser, proposal.id)).budgetMetadata.amount, 120000000);
+    } finally {
+      ACCOUNTS.splice(ACCOUNTS.indexOf(scienceDeputy), 2);
+    }
+  });
+
   it("biên bản: thư ký hội đồng ghi được sau khi thành lập; dữ liệu tờ trình và biên bản được kiểm tra", async () => {
     const services = createServices();
     const proposal = await createSubmittedProposal(services);

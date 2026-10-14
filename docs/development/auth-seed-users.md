@@ -8,9 +8,12 @@ These credentials are for local development only. All seeded accounts share the 
 | --- | --- | --- | --- |
 | `admin` | `1234` | Quản trị hệ thống | Khoa Toán - Tin học |
 | `admin2` | `1234` | Quản trị hệ thống | Khoa Toán - Tin học |
-| `tvtien` | `1234` | Giám Đốc | Ban Giám Đốc |
-| `nmphuong` | `1234` | Trưởng Phòng KHQS | Trưởng Phòng KHQS |
-| `dmtrung` | `1234` | Trưởng Ban QLKH | Trưởng Ban QLKH, Phòng KHQS |
+| `tvtien` | `1234` | Giám đốc Học viện (`LEADERSHIP_APPROVAL_AUTHORITY`) | Ban Giám Đốc |
+| `pgiamdoc` | `1234` | Phó Giám đốc phụ trách Khoa học (`SCIENCE_DEPUTY_DIRECTOR`) | Ban Giám Đốc |
+| `ttlan` | `1234` | Phó Giám đốc — chỉ theo dõi (`RESEARCH_OVERSIGHT_AUTHORITY`) | Ban Giám Đốc |
+| `nmphuong` | `1234` | Trưởng phòng KHQS (`RESEARCH_MANAGEMENT_HEAD`) | Trưởng Phòng KHQS |
+| `pphong` | `1234` | Phó phòng KHQS (`RESEARCH_MANAGEMENT_DEPUTY_HEAD`) | Phó phòng KHQS |
+| `dmtrung` | `1234` | Trưởng ban QLKH (`RESEARCH_BOARD_HEAD`) | Trưởng Ban QLKH, Phòng KHQS |
 | `hdtien1` | `1234` | Chuyên viên QLKH | Chuyên viên QLKH, Phòng KHQS |
 | `patuan` | `1234` | Chủ nhiệm đề tài | Khoa Toán - Tin học |
 | `hdtien2` | `1234` | Chuyên viên QLKH | Chuyên viên QLKH, Phòng KHQS |

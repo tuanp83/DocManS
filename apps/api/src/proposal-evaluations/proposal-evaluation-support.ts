@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import type { PrismaService } from "../infrastructure/prisma/prisma.service.js";
-import { assertHasOrganizationScope, isLeadership, isResearchManagementHead, isResearchManagementStaff } from "../proposals-shared/proposal-access.js";
+import { assertHasOrganizationScope, isAcademyLeadership, isLeadership, isResearchDepartmentLeadership, isResearchManagementHead, isResearchManagementStaff } from "../proposals-shared/proposal-access.js";
 import { ProposalManagementOfficerService } from "../proposals-shared/proposal-management-officer.service.js";
 import type { ProposalConflictDecision } from "../proposals-shared/proposal-participation.js";
 import { isWorkflowVisibleStatus, PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
@@ -163,7 +163,9 @@ export async function assertCanReadEvaluation(prisma: PrismaService, actor: Safe
   if (!isWorkflowVisibleStatus(proposal.status)) {
     throw new ForbiddenException({ message: "Không có quyền xem thông tin đánh giá của hồ sơ này." });
   }
-  if (actor && isLeadership(actor)) return actor;
+  if (actor && isAcademyLeadership(actor)) return actor;
+  // Lãnh đạo Phòng (Trưởng phòng, Phó phòng, Trưởng ban) xem trong phạm vi đơn vị; chuyên viên xem hồ sơ mình phụ trách.
+  if (actor && isResearchDepartmentLeadership(actor) && actor.organizationScopes.some((scope) => scope.id === proposal.hostOrganizationUnitId)) return actor;
   if (actor && (await isEvaluationCoordinator(prisma, actor, proposal))) return actor;
   throw new ForbiddenException({ message: "Không có quyền xem thông tin đánh giá của hồ sơ này." });
 }
@@ -221,7 +223,16 @@ export async function resolveActorConflict(
  */
 export function assertApprovalAuthority(actor: SafeUserContext | undefined) {
   if (!actor || !isLeadership(actor)) {
-    throw new ForbiddenException({ message: "Chỉ lãnh đạo có thẩm quyền mới được quyết định phê duyệt hồ sơ." });
+    throw new ForbiddenException({ message: "Chỉ Giám đốc Học viện được phê duyệt đề tài và kinh phí." });
+  }
+
+  return actor;
+}
+
+/** Ký thành lập hội đồng (đánh giá, IRB): Giám đốc hoặc Phó Giám đốc phụ trách Khoa học. */
+export function assertCouncilSigningAuthority(actor: SafeUserContext | undefined) {
+  if (!actor || !isAcademyLeadership(actor)) {
+    throw new ForbiddenException({ message: "Chỉ Giám đốc hoặc Phó Giám đốc phụ trách Khoa học được ký thành lập hội đồng." });
   }
 
   return actor;

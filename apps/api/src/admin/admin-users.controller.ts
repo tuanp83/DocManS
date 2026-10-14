@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import { assertSystemAdmin, type RequestWithCurrentUser } from "./admin-access.js";
 import { adminRequestPipe } from "./admin-request.pipe.js";
@@ -23,13 +23,15 @@ const createOrganizationUnitPipe = adminRequestPipe({
   code: { maxLength: 80 },
   name: { maxLength: 160 },
   parentId: { maxLength: 80, optional: true },
-  status: { maxLength: 40, optional: true }
+  status: { maxLength: 40, optional: true },
+  unitType: { maxLength: 40, optional: true }
 });
 const updateOrganizationUnitPipe = adminRequestPipe({
   code: { maxLength: 80, optional: true },
   name: { maxLength: 160, optional: true },
   parentId: { maxLength: 80, optional: true },
-  status: { maxLength: 40, optional: true }
+  status: { maxLength: 40, optional: true },
+  unitType: { maxLength: 40, optional: true }
 });
 
 @Controller("api/v1/users")
@@ -66,6 +68,14 @@ export class AdminUsersController {
     return { user: await this.usersService.setUserStatus(actor, id, body?.status) };
   }
 
+  /** Chức danh của tài khoản tại các đơn vị (chỉ để hiển thị). Thay toàn bộ danh sách. */
+  @Put(":id/positions")
+  async setUserPositions(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: unknown) {
+    const actor = assertSystemAdmin(request.currentUser);
+    const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+    return { user: await this.usersService.setUserPositions(actor, id, input) };
+  }
+
   @Post(":id/password-reset")
   async initiatePasswordReset(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(passwordResetPipe) _body: Record<string, unknown>) {
     const actor = assertSystemAdmin(request.currentUser);
@@ -96,6 +106,13 @@ export class AdminOrganizationUnitsController {
   async listOrganizationUnits(@Req() request: RequestWithCurrentUser, @Query("includeInactive") includeInactive?: string) {
     assertSystemAdmin(request.currentUser);
     return { organizationUnits: await this.usersService.listOrganizationUnits({ includeInactive: includeInactive === "true" }) };
+  }
+
+  /** Loại đơn vị và chức danh áp dụng cho từng loại. */
+  @Get("position-catalog")
+  async positionCatalog(@Req() request: RequestWithCurrentUser) {
+    assertSystemAdmin(request.currentUser);
+    return { unitTypes: this.usersService.listPositionCatalog() };
   }
 
   @Get(":id/impact")

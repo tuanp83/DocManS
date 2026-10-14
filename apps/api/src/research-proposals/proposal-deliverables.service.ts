@@ -16,7 +16,7 @@ export function canReadProposalDeliverables(actor: SafeUserContext | undefined, 
   if (!actor?.id) return false;
   const hasOrgScope = (actor.organizationScopes ?? []).some((scope: { id: string }) => scope.id === proposal.hostOrganizationUnitId);
   const isOwner = proposal.ownerId === actor.id;
-  const isStaff = actor.systemRole === "RESEARCH_MANAGEMENT_STAFF" || actor.systemRole === "RESEARCH_MANAGEMENT_HEAD" || actor.systemRole === "SYSTEM_ADMIN" || actor.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY";
+  const isStaff = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD", "RESEARCH_MANAGEMENT_DEPUTY_HEAD", "RESEARCH_BOARD_HEAD", "SYSTEM_ADMIN", "LEADERSHIP_APPROVAL_AUTHORITY", "SCIENCE_DEPUTY_DIRECTOR", "RESEARCH_OVERSIGHT_AUTHORITY"].includes(actor.systemRole);
   return isOwner || (isStaff && hasOrgScope);
 }
 

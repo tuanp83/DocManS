@@ -6,6 +6,10 @@ import { SYSTEM_ROLES, type SafeUserContext, type SystemRole } from "../auth/aut
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { readCode, readText } from "./admin-access.js";
 import { validateNewPassword } from "../auth/password-request.pipe.js";
+import { findPosition, inferUnitType, isUnitType, positionDisplay, UNIT_POSITIONS, UNIT_TYPE_LABELS, UNIT_TYPES } from "../organization/unit-positions.js";
+
+const MAX_POSITIONS_PER_USER = 10;
+const POSITION_INCLUDE = { unitPositions: { include: { organizationUnit: { select: { id: true, name: true, unitType: true, status: true } } }, orderBy: { createdAt: "asc" as const } } };
 
 type CreateUserInput = {
   username?: unknown;
@@ -36,6 +40,7 @@ type OrganizationUnitInput = {
   name?: unknown;
   parentId?: unknown;
   status?: unknown;
+  unitType?: unknown;
 };
 
 @Injectable()
@@ -83,7 +88,8 @@ export class AdminUsersService {
     const users = await this.prisma.user.findMany({
       where,
       include: {
-        organizationScopes: { include: { organizationUnit: true } }
+        organizationScopes: { include: { organizationUnit: true } },
+        ...POSITION_INCLUDE
       },
       orderBy: { displayName: "asc" }
     });
@@ -102,10 +108,83 @@ export class AdminUsersService {
 
   /** Mặc định chỉ đơn vị đang hoạt động (dùng khi gán phạm vi); trang quản trị đơn vị lấy cả đơn vị đã tắt để bật lại. */
   async listOrganizationUnits(options: { includeInactive?: boolean } = {}) {
-    return this.prisma.organizationUnit.findMany({
+    const units = (await this.prisma.organizationUnit.findMany({
       where: options.includeInactive ? {} : { status: "active" },
+      include: { unitPositions: { include: { user: { select: { id: true, displayName: true, status: true } } }, orderBy: { createdAt: "asc" } } },
       orderBy: [{ status: "asc" }, { name: "asc" }]
+    } as never)) as unknown as Array<{ unitType: string; unitPositions: Array<{ userId: string; positionCode: string; user: { displayName: string; status: string } }> } & Record<string, unknown>>;
+    return units.map(({ unitPositions, ...unit }) => ({
+      ...unit,
+      unitTypeLabel: isUnitType(unit.unitType) ? UNIT_TYPE_LABELS[unit.unitType] : unit.unitType,
+      positions: (unitPositions ?? []).map((position) => ({
+        userId: position.userId,
+        displayName: position.user.displayName,
+        userStatus: position.user.status,
+        positionCode: position.positionCode,
+        label: findPosition(unit.unitType, position.positionCode)?.label ?? position.positionCode
+      }))
+    }));
+  }
+
+  /** Danh mục loại đơn vị và chức danh của từng loại (cho giao diện quản trị). */
+  listPositionCatalog() {
+    return UNIT_TYPES.map((type) => ({ code: type, label: UNIT_TYPE_LABELS[type], positions: UNIT_POSITIONS[type] }));
+  }
+
+  /**
+   * Gán chức danh cho tài khoản (thay toàn bộ danh sách). Mỗi đơn vị một chức danh; được kiêm nhiệm nhiều đơn
+   * vị; chức danh phải đúng loại đơn vị và còn chỗ (Viện: 1 Giám đốc, 5 Phó Giám đốc; Phòng/Khoa/Bộ môn: 1 trưởng,
+   * 2 phó). Đơn vị được khoá trong giao dịch nên hai lần gán đồng thời không vượt số lượng.
+   */
+  async setUserPositions(actor: SafeUserContext, userId: string, input: { positions?: unknown }) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException({ message: "Không tìm thấy người dùng." });
+    if (!Array.isArray(input.positions) || input.positions.length > MAX_POSITIONS_PER_USER) {
+      throw new BadRequestException({ message: `Danh sách chức danh không hợp lệ (tối đa ${MAX_POSITIONS_PER_USER}).` });
+    }
+    const requested = new Map<string, string>();
+    for (const raw of input.positions as unknown[]) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new BadRequestException({ message: "Chức danh không hợp lệ." });
+      const item = raw as Record<string, unknown>;
+      const organizationUnitId = readText(item.organizationUnitId, "organizationUnitId", 80);
+      const positionCode = readText(item.positionCode, "positionCode", 40);
+      if (requested.has(organizationUnitId)) throw new BadRequestException({ message: "Mỗi đơn vị chỉ giữ một chức danh." });
+      requested.set(organizationUnitId, positionCode);
+    }
+
+    const before = (await this.prisma.unitPosition.findMany({ where: { userId }, select: { organizationUnitId: true, positionCode: true } })) as Array<{ organizationUnitId: string; positionCode: string }>;
+    await this.prisma.$transaction(async (tx) => {
+      for (const [organizationUnitId, positionCode] of requested) {
+        await tx.$queryRaw`SELECT id FROM organization_units WHERE id = ${organizationUnitId} FOR UPDATE`;
+        const unit = await tx.organizationUnit.findUnique({ where: { id: organizationUnitId } });
+        if (!unit || unit.status !== "active") throw new BadRequestException({ message: "Đơn vị không hợp lệ hoặc đã ngừng hoạt động." });
+        const position = findPosition(unit.unitType, positionCode);
+        if (!position) {
+          throw new BadRequestException({ message: `Chức danh không áp dụng cho ${isUnitType(unit.unitType) ? UNIT_TYPE_LABELS[unit.unitType] : "đơn vị"} "${unit.name}".` });
+        }
+        const holders = await tx.unitPosition.count({ where: { organizationUnitId, positionCode, userId: { not: userId } } });
+        if (holders >= position.max) {
+          throw new ConflictException({ code: "POSITION_FULL", message: `${unit.name} đã đủ ${position.max} ${position.label}.` });
+        }
+      }
+      await tx.unitPosition.deleteMany({ where: { userId } });
+      for (const [organizationUnitId, positionCode] of requested) {
+        await tx.unitPosition.create({ data: { organizationUnitId, userId, positionCode, assignedById: actor.id } });
+      }
     });
+
+    await this.auditLog.record({
+      action: "set-user-unit-positions",
+      result: "success",
+      actorId: actor.id,
+      targetEntity: "user",
+      targetEntityId: userId,
+      username: actor.username,
+      reason: safeAuditContext({ before, after: [...requested].map(([organizationUnitId, positionCode]) => ({ organizationUnitId, positionCode })) })
+    });
+
+    const updated = await this.prisma.user.findUnique({ where: { id: userId }, include: { organizationScopes: { include: { organizationUnit: true } }, ...POSITION_INCLUDE } });
+    return this.toUserResponse(updated!);
   }
 
   /**
@@ -130,7 +209,8 @@ export class AdminUsersService {
         code: readCode(input.code, "code"),
         name: readText(input.name, "name"),
         parentId: parentId ?? undefined,
-        status: input.status === undefined ? "active" : this.readActiveStatus(input.status)
+        status: input.status === undefined ? "active" : this.readActiveStatus(input.status),
+        unitType: input.unitType === undefined ? inferUnitType(readText(input.name, "name")) : this.readUnitType(input.unitType)
       }
     }));
 
@@ -152,6 +232,7 @@ export class AdminUsersService {
       name?: string;
       parentId?: string | null;
       status?: string;
+      unitType?: string;
     } = {};
 
     if (input.code !== undefined) {
@@ -165,6 +246,14 @@ export class AdminUsersService {
     }
     if (input.status !== undefined) {
       data.status = this.readActiveStatus(input.status);
+    }
+    if (input.unitType !== undefined) {
+      data.unitType = this.readUnitType(input.unitType);
+      // Đổi loại đơn vị không được làm chức danh đang có mất nghĩa (ví dụ Viện → Khoa khi đang có Giám đốc).
+      const held = (await this.prisma.unitPosition.findMany({ where: { organizationUnitId: unitId }, select: { positionCode: true } })) as Array<{ positionCode: string }>;
+      if (held.some((position) => !findPosition(data.unitType!, position.positionCode))) {
+        throw new BadRequestException({ message: "Đơn vị đang có người giữ chức danh không thuộc loại mới. Gỡ các chức danh đó trước khi đổi loại đơn vị." });
+      }
     }
 
     const unit = await this.writeOrganizationUnit(() => this.prisma.organizationUnit.update({
@@ -382,20 +471,21 @@ export class AdminUsersService {
   }
 
   private toRoleLabel(systemRole: SystemRole) {
-    return systemRole === "SYSTEM_ADMIN"
-      ? "Quản trị hệ thống"
-      : systemRole === "RESEARCH_MANAGEMENT_STAFF"
-        ? "Chuyên viên quản lý khoa học"
-        : systemRole === "RESEARCH_MANAGEMENT_HEAD"
-          ? "Trưởng phòng quản lý khoa học"
-        : systemRole === "LEADERSHIP_APPROVAL_AUTHORITY"
-          ? "Lãnh đạo phê duyệt"
-          : systemRole === "RESEARCH_OVERSIGHT_AUTHORITY"
-            ? "Lãnh đạo giám sát nghiên cứu"
-          : systemRole === "RESEARCHER_INTERNAL_USER"
-            ? "Người dùng nghiên cứu nội bộ"
-            : "Nhà nghiên cứu bên ngoài";
+    const labels: Record<string, string> = {
+      SYSTEM_ADMIN: "Quản trị hệ thống",
+      LEADERSHIP_APPROVAL_AUTHORITY: "Giám đốc Học viện",
+      SCIENCE_DEPUTY_DIRECTOR: "Phó Giám đốc phụ trách Khoa học",
+      RESEARCH_OVERSIGHT_AUTHORITY: "Phó Giám đốc",
+      RESEARCH_MANAGEMENT_HEAD: "Trưởng phòng KHQS",
+      RESEARCH_MANAGEMENT_DEPUTY_HEAD: "Phó phòng KHQS",
+      RESEARCH_BOARD_HEAD: "Trưởng ban QLKH",
+      RESEARCH_MANAGEMENT_STAFF: "Chuyên viên quản lý khoa học",
+      RESEARCHER_INTERNAL_USER: "Người dùng nghiên cứu nội bộ",
+      EXTERNAL_RESEARCHER_USER: "Nhà nghiên cứu bên ngoài"
+    };
+    return labels[systemRole] ?? systemRole;
   }
+
 
   private async findActiveOrganizationUnit(id: string) {
     const organizationUnit = await this.prisma.organizationUnit.findUnique({ where: { id } });
@@ -404,6 +494,11 @@ export class AdminUsersService {
     }
 
     return organizationUnit;
+  }
+
+  private readUnitType(value: unknown) {
+    if (!isUnitType(value)) throw new BadRequestException({ message: "Loại đơn vị không hợp lệ." });
+    return value;
   }
 
   private readActiveStatus(value: unknown) {
@@ -438,6 +533,7 @@ export class AdminUsersService {
         name: string;
       };
     }>;
+    unitPositions?: Array<{ organizationUnitId: string; positionCode: string; organizationUnit: { name: string; unitType: string } }>;
   }) {
     const organizationScope = user.organizationScopes?.find((scope) => scope.isPrimary) ?? user.organizationScopes?.[0];
 
@@ -448,7 +544,13 @@ export class AdminUsersService {
       status: user.status,
       systemRole: user.systemRole,
       unit: user.unit,
-      organizationUnitId: organizationScope?.organizationUnit.id
+      organizationUnitId: organizationScope?.organizationUnit.id,
+      positions: (user.unitPositions ?? []).map((position) => ({
+        organizationUnitId: position.organizationUnitId,
+        unitName: position.organizationUnit.name,
+        positionCode: position.positionCode,
+        label: positionDisplay(position.organizationUnit.unitType, position.positionCode, position.organizationUnit.name)
+      }))
     };
   }
 }

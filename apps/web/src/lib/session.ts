@@ -5,6 +5,8 @@ export const AUTH_SESSION_COOKIE = "rtms_session";
 export type CurrentUser = {
   mustChangePassword?: boolean;
   researcherProfileId?: string;
+  /** Chức danh tại đơn vị, ví dụ "Trưởng khoa – Khoa Nội" (chỉ để hiển thị). */
+  positions?: string[];
   id: string;
   username: string;
   displayName: string;
@@ -27,6 +29,8 @@ export type ShellAccount = {
   systemRole: CurrentUser["systemRole"];
   systemRoleLabel: string;
   unit: string;
+  /** Chức danh tại đơn vị (chỉ để hiển thị). */
+  positions: string[];
   initials: string;
   organizationScopes?: CurrentUser["organizationScopes"];
 };
@@ -45,23 +49,25 @@ export function toShellAccount(user: CurrentUser): ShellAccount {
     systemRole: user.systemRole,
     systemRoleLabel: getSystemRoleLabel(user.systemRole),
     unit: user.unit,
+    positions: user.positions ?? [],
     initials: user.displayName.trim().charAt(0).toUpperCase() || "U",
     organizationScopes: user.organizationScopes
   };
 }
 
+const SYSTEM_ROLE_LABELS: Record<string, string> = {
+  SYSTEM_ADMIN: "Quản trị hệ thống",
+  LEADERSHIP_APPROVAL_AUTHORITY: "Giám đốc Học viện",
+  SCIENCE_DEPUTY_DIRECTOR: "Phó Giám đốc phụ trách Khoa học",
+  RESEARCH_OVERSIGHT_AUTHORITY: "Phó Giám đốc",
+  RESEARCH_MANAGEMENT_HEAD: "Trưởng phòng KHQS",
+  RESEARCH_MANAGEMENT_DEPUTY_HEAD: "Phó phòng KHQS",
+  RESEARCH_BOARD_HEAD: "Trưởng ban QLKH",
+  RESEARCH_MANAGEMENT_STAFF: "Chuyên viên quản lý khoa học",
+  RESEARCHER_INTERNAL_USER: "Người dùng nghiên cứu nội bộ",
+  EXTERNAL_RESEARCHER_USER: "Nhà nghiên cứu bên ngoài"
+};
+
 export function getSystemRoleLabel(systemRole: CurrentUser["systemRole"]) {
-  return systemRole === "SYSTEM_ADMIN"
-    ? "Quản trị hệ thống"
-    : systemRole === "RESEARCH_MANAGEMENT_STAFF"
-      ? "Chuyên viên quản lý khoa học"
-      : systemRole === "RESEARCH_MANAGEMENT_HEAD"
-        ? "Trưởng phòng quản lý khoa học"
-      : systemRole === "LEADERSHIP_APPROVAL_AUTHORITY"
-        ? "Lãnh đạo phê duyệt"
-        : systemRole === "RESEARCH_OVERSIGHT_AUTHORITY"
-          ? "Lãnh đạo giám sát nghiên cứu"
-        : systemRole === "RESEARCHER_INTERNAL_USER"
-          ? "Người dùng nghiên cứu nội bộ"
-          : "Nhà nghiên cứu bên ngoài";
+  return SYSTEM_ROLE_LABELS[systemRole] ?? "Nhà nghiên cứu bên ngoài";
 }

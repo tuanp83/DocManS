@@ -29,7 +29,7 @@ export type StudentProjectFacts = {
 export type StudentProjectAction = "edit" | "submit" | "approve" | "return" | "cancel" | "complete" | "document.upload";
 
 /** Vai trò được chọn làm giảng viên hướng dẫn: tài khoản nội bộ (không phải tài khoản ngoài, quản trị). */
-export const SUPERVISOR_ROLES = ["RESEARCHER_INTERNAL_USER", "RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD", "LEADERSHIP_APPROVAL_AUTHORITY"];
+export const SUPERVISOR_ROLES = ["RESEARCHER_INTERNAL_USER", "RESEARCH_MANAGEMENT_STAFF", "RESEARCH_BOARD_HEAD", "RESEARCH_MANAGEMENT_DEPUTY_HEAD", "RESEARCH_MANAGEMENT_HEAD", "LEADERSHIP_APPROVAL_AUTHORITY", "SCIENCE_DEPUTY_DIRECTOR", "RESEARCH_OVERSIGHT_AUTHORITY"];
 
 /** Vai trò có mục NCKH Sinh viên và được tự đăng ký hướng dẫn đề tài. */
 export const REGISTRANT_ROLES = ["RESEARCHER_INTERNAL_USER", "RESEARCH_MANAGEMENT_STAFF"];

@@ -2,7 +2,8 @@
 import type { AuthorizationDecisionCodeV1, PermissionActionV1, ViewerAuthorizationV1, ViewerRelationshipV1 } from "@rtms/permissions";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { publicAuthorizationReasonV1 } from "../permissions/authorization-v1.service.js";
-import { canAssignProjectOfficer, canDecideProjectExtension, isInProjectScope, isProjectLeadership, isProjectStaff } from "./project-roles.js";
+import { canApproveProjectLiquidation, canAssignProjectOfficer, canDecideProjectExtension, canMonitorProjects, canReadProjectFinanceDetail, isInProjectScope, isProjectLeadership, isProjectStaff } from "./project-roles.js";
+import { isLeadership as isDirector } from "../proposals-shared/proposal-access.js";
 
 export const PROJECT_ACTIONS: PermissionActionV1[] = [
   "project.read", "project.monitor", "project.setup.configure", "project.setup.confirm", "project.officer.assign", "project.officer.revoke",
@@ -94,13 +95,15 @@ export function projectViewerAuthorizationV1(input: ProjectCapabilityInput): Vie
   const isPi = input.project.ownerId === input.actor.id && scoped;
   // Đọc/theo dõi: giống quyền đọc đề xuất của nhánh này — chuyên viên QLKH có phạm vi đơn vị và lãnh đạo
   // xem được mọi đề tài trong phạm vi; chủ nhiệm và thành viên xem đề tài của mình.
-  const canRead = scoped && (isPi || participant || isLeadership(input.actor) || isStaff(input.actor));
+  const canRead = scoped && (isPi || participant || isLeadership(input.actor) || isStaff(input.actor) || canMonitorProjects(input.actor));
   const canMonitor = canRead;
   // Thao tác nghiệp vụ: chỉ chuyên viên đang được phân công phụ trách chính, không tham gia đề tài.
   const canOperate = scoped && isStaff(input.actor) && hasOfficer && !participant && !isPi;
   const canAssignOfficer = scoped && canAssignProjectOfficer(input.actor) && !participant && !isPi;
   // Quyết định gia hạn: lãnh đạo (thay Trưởng phòng ở nhánh chính).
   const canHeadDecide = scoped && canDecideProjectExtension(input.actor) && !participant && !isPi;
+  // Phê duyệt thanh lý (quyết toán kinh phí): chỉ Giám đốc.
+  const canDirectorDecide = scoped && canApproveProjectLiquidation(input.actor) && !participant && !isPi;
   const canPi = isPi && input.project.status === PROJECT_STATUSES.executing;
   const statusesForExecution = [PROJECT_STATUSES.executing, PROJECT_STATUSES.paused];
   const inExecution = statusesForExecution.includes(input.project.status as typeof PROJECT_STATUSES.executing | typeof PROJECT_STATUSES.paused);
@@ -108,7 +111,7 @@ export function projectViewerAuthorizationV1(input: ProjectCapabilityInput): Vie
   const blockedActions: Array<{ action: PermissionActionV1; code: AuthorizationDecisionCodeV1; reason: string }> = [];
   const allowedActions: PermissionActionV1[] = [];
   for (const action of PROJECT_ACTIONS) {
-    const denial = projectActionDenial(action, { ...input, scoped, officer: hasOfficer, participantActive: participant, isPi, canRead, canMonitor, canOperate, canAssignOfficer, canHeadDecide, canPi, inExecution });
+    const denial = projectActionDenial(action, { ...input, scoped, officer: hasOfficer, participantActive: participant, isPi, canRead, canMonitor, canOperate, canAssignOfficer, canHeadDecide, canDirectorDecide, canPi, inExecution });
     if (denial) blockedActions.push({ action, ...denial });
     else allowedActions.push(action);
   }
@@ -140,7 +143,7 @@ export function projectViewerAuthorizationV1(input: ProjectCapabilityInput): Vie
   };
 }
 
-function projectActionDenial(action: PermissionActionV1, input: ProjectCapabilityInput & { scoped: boolean; officer: boolean; participantActive: boolean; isPi: boolean; canRead: boolean; canMonitor: boolean; canOperate: boolean; canAssignOfficer: boolean; canHeadDecide: boolean; canPi: boolean; inExecution: boolean }): { code: AuthorizationDecisionCodeV1; reason: string } | null {
+function projectActionDenial(action: PermissionActionV1, input: ProjectCapabilityInput & { scoped: boolean; officer: boolean; participantActive: boolean; isPi: boolean; canRead: boolean; canMonitor: boolean; canOperate: boolean; canAssignOfficer: boolean; canHeadDecide: boolean; canDirectorDecide: boolean; canPi: boolean; inExecution: boolean }): { code: AuthorizationDecisionCodeV1; reason: string } | null {
   if (action === "project.read" || action === "project.history.read") return input.canRead ? null : blocked("ACTION_NOT_GRANTED");
   if (action === "project.monitor") return input.canMonitor ? null : blocked("ACTION_NOT_GRANTED");
   if (action === "project.setup.configure" || action === "project.setup.confirm") return input.canOperate && input.project.status === PROJECT_STATUSES.preparing ? null : blocked(input.project.status === PROJECT_STATUSES.preparing ? "ACTION_NOT_GRANTED" : "WORKFLOW_STATE_DENIED");
@@ -177,7 +180,7 @@ function projectActionDenial(action: PermissionActionV1, input: ProjectCapabilit
   return blocked("ACTION_NOT_GRANTED");
 }
 
-type DenialInput = ProjectCapabilityInput & { scoped: boolean; participantActive: boolean; isPi: boolean; canRead: boolean; canOperate: boolean; canHeadDecide: boolean };
+type DenialInput = ProjectCapabilityInput & { scoped: boolean; participantActive: boolean; isPi: boolean; canRead: boolean; canOperate: boolean; canHeadDecide: boolean; canDirectorDecide?: boolean };
 
 /**
  * Nghiệm thu → thanh lý → đóng (docs/design/nghiem-thu-thanh-ly-dong-de-tai.md):
@@ -203,13 +206,14 @@ function closureActionDenial(action: PermissionActionV1, input: DenialInput): { 
     case "project.acceptance.council.establish": return gate(input.canHeadDecide, pending && acceptance === R.councilProposed);
     case "project.acceptance.minutes.record": return gate(input.canOperate, pending && acceptance === R.councilEstablished);
     case "project.acceptance.revision.confirm": return gate(input.canOperate, pending && acceptance === R.revisionSubmitted);
-    case "project.finance.read": return input.canRead ? null : blocked("ACTION_NOT_GRANTED");
+    // Các Phó Giám đốc chỉ theo dõi xem báo cáo kinh phí tổng hợp, không xem chi tiết kinh phí từng đề tài.
+    case "project.finance.read": return input.canRead && canReadProjectFinanceDetail(input.actor) ? null : blocked("ACTION_NOT_GRANTED");
     case "project.finance.manage": {
-      const manager = input.scoped && (isStaff(input.actor) || isLeadership(input.actor)) && !input.participantActive && !input.isPi;
+      const manager = input.scoped && (isStaff(input.actor) || isDirector(input.actor)) && !input.participantActive && !input.isPi;
       return gate(manager, status !== PROJECT_STATUSES.closed && liquidation !== LIQUIDATION_STATUSES.approved);
     }
     case "project.liquidation.prepare": return gate(input.canOperate, concluded && liquidation !== LIQUIDATION_STATUSES.approved);
-    case "project.liquidation.approve": return gate(input.canHeadDecide, concluded && liquidation === LIQUIDATION_STATUSES.draft);
+    case "project.liquidation.approve": return gate(input.canDirectorDecide === true, concluded && liquidation === LIQUIDATION_STATUSES.draft);
     case "project.close": return gate(input.canOperate, concluded && liquidation === LIQUIDATION_STATUSES.approved);
     // Sản phẩm (nội dung công việc): chuyên viên lập danh sách khi chuẩn bị / đang thực hiện; chủ nhiệm nộp minh chứng;
     // chuyên viên lập tổ chuyên gia và ghi kết quả. Trạng thái từng sản phẩm được kiểm tra ở service.

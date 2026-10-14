@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable 
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
-import { label, leadershipUserIds, NOTIFICATION_TYPES, projectLink, researchManagersInScope, vnDate } from "../notifications/workflow-events.js";
+import { label, councilSignerUserIds, leadershipUserIds, NOTIFICATION_TYPES, projectLink, researchManagersInScope, vnDate } from "../notifications/workflow-events.js";
 import { readTransactionClockV1 } from "../permissions/authorization-v1.service.js";
 import { readAcceptanceMembers, readAcceptanceScores, readCouncilType, readOptionalText, readResolution, type AcceptanceMemberInput } from "../proposal-evaluations/acceptance-council.js";
 import { computeDisbursementTotals, readApprovedBudget, readDisbursementInput, stampMilestoneDates } from "../proposal-evaluations/disbursement.js";
@@ -212,7 +212,7 @@ export class ProjectClosureService {
       await tx.projectAcceptance.update({ where: { id: round.id }, data });
       await this.record(tx, currentActor, project, "project.acceptance.council.propose", "Đề xuất hội đồng nghiệm thu", { acceptanceId: round.id, councilType: data.councilType, members: members.map((member) => ({ profileId: member.profileId, role: member.role })) }, now);
       if (round.status !== R.councilProposed) {
-        notify({ type: NOTIFICATION_TYPES.acceptanceCouncilProposed, userIds: await leadershipUserIds(tx), excludeUserIds: [currentActor.id, ...this.projects.projectRecipients(project).team], title: `Đề xuất hội đồng nghiệm thu: ${project.title}`, message: `Chuyên viên đã đề xuất hội đồng nghiệm thu đề tài ${label(project)}. Vui lòng xem xét, ký quyết định thành lập.`, link: projectLink(projectId), metadata: { projectId, acceptanceId: round.id } });
+        notify({ type: NOTIFICATION_TYPES.acceptanceCouncilProposed, userIds: await councilSignerUserIds(tx), excludeUserIds: [currentActor.id, ...this.projects.projectRecipients(project).team], title: `Đề xuất hội đồng nghiệm thu: ${project.title}`, message: `Chuyên viên đã đề xuất hội đồng nghiệm thu đề tài ${label(project)}. Vui lòng xem xét, ký quyết định thành lập.`, link: projectLink(projectId), metadata: { projectId, acceptanceId: round.id } });
       }
       return this.reload(tx, currentActor, projectId);
     });

@@ -76,6 +76,12 @@ export async function leadershipUserIds(client: UserReader): Promise<string[]> {
   return rows.map((row) => row.id);
 }
 
+/** Người ký thành lập hội đồng, gia hạn: Giám đốc và Phó Giám đốc phụ trách Khoa học đang hoạt động. */
+export async function councilSignerUserIds(client: UserReader): Promise<string[]> {
+  const rows = (await client.user.findMany({ where: { status: "active", systemRole: { in: [LEADERSHIP_ROLE, "SCIENCE_DEPUTY_DIRECTOR"] } }, select: { id: true } })) as Array<{ id: string }>;
+  return rows.map((row) => row.id);
+}
+
 export function proposalLink(proposalId: string) {
   return `/proposals/${encodeURIComponent(proposalId)}`;
 }

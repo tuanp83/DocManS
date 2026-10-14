@@ -3,6 +3,7 @@ import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { ApprovedProjectsService } from "../approved-projects/approved-projects.service.js";
 import { isRelationshipActiveAt } from "../proposals-shared/proposal-participation.js";
+import { isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
 import { canReadProposalDeliverables } from "../research-proposals/proposal-deliverables.service.js";
 import { HEALTH_APPLICABLE_STATUSES, localDayIndex } from "../approved-projects/project-progress.js";
 import { approvedBudget, CLOSED_STATUSES, DashboardService, PENDING_STATUSES, type DashboardProposalRecord } from "./dashboard.service.js";
@@ -170,7 +171,16 @@ export class DashboardAnalyticsService {
     this.assertActor(actor);
     // Đề tài có phân công chuyên viên mâu thuẫn (409) bị bỏ qua thay vì làm hỏng toàn bộ dashboard.
     const responses = await this.projects.listProjects(actor, { skipUnresolved: true });
-    return responses.map((response: AnyRecord) => toDashboardProject(response, now));
+    const projects = responses.map((response: AnyRecord) => toDashboardProject(response, now));
+    if (!isResearchOversightAuthority(actor) || !projects.length) return projects;
+    // Các Phó Giám đốc chỉ theo dõi không đọc kinh phí từng đề tài (project.finance.read), nhưng được xem báo cáo
+    // kinh phí tổng hợp: nạp kinh phí để cộng vào số tổng, còn các dòng chi tiết để trống (drillDown).
+    const finances = (await (this.prisma as any).approvedProject.findMany({ where: { id: { in: projects.map((project) => project.id) } }, select: { id: true, finance: true } })) as Array<{ id: string; finance: AnyRecord | null }>;
+    const byId = new Map(finances.map((row) => [row.id, row.finance]));
+    return projects.map((project) => {
+      const finance = byId.get(project.id);
+      return finance ? { ...project, finance: { totalBudget: Number(finance.totalBudget) || 0, totalDisbursed: Number(finance.totalDisbursed) || 0, totalSettled: Number(finance.totalSettled) || 0 } } : project;
+    });
   }
 
   async readableProposals(actor: SafeUserContext | undefined, now = new Date()) {
@@ -365,6 +375,7 @@ export class DashboardAnalyticsService {
     const pageSize = query.pageSize ?? 50;
 
     if (metric === "projects") {
+      const hideFinanceRows = isResearchOversightAuthority(actor);
       const rows = (await this.readableProjects(actor, now))
         .filter((project) => matchesProject(project, filters))
         .sort((left, right) => right.maxDaysOverdue - left.maxDaysOverdue || HEALTH_RANK[left.health] - HEALTH_RANK[right.health] || String(left.code ?? left.id).localeCompare(String(right.code ?? right.id)))
@@ -372,7 +383,8 @@ export class DashboardAnalyticsService {
           id: project.id, code: project.code, title: project.title, unit: { id: project.unitId, name: project.unitName }, piName: project.piName,
           status: project.status, level: project.level, field: project.field, health: project.health, spi: project.spi,
           plannedPercent: project.plannedPercent, actualPercent: project.actualPercent, daysOverdue: project.maxDaysOverdue, lateReports: project.lateReports,
-          overdue: project.overdue, startDate: project.startDate, endDate: project.endDate, totalBudget: project.finance?.totalBudget ?? null, totalDisbursed: project.finance?.totalDisbursed ?? null,
+          overdue: project.overdue, startDate: project.startDate, endDate: project.endDate,
+          totalBudget: hideFinanceRows ? null : project.finance?.totalBudget ?? null, totalDisbursed: hideFinanceRows ? null : project.finance?.totalDisbursed ?? null,
           link: `/projects/${encodeURIComponent(project.id)}`
         }));
       return { metric, filters, ...paginate(rows, page, pageSize) };
