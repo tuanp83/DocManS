@@ -1,4 +1,5 @@
 import { currentSubmissionFromEvents, findCurrentSubmission, hasCompletenessCheckForEvent, readCompletenessState, type SubmissionEventLike } from "../proposals-shared/submission-evidence.js";
+import { autoAssignPortfolioOfficer, defaultMilitaryScope, readMilitaryScope } from "../proposals-shared/management-portfolio.js";
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { NotificationsService } from "../notifications/notifications.service.js";
@@ -70,6 +71,7 @@ type ResearchProposalRecord = {
   hostOrganizationUnitId: string;
   researchFieldCode: string | null;
   proposalTypeCode: string | null;
+  militaryScope?: string | null;
   title: string;
   objectives: string | null;
   summary: string | null;
@@ -278,12 +280,7 @@ export class ResearchProposalsService {
         if (query.level && p.proposalTypeCode !== query.level) return false;
         
         // Military scope filter
-        if (query.military) {
-          const isMilitary = p.researchFieldCode?.startsWith("QS") || p.proposalTypeCode?.startsWith("QS") || p.proposalTypeCode === "bqp";
-          const isDual = p.researchFieldCode?.startsWith("LD") || p.proposalTypeCode?.startsWith("LD") || p.proposalTypeCode === "luongdung";
-          const scope = isDual ? "dual-use" : isMilitary ? "military" : "civilian";
-          if (scope !== query.military) return false;
-        }
+        if (query.military && (p.militaryScope ?? defaultMilitaryScope(p)) !== query.military) return false;
 
         const disbursementData: any = p.disbursementMetadata || {};
         const budgetTotal = Number(disbursementData.totalBudget) || Number((p.budgetMetadata as any)?.approvedAmount) || Number((p.budgetMetadata as any)?.amount) || 0;
@@ -400,6 +397,9 @@ export class ResearchProposalsService {
         title: readText(input.title, "title", 260),
         researchFieldCode: readOptionalCode(input.researchFieldCode, "researchFieldCode"),
         proposalTypeCode: readOptionalCode(input.proposalTypeCode, "proposalTypeCode"),
+        militaryScope:
+          readMilitaryScope(input.militaryScope) ??
+          defaultMilitaryScope({ proposalTypeCode: readOptionalCode(input.proposalTypeCode, "proposalTypeCode"), researchFieldCode: readOptionalCode(input.researchFieldCode, "researchFieldCode") }),
         objectives: readOptionalText(input.objectives, "objectives", 3000),
         summary: readOptionalText(input.summary, "summary", 3000),
         startDate,
@@ -447,6 +447,9 @@ export class ResearchProposalsService {
     }
     if (input.proposalTypeCode !== undefined) {
       data.proposalTypeCode = readOptionalCode(input.proposalTypeCode, "proposalTypeCode") ?? null;
+    }
+    if (input.militaryScope !== undefined) {
+      data.militaryScope = readMilitaryScope(input.militaryScope) ?? null;
     }
     if (input.objectives !== undefined) {
       data.objectives = readOptionalText(input.objectives, "objectives", 3000) ?? null;
@@ -566,6 +569,9 @@ export class ResearchProposalsService {
           })
         }
       });
+
+      // Hồ sơ vào bước tiếp nhận: tự giao chuyên viên phụ trách theo mảng (nếu chưa có người phụ trách).
+      await autoAssignPortfolioOfficer(tx, updated, actor.id, submittedAt, await this.participantUserIds(proposalId));
 
       return updated;
     })) as unknown as ResearchProposalRecord;
@@ -729,6 +735,9 @@ export class ResearchProposalsService {
         }
       });
 
+      // Người phụ trách cũ đã bị thu hồi/kết thúc: giao lại theo mảng.
+      await autoAssignPortfolioOfficer(tx, record, pi.id, new Date(), await this.participantUserIds(proposalId));
+
       return record;
     })) as unknown as ResearchProposalRecord;
 
@@ -874,6 +883,12 @@ export class ResearchProposalsService {
     });
 
     return this.toManagementOfficerResponse({ resolved: true, officer: null });
+  }
+
+  /** Tài khoản của người tham gia đề tài (thành viên, thư ký): không được làm chuyên viên phụ trách hồ sơ. */
+  private async participantUserIds(proposalId: string) {
+    const members = await this.findMembers(proposalId);
+    return new Set(members.filter((member) => isRelationshipActiveAt(member, new Date()) && member.userId).map((member) => member.userId as string));
   }
 
   /** Officer changes alter who may act on the record, so stale capability snapshots must be rejected. */
@@ -1447,6 +1462,7 @@ export class ResearchProposalsService {
       hostOrganizationUnitName: proposal.hostOrganizationUnit?.name ?? proposal.hostOrganizationUnitId,
       researchFieldCode: proposal.researchFieldCode ?? "",
       proposalTypeCode: proposal.proposalTypeCode ?? "",
+      militaryScope: proposal.militaryScope ?? defaultMilitaryScope(proposal),
       title: proposal.title,
       objectives: proposal.objectives ?? "",
       summary: proposal.summary ?? "",

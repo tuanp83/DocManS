@@ -100,7 +100,7 @@ export class ProposalEvaluationSummaryService {
     const access = actor ? await this.reviewAccess.resolveForProposal(actor.id, proposalId) : null;
     // Thư ký hội đồng của hồ sơ được xem tiến độ để tổng hợp; các vai trò khác theo quyền đọc đánh giá.
     const isCouncilSecretary = !!access?.isAssignedReviewer && access.assignmentRole === "committee_secretary" && isWorkflowVisibleStatus(proposal.status);
-    if (!isCouncilSecretary) assertCanReadEvaluation(actor, proposal);
+    if (!isCouncilSecretary) await assertCanReadEvaluation(this.prisma, actor, proposal);
     if ((await this.participation.evaluateConflict(actor.id, proposalId)).conflicted) throw new BadRequestException({ message: "Không được xem dữ liệu phản biện của hồ sơ mình tham gia." });
 
     // Chỉ vòng đánh giá của lần nộp hiện tại; phân công và phiếu của lần nộp cũ không được tính.
@@ -114,7 +114,7 @@ export class ProposalEvaluationSummaryService {
     const progress = this.summarizeProgress(round.assignments, round.reviews);
     // Lãnh đạo, cơ quan giám sát: chỉ số liệu chung và bản tổng hợp; danh tính người phản biện, điểm và nhận xét
     // từng phiếu được bảo mật như ở gói quyết định (proposal-decisions.service.ts).
-    if (!isCouncilSecretary && !isEvaluationCoordinator(actor, proposal)) {
+    if (!isCouncilSecretary && !(await isEvaluationCoordinator(this.prisma, actor, proposal))) {
       const { pendingReviewers: _pending, ...counts } = progress;
       return {
         proposalId,
@@ -369,7 +369,7 @@ export class ProposalEvaluationSummaryService {
    */
   private async loadForConsolidation(actor: SafeUserContext, proposalId: string, action: string) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    if (!isEvaluationCoordinator(actor, proposal)) {
+    if (!(await isEvaluationCoordinator(this.prisma, actor, proposal))) {
       const access = actor ? await this.reviewAccess.resolveForProposal(actor.id, proposalId) : null;
       if (!access?.isAssignedReviewer || access.assignmentRole !== "committee_secretary") {
         throw new ForbiddenException({ message: "Chỉ chuyên viên, Trưởng phòng QLKH hoặc thư ký hội đồng của hồ sơ được tổng hợp kết quả." });

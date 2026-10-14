@@ -79,6 +79,7 @@ function toDraftInput(proposal: ResearchProposal): ProposalDraftInput {
     title: proposal.title,
     researchFieldCode: proposal.researchFieldCode,
     proposalTypeCode: proposal.proposalTypeCode,
+    militaryScope: proposal.militaryScope ?? "military",
     startDate: toIntakeDateInput(proposal.startDate),
     endDate: toIntakeDateInput(proposal.endDate),
     objectives: proposal.objectives,
@@ -576,6 +577,13 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
                   <span>Loại đề tài</span>
                   <select disabled={!canEdit} value={form.proposalTypeCode} onChange={(event) => setForm({ ...form, proposalTypeCode: event.target.value })}>
                     <option value="">Chọn loại đề tài</option>{catalogs.filter((item) => item.type === "proposal-type" && item.status === "active").map((item) => <option key={item.id} value={item.code}>{item.name}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Tính chất đề tài</span>
+                  <select disabled={!canEdit} value={form.militaryScope ?? "military"} onChange={(event) => setForm({ ...form, militaryScope: event.target.value as "military" | "civilian" })}>
+                    <option value="military">Quân sự</option>
+                    <option value="civilian">Dân sự</option>
                   </select>
                 </label>
               </div>

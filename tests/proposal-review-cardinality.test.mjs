@@ -13,6 +13,8 @@ const submissionEvents = [
   { id: 'check', proposalId: 'proposal', toStatus: 'submitted', submittedAt: new Date('2026-10-02T00:00:00.000Z'), snapshot: { kind: 'completeness_check', submissionEventId: 'sub', readiness: { ready: true } } }
 ];
 const participation = { evaluateConflict: async () => ({ conflicted: false }) };
+// Chuyên viên đang phụ trách hồ sơ (người điều phối đánh giá).
+const officerTable = { findMany: async () => [{ id: 'officer', proposalId: 'proposal', officerUserId: 'staff', status: 'ACTIVE', effectiveFrom: new Date('2026-01-01T00:00:00.000Z'), effectiveUntil: null, createdAt: new Date('2026-01-01T00:00:00.000Z') }] };
 const access = { resolveForProposal: async () => ({ isAssignedReviewer: false }), resolveConflictForProposal: async () => ({ isAssignedReviewer: false, hasPersistedReview: false, hasScoringAssignment: false, unresolved: false }) };
 // Hội đồng: 2–3 phản biện, 3–5 thành viên, đúng 1 thư ký (thư ký không chấm phiếu).
 function roster(reviewers, council, secretaries = 1) {
@@ -62,6 +64,7 @@ test('fourth reviewer is rejected inside the locked proposal mutation before any
       return 3;
     }, findFirst: async () => null, updateMany: async () => ({ count: 1 }), create: async () => ({ id: 'new', createdAt: new Date(), updatedAt: new Date() }) },
     auditLog: { create: async () => {} },
+    proposalManagementOfficer: officerTable,
     proposalSubmissionEvent: { findMany: async () => submissionEvents },
     // The production conflict resolver uses these reads before the cardinality check.
     proposalMember: { findMany: async () => [] },
@@ -87,6 +90,7 @@ test('submitting the package rechecks the round inside the locked mutation and r
     proposalEvaluationSummary: { findFirst: async () => summary, update: async () => { writes.push('summary'); return summary; } },
     proposalSubmissionEvent: { findMany: async () => submissionEvents, create: async () => { writes.push('event'); } },
     auditLog: { create: async () => { writes.push('audit'); } },
+    proposalManagementOfficer: officerTable,
     // Đọc quan hệ tham gia và phân công thật trong giao dịch (kiểm tra xung đột lợi ích).
     proposalMember: { findMany: async () => [] },
     proposalParticipation: { findMany: async () => [] }

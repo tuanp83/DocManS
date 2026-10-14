@@ -92,7 +92,7 @@ export class ProposalReviewAssignmentsService {
 
   async candidates(actor: SafeUserContext, proposalId: string, query: unknown = "") {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertEvaluationCoordinator(actor, proposal);
+    await assertEvaluationCoordinator(this.prisma, actor, proposal);
     assertProposalStatus(proposal, REVIEWER_ASSIGNABLE_STATUSES, "Hồ sơ không ở trạng thái cho phép phân công đánh giá.");
     if (typeof query !== "string") {
       throw new BadRequestException({ message: "Từ khóa tìm kiếm người đánh giá không hợp lệ." });
@@ -150,7 +150,7 @@ export class ProposalReviewAssignmentsService {
 
   async listAssignments(actor: SafeUserContext, proposalId: string) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertCanReadEvaluation(actor, proposal);
+    await assertCanReadEvaluation(this.prisma, actor, proposal);
     if ((await this.participation.evaluateConflict(actor.id, proposalId)).conflicted) throw new ForbiddenException({ message: "Không được xem dữ liệu phản biện của hồ sơ mình tham gia." });
     const assignments = await this.findAssignments(proposalId);
     const reviews = await this.findReviews(proposalId);
@@ -178,7 +178,7 @@ export class ProposalReviewAssignmentsService {
       return result;
     }
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertEvaluationCoordinator(actor, proposal);
+    await assertEvaluationCoordinator(this.prisma, actor, proposal);
     assertProposalStatus(proposal, REVIEWER_ASSIGNABLE_STATUSES, "Chỉ hồ sơ đã nộp hoặc đang đánh giá mới được phân công người đánh giá.");
     const actorConflict = await this.participation.evaluateConflict(actor.id, proposalId);
     if (actorConflict.conflicted) {
@@ -333,7 +333,7 @@ export class ProposalReviewAssignmentsService {
     if (!this.transactional) return this.mutate(actor, proposalId, input.contextVersion, (s, a) => s.revokeAssignment(a, proposalId, assignmentId, input));
     if ((await this.participation.evaluateConflict(actor.id, proposalId)).conflicted) throw new ForbiddenException({ code: "CONFLICT_DENIED", message: "Người tham gia không được thay đổi phân công." });
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertEvaluationCoordinator(actor, proposal);
+    await assertEvaluationCoordinator(this.prisma, actor, proposal);
     assertProposalStatus(proposal, REVIEWER_ASSIGNABLE_STATUSES, "Hồ sơ không ở trạng thái cho phép thay đổi phân công đánh giá.");
 
     const assignment = await this.findAssignmentById(proposalId, assignmentId);

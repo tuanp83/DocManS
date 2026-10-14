@@ -12,6 +12,7 @@ import {
   assertApprovalAuthority,
   assertCanManageIRB,
   assertCanReadEvaluation,
+  assertEvaluationCoordinator,
   assertProposalStatus,
   assertScientificManagementScope,
   findEvaluationProposal,
@@ -152,7 +153,7 @@ export class ProposalDecisionsService {
     assertApprovalAuthority(actor);
     // Same workflow gate as `canReadProposal`: a draft belongs to its owner, so the decision package
     // must not become a side channel that reports an unsubmitted proposal's existence.
-    assertCanReadEvaluation(actor, proposal);
+    await assertCanReadEvaluation(this.prisma, actor, proposal);
 
     const [round, summary, decisions, attachments, history] = await Promise.all([
       this.assignments.findCurrentRound(proposal),
@@ -451,7 +452,7 @@ export class ProposalDecisionsService {
     const result = await this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
       invitedNow = [];
       invitedFor = { code: proposal.code ?? null, title: proposal.title };
-      assertScientificManagementScope(actor, proposal);
+      await assertEvaluationCoordinator(tx, actor, proposal);
       await this.assertNoDecisionConflict(actor, proposal);
       const { action, members, meetingDate, meetingLocation, tentativeAgenda } = readProposeCouncilInput(input);
       assertProposalStatus(proposal, ["submitted", "resubmitted", "under_review"], "Chỉ lập tờ trình hội đồng khi hồ sơ đã nộp hoặc đang đánh giá.");
@@ -527,7 +528,7 @@ export class ProposalDecisionsService {
    */
   async getCouncilCandidates(actor: SafeUserContext, proposalId: string) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertCanReadEvaluation(actor, proposal);
+    await assertCanReadEvaluation(this.prisma, actor, proposal);
 
     const [proposalMembers, hostOrgUnit] = await Promise.all([
       this.prisma.proposalMember.findMany({ where: { proposalId } }).catch(() => []) as Promise<Array<{ userId?: string | null; name?: string | null; status?: string | null; participationRole?: string | null }>>,
@@ -790,7 +791,7 @@ export class ProposalDecisionsService {
     return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
       const access = await this.reviewAccess.resolveForProposal(actor.id, proposalId);
       const isCouncilSecretary = access.isAssignedReviewer && access.assignmentRole === "committee_secretary";
-      if (!isCouncilSecretary) assertScientificManagementScope(actor, proposal);
+      if (!isCouncilSecretary) await assertEvaluationCoordinator(tx, actor, proposal);
 
       const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
       if (currentCouncil.status !== "approved") {
@@ -881,7 +882,7 @@ export class ProposalDecisionsService {
 
   async getIRBInfo(actor: SafeUserContext, proposalId: string) {
     const proposal = await findEvaluationProposal(this.prisma, proposalId);
-    assertCanReadEvaluation(actor, proposal);
+    await assertCanReadEvaluation(this.prisma, actor, proposal);
 
     const existing = proposal.irbMetadata as Record<string, unknown> | null;
     const contextVersion = proposalContextVersion(proposal as never);
