@@ -124,7 +124,7 @@ describe("Dashboard: drill-down không lọt dữ liệu", () => {
     assert.equal(row.overdue, true);
     assert.equal(row.link, "/projects/project-2");
     assert.equal(row.totalBudget, 200_000_000);
-    assert.deepEqual(Object.keys(row).sort(), ["actualPercent", "code", "daysOverdue", "startDate", "endDate", "field", "health", "id", "lateReports", "level", "link", "overdue", "piName", "plannedPercent", "spi", "status", "title", "totalBudget", "totalDisbursed", "unit"].sort());
+    assert.deepEqual(Object.keys(row).sort(), ["actualPercent", "code", "daysOverdue", "startDate", "endDate", "field", "health", "id", "lateReports", "level", "link", "overdue", "piName", "plannedPercent", "spi", "status", "title", "totalBudget", "totalDisbursed", "unit", "militaryScope", "officerName"].sort());
     for (const forbidden of ["members", "reports", "requests", "history", "viewerAuthorization", "finance", "acceptances"]) assert.ok(!(forbidden in row), forbidden);
   });
 
@@ -137,7 +137,7 @@ describe("Dashboard: drill-down không lọt dữ liệu", () => {
     assert.deepEqual(ids(await analytics.drillDown(head, { metric: "proposals", overdue: "true" })), ["proposal-3"]);
     assert.deepEqual(ids(await analytics.drillDown(head, { metric: "proposals", level: "national-level" })), ["proposal-4"]);
     const [row] = (await analytics.drillDown(head, { metric: "proposals", status: "submitted" })).items;
-    assert.deepEqual(Object.keys(row).sort(), ["code", "endDate", "field", "id", "level", "link", "overdue", "ownerName", "status", "submittedAt", "title", "unit"].sort());
+    assert.deepEqual(Object.keys(row).sort(), ["code", "endDate", "field", "id", "level", "link", "overdue", "ownerName", "status", "submittedAt", "title", "unit", "militaryScope", "officerName"].sort());
   });
 
   it("sản phẩm đầu ra: giao của quyền đọc hồ sơ và quyền đọc sản phẩm đầu ra", async () => {
@@ -353,5 +353,55 @@ describe("Ảnh chụp sức khoẻ hằng tuần và xu hướng", () => {
     await rejects400(analytics.trends(leader, { from: "2026-10-10", to: "2026-10-01" }), "from");
     await rejects400(analytics.trends(leader, { from: "2020-01-01", to: "2026-10-01" }), "from");
     await rejects400(analytics.trends(leader, { health: "red" }), "health");
+  });
+});
+
+describe("Dashboard: theo dõi tổng hợp theo tính chất và chuyên viên phụ trách (GĐ4)", () => {
+  function seedScopes() {
+    const db = seed();
+    const t = db.tables;
+    t.proposals.find((row) => row.id === "proposal-1").militaryScope = "military";
+    t.proposals.find((row) => row.id === "proposal-2").militaryScope = "civilian";
+    t.proposals.find((row) => row.id === "proposal-3").militaryScope = "military";
+    t.proposalOfficers.push({ id: "po-3", proposalId: "proposal-3", officerUserId: "officer", assignedById: "head", status: "ACTIVE", effectiveFrom: ago(30), effectiveUntil: null, createdAt: ago(30) });
+    return db;
+  }
+  const count = (buckets, key) => buckets.find((bucket) => bucket.key === key)?.count ?? 0;
+
+  it("đề tài lấy tính chất từ hồ sơ gốc; gom theo chuyên viên có số quá hạn, chậm tiến độ", async () => {
+    const db = seedScopes();
+    const { analytics } = services(db);
+    const leader = actor(db, "leader");
+    const projects = await analytics.distribution(leader, { subject: "projects" });
+    assert.equal(count(projects.byScope, "military"), 1);
+    assert.equal(count(projects.byScope, "civilian"), 1);
+    assert.equal(count(projects.byScope, "none"), 1, "project-3 từ hồ sơ chưa phân loại");
+    assert.equal(projects.byScope.find((bucket) => bucket.key === "military").label, "Quân sự");
+    const u2 = projects.byOfficer.find((bucket) => bucket.key === "staff-u2");
+    assert.deepEqual({ count: u2.count, overdue: u2.overdue, behind: u2.behind }, { count: 1, overdue: 1, behind: 1 });
+    assert.equal(count(projects.byOfficer, "officer"), 1);
+    assert.equal(projects.byOfficer.find((bucket) => bucket.key === "none").label, "Chưa có người phụ trách");
+    assert.equal(projects.totals.behind, 1);
+
+    assert.deepEqual(ids(await analytics.drillDown(leader, { metric: "projects", scope: "military" })), ["project-1"]);
+    assert.deepEqual(ids(await analytics.drillDown(leader, { metric: "projects", officerId: "staff-u2" })), ["project-2"]);
+    assert.deepEqual(ids(await analytics.drillDown(leader, { metric: "projects", officerId: "none" })), ["project-3"]);
+    assert.equal((await analytics.drillDown(leader, { metric: "projects", scope: "civilian" })).items[0].militaryScope, "civilian");
+    assert.equal((await analytics.distribution(leader, { subject: "projects", scope: "civilian" })).totals.count, 1);
+    assert.equal((await analytics.products(leader, { scope: "civilian" })).projectProducts.total, 1);
+  });
+
+  it("hồ sơ gom theo tính chất và chuyên viên phụ trách; bộ lọc chỉ thu hẹp phạm vi người xem", async () => {
+    const db = seedScopes();
+    const { analytics } = services(db);
+    // Trưởng phòng có phạm vi đơn vị 1: proposal-1, -3, -4.
+    const proposals = await analytics.distribution(actor(db, "head"), { subject: "proposals" });
+    assert.equal(count(proposals.byScope, "military"), 2);
+    const officer = proposals.byOfficer.find((bucket) => bucket.key === "officer");
+    assert.deepEqual({ count: officer.count, pending: officer.pending }, { count: 1, pending: 1 });
+    assert.deepEqual(ids(await analytics.drillDown(actor(db, "head"), { metric: "proposals", officerId: "officer" })), ["proposal-3"]);
+    // Chuyên viên đơn vị 1 lọc theo Dân sự (chỉ có ở đơn vị 2): không thấy gì.
+    assert.equal((await analytics.drillDown(actor(db, "staff2"), { metric: "proposals", scope: "civilian" })).total, 0);
+    await rejects400(analytics.distribution(actor(db, "head"), { subject: "proposals", scope: "navy" }), "scope");
   });
 });

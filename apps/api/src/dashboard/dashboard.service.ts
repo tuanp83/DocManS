@@ -20,6 +20,9 @@ export type DashboardProposalRecord = {
   budgetMetadata: unknown;
   researchFieldCode?: string | null;
   proposalTypeCode?: string | null;
+  militaryScope?: string | null;
+  /** Chuyên viên phụ trách hiện tại (null: chưa có hoặc phân công mâu thuẫn). */
+  officer?: { id: string; name: string | null } | null;
   owner: { displayName: string | null; username: string | null } | null;
   hostOrganizationUnit: { id: string; name: string } | null;
 };
@@ -73,6 +76,7 @@ export class DashboardService {
         budgetMetadata: true,
         researchFieldCode: true,
         proposalTypeCode: true,
+        militaryScope: true,
         owner: { select: { displayName: true, username: true } },
         hostOrganizationUnit: { select: { id: true, name: true } }
       }
@@ -84,9 +88,14 @@ export class DashboardService {
       this.managementOfficers.resolveForProposals(records.map((record) => record.id), asOf)
     ]);
 
-    return records.filter((record) =>
-      canReadProposal(actor, record, participationByProposal.get(record.id), reviewAccessByProposal.get(record.id), managementOfficerByProposal.get(record.id))
-    );
+    return records
+      .filter((record) =>
+        canReadProposal(actor, record, participationByProposal.get(record.id), reviewAccessByProposal.get(record.id), managementOfficerByProposal.get(record.id))
+      )
+      .map((record) => {
+        const officer = managementOfficerByProposal.get(record.id)?.officer;
+        return { ...record, officer: officer ? { id: officer.officerUserId, name: officer.officer?.displayName ?? null } : null };
+      });
   }
 
   async getStats(actor: SafeUserContext | undefined) {

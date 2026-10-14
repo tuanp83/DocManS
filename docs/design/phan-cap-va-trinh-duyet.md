@@ -91,6 +91,15 @@ Chuyên viên lập, bấm "Trình Trưởng ban rà soát"
 | Giám đốc / Phó GĐ KH | Hồ sơ chờ phê duyệt / Hồ sơ chờ ký (mục Hội đồng, IRB; Giám đốc có thêm Duyệt đề tài, Duyệt kinh phí), trang đề tài (gia hạn, điều chỉnh, nghiệm thu, thanh lý) |
 | Phó GĐ khác | Dashboard, Theo dõi đề tài, Báo cáo (kinh phí tổng hợp) |
 
+### Theo dõi tổng hợp trên Dashboard
+
+Trang **Dashboard** là nơi theo dõi chung của Phó phòng, Trưởng phòng, Trưởng ban và Ban giám đốc; mỗi người chỉ thấy số liệu trong phạm vi mình được xem.
+
+- Bộ lọc: năm, đơn vị, cấp, lĩnh vực, **tính chất** (Quân sự / Dân sự / Chưa phân loại). Tính chất của đề tài lấy theo hồ sơ đề xuất gốc.
+- Mục **Theo tính chất và chuyên viên phụ trách**: số đề tài, hồ sơ theo tính chất; bảng theo từng chuyên viên (số đề tài, quá hạn, chậm tiến độ, báo cáo trễ, hồ sơ, hồ sơ đang xét) và nhóm "Chưa có người phụ trách". Bấm số để mở danh sách chi tiết.
+- **Tải báo cáo Excel** có thêm cột Tính chất và Chuyên viên phụ trách.
+- Các Phó GĐ chỉ theo dõi thấy kinh phí **tổng** (thẻ số, biểu đồ), còn cột kinh phí từng đề tài/hồ sơ để trống.
+
 ## 6. Việc quản trị viên làm khi đưa bản này lên máy chủ
 
 Migration tự chạy khi khởi động (`docker compose ... up -d`), nên trước đó chạy `./scripts/backup.sh`. Sau khi hệ thống lên:

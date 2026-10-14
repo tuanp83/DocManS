@@ -19,7 +19,7 @@ test("API client chỉ gọi 4 API thống kê và chỉ gửi khoá bộ lọc 
   const api = read("apps/web/src/lib/dashboard-api.ts");
   const paths = [...api.matchAll(/getJson<.*?>\(`([a-z-]+)\$\{/g)].map((match) => match[1]).sort();
   assert.deepEqual(paths, ["distribution", "distribution", "drill-down", "products", "trends"]);
-  assert.match(api, /DASHBOARD_FILTER_KEYS = \["year", "unitId", "level", "field"\] as const/);
+  assert.match(api, /DASHBOARD_FILTER_KEYS = \["year", "unitId", "level", "field", "scope"\] as const/);
   assert.match(api, /credentials: "include"/);
   // Bỏ giá trị rỗng để API không nhận khoá thừa.
   assert.match(api, /if \(value === undefined \|\| value === null \|\| value === ""\) continue;/);
@@ -41,7 +41,7 @@ test("bấm số liệu mở danh sách chi tiết từ API drill-down; mỗi bi
   assert.match(panel, /event\.key === "Escape"/);
   assert.match(panel, /<ProjectGantt rows=/);
   const cards = analytics.match(/<ChartCard\b/g)?.length ?? 0;
-  const tables = analytics.match(/table=\{<BucketTable /g)?.length ?? 0;
+  const tables = analytics.match(/table=\{<(BucketTable|OfficerTable) /g)?.length ?? 0;
   assert.ok(cards >= 10);
   assert.equal(cards, tables, "mỗi ChartCard có bảng tương đương");
   for (const metric of ["projects", "proposals", "products", "deliverables"]) assert.ok(analytics.includes(`openDrill("${metric}"`), metric);

@@ -2055,6 +2055,16 @@ button.dash-tile {
   cursor: pointer;
 }
 
+.dash-cell-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 button.dash-tile:hover,
 button.dash-tile:focus-visible {
   border-color: rgba(20, 90, 55, 0.35);

@@ -14,6 +14,10 @@ export type DistributionSubject = (typeof DISTRIBUTION_SUBJECTS)[number];
 export const HEALTH_FILTERS = ["green", "amber", "red", "none"] as const;
 export const PRODUCT_STATUSES = ["PLANNED", "SUBMITTED", "UNDER_REVIEW", "PASSED", "FAILED"] as const;
 export const PRODUCT_FORMS = [1, 2, 3, 4, 5, 6] as const;
+/** Tính chất đề tài (ResearchProposal.militaryScope); "none" = chưa phân loại. */
+export const SCOPE_FILTERS = ["military", "civilian", "none"] as const;
+/** Chuyên viên phụ trách: id người dùng, hoặc "none" = chưa có người phụ trách. */
+export const NO_OFFICER = "none";
 
 export type DashboardFilters = {
   unitId?: string;
@@ -23,6 +27,8 @@ export type DashboardFilters = {
   status?: string;
   health?: (typeof HEALTH_FILTERS)[number];
   overdue?: boolean;
+  scope?: (typeof SCOPE_FILTERS)[number];
+  officerId?: string;
   form?: number;
   productStatus?: (typeof PRODUCT_STATUSES)[number];
   type?: string;
@@ -79,6 +85,8 @@ const PARSERS: Record<Key, (raw: string) => unknown> = {
   status: (raw) => (STATUS.test(raw) ? raw : invalid("status", "Trạng thái không hợp lệ.")),
   health: (raw) => oneOf("health", raw, HEALTH_FILTERS),
   overdue: (raw) => (raw === "true" ? true : raw === "false" ? false : invalid("overdue", "overdue chỉ nhận true hoặc false.")),
+  scope: (raw) => oneOf("scope", raw, SCOPE_FILTERS),
+  officerId: (raw) => (CODE.test(raw) ? raw : invalid("officerId", "Mã chuyên viên không hợp lệ.")),
   form: (raw) => integer("form", raw, 1, 6),
   productStatus: (raw) => oneOf("productStatus", raw, PRODUCT_STATUSES),
   type: (raw) => (FREE_TEXT.test(raw) ? raw : invalid("type", "Loại sản phẩm không hợp lệ.")),
@@ -106,10 +114,10 @@ export function parseDashboardQuery(query: unknown, allowed: readonly Key[]): Da
 
 /** Bộ lọc dùng được cho từng loại danh sách chi tiết (drill-down). */
 export const DRILL_DOWN_FILTERS: Record<DrillDownMetric, readonly Key[]> = {
-  projects: ["unitId", "level", "field", "year", "status", "health", "overdue"],
-  proposals: ["unitId", "level", "field", "year", "status", "overdue"],
-  products: ["unitId", "level", "field", "year", "form", "productStatus"],
-  deliverables: ["unitId", "level", "field", "year", "type", "deliverableStatus"]
+  projects: ["unitId", "level", "field", "year", "status", "health", "overdue", "scope", "officerId"],
+  proposals: ["unitId", "level", "field", "year", "status", "overdue", "scope", "officerId"],
+  products: ["unitId", "level", "field", "year", "scope", "form", "productStatus"],
+  deliverables: ["unitId", "level", "field", "year", "scope", "type", "deliverableStatus"]
 };
 
-export const COMMON_FILTERS: readonly Key[] = ["unitId", "level", "field", "year"];
+export const COMMON_FILTERS: readonly Key[] = ["unitId", "level", "field", "year", "scope"];

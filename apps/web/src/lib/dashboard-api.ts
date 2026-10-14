@@ -1,20 +1,29 @@
 import { getApiBaseUrl } from "@/lib/session";
 
 /** Bộ lọc chung của dashboard; khớp danh sách trắng ở API (apps/api/src/dashboard/dashboard-query.ts). */
-export type DashboardFilters = { year?: string; unitId?: string; level?: string; field?: string };
-export const DASHBOARD_FILTER_KEYS = ["year", "unitId", "level", "field"] as const;
+export type DashboardFilters = { year?: string; unitId?: string; level?: string; field?: string; scope?: ScopeKey };
+export const DASHBOARD_FILTER_KEYS = ["year", "unitId", "level", "field", "scope"] as const;
+
+/** Tính chất đề tài; "none" = chưa phân loại. */
+export type ScopeKey = "military" | "civilian" | "none";
+export const SCOPE_KEYS: ScopeKey[] = ["military", "civilian", "none"];
+export const SCOPE_LABELS: Record<ScopeKey, string> = { military: "Quân sự", civilian: "Dân sự", none: "Chưa phân loại" };
+/** Khoá nhóm "chưa có chuyên viên phụ trách" (khớp bộ lọc officerId=none ở API). */
+export const NO_OFFICER = "none";
 
 export type HealthKey = "green" | "amber" | "red" | "none";
 export const HEALTH_KEYS: HealthKey[] = ["green", "amber", "red", "none"];
 export const HEALTH_KEY_LABELS: Record<HealthKey, string> = { green: "Đúng tiến độ", amber: "Cần chú ý", red: "Chậm tiến độ", none: "Không đánh giá" };
 
 export type Bucket = { key: string; label: string; count: number; totalBudget?: number; totalDisbursed?: number; approvedBudget?: number };
+/** Nhóm theo chuyên viên phụ trách: đề tài có overdue/behind/lateReports, hồ sơ có pending/overdue. */
+export type OfficerBucket = Bucket & { overdue?: number; behind?: number; lateReports?: number; pending?: number };
 export type UnitHealthBucket = Bucket & Record<HealthKey, number>;
 
 export type ProjectDistribution = {
   subject: "projects";
-  totals: { count: number; financeVisibleCount: number; totalBudget: number; totalDisbursed: number; totalSettled: number; overdue: number };
-  byUnit: Bucket[]; byLevel: Bucket[]; byField: Bucket[]; byStatus: Bucket[]; byYear: Bucket[];
+  totals: { count: number; financeVisibleCount: number; totalBudget: number; totalDisbursed: number; totalSettled: number; overdue: number; behind: number };
+  byUnit: Bucket[]; byLevel: Bucket[]; byField: Bucket[]; byStatus: Bucket[]; byYear: Bucket[]; byScope: Bucket[]; byOfficer: OfficerBucket[];
   byHealth: Array<{ key: HealthKey; label: string; count: number }>;
   byUnitHealth: UnitHealthBucket[];
 };
@@ -22,7 +31,7 @@ export type ProjectDistribution = {
 export type ProposalDistribution = {
   subject: "proposals";
   totals: { count: number; pending: number; approved: number; overdue: number; approvedBudget: number };
-  byUnit: Bucket[]; byLevel: Bucket[]; byField: Bucket[]; byStatus: Bucket[]; byYear: Bucket[];
+  byUnit: Bucket[]; byLevel: Bucket[]; byField: Bucket[]; byStatus: Bucket[]; byYear: Bucket[]; byScope: Bucket[]; byOfficer: OfficerBucket[];
 };
 
 export type TrendPoint = {
@@ -44,14 +53,14 @@ export type ProductStats = {
 
 export type DrillDownMetric = "projects" | "proposals" | "products" | "deliverables";
 /** Bộ lọc riêng của từng loại danh sách (cộng với bộ lọc chung). */
-export type DrillDownFilters = DashboardFilters & { status?: string; health?: HealthKey; overdue?: "true" | "false"; form?: string; productStatus?: ProductStatus; type?: string; deliverableStatus?: string };
+export type DrillDownFilters = DashboardFilters & { officerId?: string; status?: string; health?: HealthKey; overdue?: "true" | "false"; form?: string; productStatus?: ProductStatus; type?: string; deliverableStatus?: string };
 
 export type ProjectRow = {
   id: string; code: string | null; title: string; unit: { id: string; name: string }; piName: string | null; status: string; level: string | null; field: string | null;
   health: HealthKey; spi: number | null; plannedPercent: number; actualPercent: number; daysOverdue: number; lateReports: number; overdue: boolean;
-  startDate: string | null; endDate: string | null; totalBudget: number | null; totalDisbursed: number | null; link: string;
+  startDate: string | null; endDate: string | null; totalBudget: number | null; totalDisbursed: number | null; militaryScope: string | null; officerName: string | null; link: string;
 };
-export type ProposalRow = { id: string; code: string | null; title: string; unit: { id: string; name: string }; ownerName: string | null; status: string; level: string | null; field: string | null; submittedAt: string | null; endDate: string | null; overdue: boolean; link: string };
+export type ProposalRow = { id: string; code: string | null; title: string; unit: { id: string; name: string }; ownerName: string | null; status: string; level: string | null; field: string | null; submittedAt: string | null; endDate: string | null; overdue: boolean; militaryScope: string | null; officerName: string | null; link: string };
 export type ProductRow = { id: string; title: string; productForm: number; status: ProductStatus; position: number; project: { id: string; code: string | null; title: string }; unit: { id: string; name: string }; link: string };
 export type DeliverableRow = { id: string; type: string; title: string; status: string; publishedAt: string | null; proposal: { id: string; code: string | null; title: string }; unit: { id: string; name: string }; link: string };
 
@@ -78,7 +87,7 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
-const common = (filters: DashboardFilters) => ({ year: filters.year, unitId: filters.unitId, level: filters.level, field: filters.field });
+const common = (filters: DashboardFilters) => ({ year: filters.year, unitId: filters.unitId, level: filters.level, field: filters.field, scope: filters.scope });
 
 export function loadProjectDistribution(filters: DashboardFilters, signal?: AbortSignal) {
   return getJson<ProjectDistribution>(`distribution${dashboardQuery({ subject: "projects", ...common(filters) })}`, signal);
@@ -104,7 +113,7 @@ export function trendFrom(months: number, now = Date.now()) {
 
 /** Xu hướng không lọc theo năm (trục thời gian đã là năm). Không gửi `to`: API lấy hôm nay theo giờ Việt Nam. */
 export function loadTrends(filters: DashboardFilters, range: { from?: string }, signal?: AbortSignal) {
-  return getJson<Trends>(`trends${dashboardQuery({ from: range.from, unitId: filters.unitId, level: filters.level, field: filters.field })}`, signal);
+  return getJson<Trends>(`trends${dashboardQuery({ from: range.from, unitId: filters.unitId, level: filters.level, field: filters.field, scope: filters.scope })}`, signal);
 }
 
 /** Cùng quy tắc với API (dashboard-query.ts): loại sản phẩm đầu ra 1–100 ký tự, không ký tự điều khiển. */
