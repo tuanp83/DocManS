@@ -112,6 +112,8 @@ describe("workspace smoke checks", () => {
       "ProposalMember",
       "ProposalManagementOfficer",
       "ManagementPortfolio",
+      "ApprovalSubmission",
+      "ApprovalStep",
       "ProposalAttachment",
       "FileRecord",
       "ProposalSubmissionEvent",

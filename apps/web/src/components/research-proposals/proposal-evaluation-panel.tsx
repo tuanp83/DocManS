@@ -678,7 +678,7 @@ export function ProposalEvaluationPanel({
       });
       setCouncilSuccess(
         action === "submit"
-          ? "Đã gửi tờ trình đề xuất Hội đồng lên Lãnh đạo Học viện phê duyệt thành công!"
+          ? "Đã trình tờ trình Hội đồng. Trưởng ban QLKH rà soát, Trưởng phòng KHQS duyệt rồi Ban giám đốc ký."
           : action === "invite"
             ? "Đã lưu tờ trình và gửi lời mời đến các thành viên chưa được mời. Theo dõi tình trạng nhận lời ở bảng bên dưới."
             : "Đã lưu bản nháp tờ trình đề xuất Hội đồng."
@@ -806,7 +806,7 @@ export function ProposalEvaluationPanel({
       }
     }
     if (mode === "finalize" && !window.confirm("Chốt bản tổng hợp? Nội dung và danh sách phiếu sẽ được khoá; muốn sửa phải mở lại.")) return;
-    if (mode === "submit" && !window.confirm("Trình lãnh đạo phê duyệt? Vòng đánh giá sẽ được đóng lại và không sửa được bản tổng hợp.")) return;
+    if (mode === "submit" && !window.confirm("Trình gói đánh giá? Gói đi qua Trưởng ban QLKH, Trưởng phòng KHQS rồi tới Giám đốc phê duyệt; vòng đánh giá được đóng lại.")) return;
     let reason = "";
     if (mode === "reopen") {
       reason = window.prompt("Lý do mở lại bản tổng hợp đã chốt:")?.trim() ?? "";
@@ -1140,10 +1140,10 @@ export function ProposalEvaluationPanel({
             >
               <Clock size={20} />
               <div>
-                <strong>Tờ trình thành lập Hội đồng đã được gửi Lãnh đạo Học viện phê duyệt</strong>
+                <strong>Tờ trình thành lập Hội đồng đang được xét duyệt (Trưởng ban → Trưởng phòng → Ban giám đốc)</strong>
                 <p style={{ margin: "2px 0 0 0", fontSize: "13px" }}>
                   Thời điểm trình: {council?.proposedAt ? formatDate(council.proposedAt) : "Mới đây"} bởi{" "}
-                  <strong>{council?.proposedByName || "Trưởng phòng KHQS"}</strong>. Đang chờ Giám đốc Học viện xem xét ký ban hành Quyết định.
+                  <strong>{council?.proposedByName || "Chuyên viên QLKH"}</strong>. Xem bước hiện tại ở mục "Tờ trình qua Phòng KHQS".
                 </p>
               </div>
             </div>
@@ -1695,6 +1695,12 @@ export function ProposalEvaluationPanel({
               />
             </label>
 
+            {council?.status === "returned" || council?.status === "rejected" ? (
+              <p className="state-message warning" role="status">
+                {council.status === "returned" ? "Phòng KHQS đã trả lại tờ trình" : "Ban giám đốc chưa phê duyệt tờ trình"}
+                {council.returnedByName || council.rejectedByName ? ` (${council.returnedByName ?? council.rejectedByName})` : ""}: {council.returnReason ?? council.rejectionReason ?? "Không ghi lý do"}. Sửa rồi trình lại.
+              </p>
+            ) : null}
             {councilInvitationRows.length ? (
               <div className="table-wrap">
                 <table className="data-table">
@@ -1756,7 +1762,7 @@ export function ProposalEvaluationPanel({
                 style={{ background: "#15803d", borderColor: "#15803d", fontSize: "13px", display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
                 <Send size={15} />
-                {isSubmittingCouncil ? "Đang gửi..." : "Trình Lãnh đạo Học viện phê duyệt"}
+                {isSubmittingCouncil ? "Đang gửi..." : "Trình Trưởng ban rà soát"}
               </button>
             </div>
           </div>
@@ -2061,7 +2067,7 @@ export function ProposalEvaluationPanel({
                 onClick={() => void handleSummaryAction("submit")}
               >
                 <Send size={16} aria-hidden="true" />
-                {savingMode === "submit" ? "Đang trình" : "Trình lãnh đạo phê duyệt"}
+                {savingMode === "submit" ? "Đang trình" : "Trình Trưởng ban rà soát"}
               </button>
             ) : null}
           </div>

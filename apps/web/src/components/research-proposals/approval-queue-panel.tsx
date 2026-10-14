@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { IRBApprovalModal } from "@/components/research-proposals/irb-approval-modal";
+import { loadPendingSubmissions } from "@/lib/approval-routing-api";
 import { useSession } from "@/components/auth/session-provider";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -64,7 +66,8 @@ export function ApprovalQueuePanel() {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
   // Tab chuyển đổi: "council" (Duyệt Hội đồng) | "proposal" (Duyệt đề tài) | "budget" (Duyệt kinh phí)
-  const [activeTab, setActiveTab] = useState<"council" | "proposal" | "budget">("council");
+  const [activeTab, setActiveTab] = useState<"council" | "proposal" | "budget" | "irb">("council");
+  const [irbTarget, setIrbTarget] = useState<ResearchProposal | null>(null);
   // Phó GĐ phụ trách Khoa học chỉ ký thành lập hội đồng; phê duyệt đề tài và kinh phí là của Giám đốc.
   const { account } = useSession();
   const isDirector = account?.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY";
@@ -88,12 +91,17 @@ export function ApprovalQueuePanel() {
   const [councilApprovalNote, setCouncilApprovalNote] = useState("");
   const [councilDecisionNumber, setCouncilDecisionNumber] = useState("");
   const [councilActionLoading, setCouncilActionLoading] = useState(false);
+  const [notRouted, setNotRouted] = useState<Set<string>>(new Set());
   const [councilActionError, setCouncilActionError] = useState("");
   const [councilActionSuccess, setCouncilActionSuccess] = useState("");
 
   async function loadData() {
     try {
-      const data = await loadResearchProposals();
+      const [data, routing] = await Promise.all([loadResearchProposals(), loadPendingSubmissions("proposal").catch(() => ({ pending: [] }))]);
+      // Tờ trình còn ở Phòng KHQS (Trưởng ban, Trưởng phòng) chưa hiện cho Ban giám đốc; tờ trình trình trước khi có
+      // luồng này (không có hồ sơ trình) vẫn hiện như cũ.
+      const blocked = new Set(routing.pending.filter((item) => item.stage !== "LEADERSHIP").map((item) => `${item.kind}:${item.subjectId}`));
+      setNotRouted(blocked);
       setProposals(data);
       setState("ready");
     } catch {
@@ -155,10 +163,18 @@ export function ApprovalQueuePanel() {
     return true;
   }
 
+  const atLeadership = (kind: string, id: string) => !notRouted.has(`${kind}:${id}`);
+
+  // Hội đồng đạo đức (IRB) đã trình, tờ trình đã tới Ban giám đốc.
+  const waitingIrb = useMemo(
+    () => proposals.filter((p) => p.irbMetadata?.council?.status === "submitted" && atLeadership("IRB_COUNCIL", p.id)),
+    [proposals, notRouted]
+  );
+
   // --- TAB 1: DUYỆT HỘI ĐỒNG ---
   const waitingCouncilProposals = useMemo(
-    () => proposals.filter((p) => matchesFilter(p) && p.councilMetadata?.status === "submitted"),
-    [proposals, keyword, selectedLevel, selectedMilitaryScope, selectedUnit]
+    () => proposals.filter((p) => matchesFilter(p) && p.councilMetadata?.status === "submitted" && atLeadership("EVALUATION_COUNCIL", p.id)),
+    [proposals, keyword, selectedLevel, selectedMilitaryScope, selectedUnit, notRouted]
   );
 
   const decidedCouncilProposals = useMemo(
@@ -167,8 +183,8 @@ export function ApprovalQueuePanel() {
   );
 
   const totalWaitingCouncils = useMemo(
-    () => proposals.filter((p) => p.councilMetadata?.status === "submitted").length,
-    [proposals]
+    () => proposals.filter((p) => p.councilMetadata?.status === "submitted" && atLeadership("EVALUATION_COUNCIL", p.id)).length,
+    [proposals, notRouted]
   );
   const totalDecidedCouncils = useMemo(
     () => proposals.filter((p) => p.councilMetadata?.status === "approved").length,
@@ -177,8 +193,8 @@ export function ApprovalQueuePanel() {
 
   // --- TAB 2: DUYỆT ĐỀ TÀI ---
   const waitingProposals = useMemo(
-    () => proposals.filter((p) => matchesFilter(p) && p.status === "ready_for_approval"),
-    [proposals, keyword, selectedLevel, selectedMilitaryScope, selectedUnit]
+    () => proposals.filter((p) => matchesFilter(p) && p.status === "ready_for_approval" && atLeadership("DECISION_PACKAGE", p.id)),
+    [proposals, keyword, selectedLevel, selectedMilitaryScope, selectedUnit, notRouted]
   );
 
   const decidedProposals = useMemo(
@@ -186,7 +202,7 @@ export function ApprovalQueuePanel() {
     [proposals, keyword, selectedLevel, selectedMilitaryScope, selectedUnit]
   );
 
-  const totalWaitingProposals = useMemo(() => proposals.filter((p) => p.status === "ready_for_approval").length, [proposals]);
+  const totalWaitingProposals = useMemo(() => proposals.filter((p) => p.status === "ready_for_approval" && atLeadership("DECISION_PACKAGE", p.id)).length, [proposals, notRouted]);
   const totalDecidedProposals = useMemo(() => proposals.filter((p) => DECIDED_STATUSES.includes(p.status)).length, [proposals]);
 
   // --- TAB 3: DUYỆT KINH PHÍ ---
@@ -194,9 +210,9 @@ export function ApprovalQueuePanel() {
     () =>
       proposals.filter((p) => {
         if (!matchesFilter(p)) return false;
-        return p.status === "ready_for_approval" || (p.status === "approved" && !(p.budgetMetadata as any)?.approvedAmount);
+        return (p.status === "ready_for_approval" && atLeadership("DECISION_PACKAGE", p.id)) || (p.status === "approved" && !(p.budgetMetadata as any)?.approvedAmount);
       }),
-    [proposals, keyword, selectedLevel, selectedMilitaryScope, selectedUnit]
+    [proposals, keyword, selectedLevel, selectedMilitaryScope, selectedUnit, notRouted]
   );
 
   const decidedBudgets = useMemo(
@@ -211,9 +227,9 @@ export function ApprovalQueuePanel() {
   const totalWaitingBudgets = useMemo(
     () =>
       proposals.filter(
-        (p) => p.status === "ready_for_approval" || (p.status === "approved" && !(p.budgetMetadata as any)?.approvedAmount)
+        (p) => (p.status === "ready_for_approval" && atLeadership("DECISION_PACKAGE", p.id)) || (p.status === "approved" && !(p.budgetMetadata as any)?.approvedAmount)
       ).length,
-    [proposals]
+    [proposals, notRouted]
   );
   const totalDecidedBudgets = useMemo(
     () => proposals.filter((p) => Boolean((p.budgetMetadata as any)?.approvedAmount) || (p.status === "approved" && Boolean(p.budgetMetadata?.amount))).length,
@@ -512,7 +528,77 @@ export function ApprovalQueuePanel() {
           </span>
         </button>
         ) : null}
+        <button
+          type="button"
+          onClick={() => setActiveTab("irb")}
+          style={{
+            padding: "12px 18px",
+            fontSize: "14px",
+            fontWeight: 700,
+            border: "none",
+            borderBottom: activeTab === "irb" ? "3px solid #166534" : "3px solid transparent",
+            color: activeTab === "irb" ? "#166534" : "#64748b",
+            background: "none",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            marginBottom: "-2px",
+            whiteSpace: "nowrap"
+          }}
+        >
+          Hội đồng đạo đức (IRB)
+          <span style={{ background: "#f1f5f9", color: "#64748b", padding: "2px 8px", borderRadius: "12px", fontSize: "12px", fontWeight: 700 }}>{waitingIrb.length}</span>
+        </button>
       </div>
+
+      {activeTab === "irb" && (
+        <div style={{ background: "#ffffff", borderRadius: "8px", border: "1px solid #e2e8f0", padding: "16px" }}>
+          <h3 style={{ margin: "0 0 4px 0", fontSize: "16px" }}>Tờ trình thành lập Hội đồng đạo đức chờ ký</h3>
+          <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#64748b" }}>Đã qua Trưởng ban QLKH và Trưởng phòng KHQS. Giám đốc hoặc Phó GĐ phụ trách Khoa học ký.</p>
+          {waitingIrb.length === 0 ? (
+            <p className="state-message">Không có tờ trình IRB nào chờ ký.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Đề tài</th>
+                    <th>Số thành viên</th>
+                    <th>Người lập</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {waitingIrb.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <span className="record-title">{p.title}</span>
+                        <span className="record-meta">{p.code || "Chưa cấp mã"} · {p.hostOrganizationUnitName}</span>
+                      </td>
+                      <td>{p.irbMetadata?.council?.members?.length ?? 0}</td>
+                      <td>{p.irbMetadata?.council?.proposedByName ?? "—"}</td>
+                      <td>
+                        <button type="button" className="button primary" onClick={() => setIrbTarget(p)}>Xem & ký</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+      {irbTarget ? (
+        <IRBApprovalModal
+          isOpen
+          onClose={() => setIrbTarget(null)}
+          proposal={irbTarget}
+          currentUserRole={account?.systemRole}
+          currentUserUsername={account?.username}
+          onSuccess={() => { setIrbTarget(null); void loadData(); }}
+        />
+      ) : null}
 
       {/* =========================================================================
           TAB 1: MỤC 1 - DUYỆT THÀNH LẬP HỘI ĐỒNG

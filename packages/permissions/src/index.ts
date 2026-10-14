@@ -55,6 +55,7 @@ export const PERMISSION_ACTION_IDS_V1 = [
   "project.adjustment.submit",
   "project.adjustment.review",
   "project.adjustment.request-supplement",
+  "project.adjustment.prepare",
   "project.adjustment.approve",
   "project.adjustment.reject",
   "project.extension.create",

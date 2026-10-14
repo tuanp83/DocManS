@@ -28,6 +28,7 @@ import { ProposalReviewsService, REVIEW_SUBMITTED_NOTE } from "./proposal-review
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { label, NOTIFICATION_TYPES, proposalLink, researchManagersInScope, type WorkflowEvent } from "../notifications/workflow-events.js";
 import { councilEstablishedEvent, reviewInvitationEvent } from "./evaluation-notifications.js";
+import { APPROVAL_KINDS, assertReadyForLeadership, boardReviewEvent, closeApprovalSubmission, openApprovalSubmission } from "../proposals-shared/approval-routing.js";
 import { readApproveCouncilInput, readCouncilMembers, readCouncilMinutesInput, readProposeCouncilInput, readRejectCouncilInput, type CouncilMemberInput } from "./council-input.js";
 import { isRoundActiveStatus } from "../proposals-shared/proposal-review-access.js";
 import { positionDisplay } from "../organization/unit-positions.js";
@@ -256,9 +257,12 @@ export class ProposalDecisionsService {
       // Khoá hồ sơ rồi đối chiếu gói trong cùng giao dịch: không ai sửa, mở lại hay trình lại gói giữa lúc kiểm tra và ghi.
       await tx.$queryRaw`SELECT id FROM research_proposals WHERE id = ${proposalId} FOR UPDATE`;
       const packageSnapshot = await this.assertDecidablePackage(tx as unknown as PrismaService, proposal, packageRevision);
+      // Gói phê duyệt phải đã qua Trưởng ban QLKH và Trưởng phòng KHQS (trừ gói trình trước khi có luồng này).
+      await assertReadyForLeadership(tx, actor, { kind: APPROVAL_KINDS.decisionPackage, subjectType: "proposal", subjectId: proposalId });
 
       // Conditional on the status we validated, so two authorities deciding at once cannot both win.
       await updateProposalStatusGuarded(tx, proposalId, proposal.status, toStatus);
+      await closeApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.decisionPackage, subjectType: "proposal", subjectId: proposalId }, decision === PROPOSAL_DECISIONS.approved ? "APPROVED" : "REJECTED");
 
       // If approved, leadership can specify or adjust the approved budget
       if (decidedBudget !== null) {
@@ -399,6 +403,10 @@ export class ProposalDecisionsService {
       if (!BUDGET_APPROVABLE_STATUSES.includes(proposal.status)) {
         throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ duyệt kinh phí khi hồ sơ đang chờ phê duyệt hoặc đã được phê duyệt." });
       }
+      // Khi hồ sơ còn chờ phê duyệt, gói phải đã qua Phòng KHQS (Trưởng ban, Trưởng phòng) mới được duyệt kinh phí.
+      if (proposal.status === PROPOSAL_STATUS.readyForApproval) {
+        await assertReadyForLeadership(tx, actor, { kind: APPROVAL_KINDS.decisionPackage, subjectType: "proposal", subjectId: proposalId });
+      }
       const projects = (tx as unknown as { approvedProject?: { findFirst: (args: unknown) => Promise<unknown> } }).approvedProject;
       if (proposal.status === PROPOSAL_STATUS.approved && projects && (await projects.findFirst({ where: { proposalId }, select: { id: true } }))) {
         throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Đề tài đã được lập; kinh phí được quản lý trong mục Kinh phí của đề tài." });
@@ -451,8 +459,10 @@ export class ProposalDecisionsService {
   async proposeCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
     let invitedNow: CouncilInvitee[] = [];
     let invitedFor: { code: string | null; title: string } = { code: null, title: "" };
+    let routing: WorkflowEvent | null = null;
     const result = await this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
       invitedNow = [];
+      routing = null;
       invitedFor = { code: proposal.code ?? null, title: proposal.title };
       await assertEvaluationCoordinator(tx, actor, proposal);
       await this.assertNoDecisionConflict(actor, proposal);
@@ -488,7 +498,7 @@ export class ProposalDecisionsService {
         invitedNow = await syncCouncilInvitations(tx, actor, proposal.id, members, evidence.eventId, meetingDate ? new Date(meetingDate) : null, now);
         if (action === "submit") {
           const problems = await councilAcceptanceProblems(tx, proposal.id, members, evidence.eventId);
-          if (problems.length) throw new BadRequestException({ code: "COUNCIL_NOT_ACCEPTED", message: `Chưa trình lãnh đạo được: ${problems.join(" ")}` });
+          if (problems.length) throw new BadRequestException({ code: "COUNCIL_NOT_ACCEPTED", message: `Chưa trình được: ${problems.join(" ")}` });
         }
       }
 
@@ -507,6 +517,11 @@ export class ProposalDecisionsService {
       };
 
       await tx.researchProposal.update({ where: { id: proposalId }, data: { councilMetadata: updatedCouncil as never } });
+      if (action === "submit") {
+        // Tờ trình đi qua Trưởng ban QLKH và Trưởng phòng KHQS trước khi tới Ban giám đốc.
+        const submission = await openApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.evaluationCouncil, subjectType: "proposal", subjectId: proposalId }, { title: proposal.title, hostOrganizationUnitId: proposal.hostOrganizationUnitId });
+        routing = (await boardReviewEvent(tx, submission)) as WorkflowEvent;
+      }
       await auditLog.record({
         action: "propose-council",
         result: "success",
@@ -519,7 +534,7 @@ export class ProposalDecisionsService {
 
       return { success: true, proposalId, councilMetadata: updatedCouncil };
     });
-    await this.notifyAfterCommit(() => invitedNow.map((item) => reviewInvitationEvent(proposalId, invitedFor, item.userId, item.role, item.dueDate)));
+    await this.notifyAfterCommit(() => [...invitedNow.map((item) => reviewInvitationEvent(proposalId, invitedFor, item.userId, item.role, item.dueDate)), ...(routing ? [routing] : [])]);
     return result;
   }
 
@@ -628,6 +643,7 @@ export class ProposalDecisionsService {
       // thêm phân công sau khi gói đã chốt sẽ làm gói không còn khớp vòng đánh giá.
       assertProposalStatus(proposal, ["submitted", "resubmitted", "under_review"], "Chỉ duyệt hội đồng khi hồ sơ đã nộp hoặc đang đánh giá.");
       if (currentCouncil.status !== "submitted") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ duyệt được tờ trình hội đồng đã gửi lãnh đạo." });
+      await assertReadyForLeadership(tx, actor, { kind: APPROVAL_KINDS.evaluationCouncil, subjectType: "proposal", subjectId: proposalId });
       const existingSummary = (await tx.proposalEvaluationSummary.findFirst({ where: { proposalId } })) as { status: string } | null;
       if (existingSummary && existingSummary.status !== "draft") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Bản tổng hợp đánh giá đã chốt hoặc đã trình; không thay đổi hội đồng được nữa." });
 
@@ -729,6 +745,7 @@ export class ProposalDecisionsService {
         });
       }
 
+      await closeApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.evaluationCouncil, subjectType: "proposal", subjectId: proposalId }, "APPROVED", approvalNote || undefined);
       await auditLog.record({
         action: "approve-council",
         result: "success",
@@ -761,6 +778,7 @@ export class ProposalDecisionsService {
       if (currentCouncil.status !== "submitted") {
         throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ trả lại được tờ trình hội đồng đang chờ duyệt." });
       }
+      await assertReadyForLeadership(tx, actor, { kind: APPROVAL_KINDS.evaluationCouncil, subjectType: "proposal", subjectId: proposalId });
       const { reason } = readRejectCouncilInput(input);
       const rejectionReason = reason || "Lãnh đạo yêu cầu điều chỉnh cơ cấu nhân sự Hội đồng.";
       const updatedCouncil = {
@@ -773,6 +791,7 @@ export class ProposalDecisionsService {
       };
 
       await tx.researchProposal.update({ where: { id: proposalId }, data: { councilMetadata: updatedCouncil as never } });
+      await closeApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.evaluationCouncil, subjectType: "proposal", subjectId: proposalId }, "REJECTED", rejectionReason);
       await auditLog.record({
         action: "reject-council",
         result: "success",
@@ -907,7 +926,9 @@ export class ProposalDecisionsService {
   }
 
   async proposeIrbCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>) {
-    return this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
+    let irbRouting: WorkflowEvent | null = null;
+    const result = await this.mutateEvaluationMetadata(actor, proposalId, input, async ({ tx, actor, proposal, auditLog }) => {
+    irbRouting = null;
     assertScientificManagementScope(actor, proposal);
     await this.assertNoDecisionConflict(actor, proposal);
     const existingIrb = (proposal.irbMetadata as Record<string, unknown>) || {};
@@ -948,6 +969,8 @@ export class ProposalDecisionsService {
       where: { id: proposalId },
       data: { irbMetadata: updated as any }
     });
+    const submission = await openApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.irbCouncil, subjectType: "proposal", subjectId: proposalId }, { title: proposal.title, hostOrganizationUnitId: proposal.hostOrganizationUnitId });
+    irbRouting = (await boardReviewEvent(tx, submission)) as WorkflowEvent;
 
     await auditLog.record({
       action: "propose-irb-council",
@@ -960,6 +983,8 @@ export class ProposalDecisionsService {
 
     return { success: true, irb: updated };
     });
+    await this.notifyAfterCommit(() => (irbRouting ? [irbRouting] : []));
+    return result;
   }
 
   async approveIrbCouncil(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
@@ -973,6 +998,7 @@ export class ProposalDecisionsService {
     if (currentCouncil.status !== "submitted") {
       throw new BadRequestException({ message: "Không thể phê duyệt hội đồng IRB chưa được trình." });
     }
+    await assertReadyForLeadership(tx, actor, { kind: APPROVAL_KINDS.irbCouncil, subjectType: "proposal", subjectId: proposalId });
 
     const updated = {
       ...current,
@@ -990,6 +1016,7 @@ export class ProposalDecisionsService {
       data: { irbMetadata: updated as any }
     });
 
+    await closeApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.irbCouncil, subjectType: "proposal", subjectId: proposalId }, "APPROVED");
     await auditLog.record({
       action: "approve-irb-council",
       result: "success",

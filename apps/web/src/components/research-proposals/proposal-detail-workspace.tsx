@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { RoutingStatus } from "@/components/approvals/routing-status";
 import type { CatalogItem } from "@/lib/admin-api";
 import { loadProposalCatalogs } from "@/lib/research-proposals-api";
 import { ProposalMembersEditor } from "@/components/research-proposals/proposal-members-editor";
@@ -757,7 +758,10 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
         {showReviewForm ? <ProposalReviewForm contextVersion={proposal.viewerAuthorization?.contextVersion} proposalId={proposal.id} onReviewSubmitted={() => void refreshWorkflowState()} canSubmitReview={canPerformProposalAction(capabilityState, "proposal.review.submit")} blockedReason={blockedProposalAction(capabilityState, "proposal.review.submit")?.reason ?? capabilityState.reason} /> : null}
 
         {showEvaluationPanel ? (
+          <>
+          <RoutingStatus subjectType="proposal" subjectId={proposal.id} refreshKey={`${proposal.status}|${proposal.councilMetadata?.status ?? ""}|${proposal.updatedAt}`} />
           <ProposalEvaluationPanel contextVersion={proposal.viewerAuthorization?.contextVersion} proposalId={proposal.id} onWorkflowChange={() => void refreshWorkflowState()} canAssignReviewers={canPerformProposalAction(capabilityState, "proposal.review.assign")} canConsolidate={canPerformProposalAction(capabilityState, "proposal.review.consolidate")} canFinalize={canPerformProposalAction(capabilityState, "proposal.review.finalize")} canSubmitPackage={canPerformProposalAction(capabilityState, "proposal.review.submit-package")} blockedReason={blockedProposalAction(capabilityState, "proposal.review.assign")?.reason ?? capabilityState.reason} consolidateBlockedReason={blockedProposalAction(capabilityState, "proposal.review.consolidate")?.reason ?? capabilityState.reason} />
+          </>
         ) : null}
 
         {showDecisionPanel ? <ProposalDecisionPanel proposal={proposal} proposalId={proposal.id} onDecision={() => void refreshWorkflowState()} canDecide={canPerformProposalAction(capabilityState, "proposal.decision.approve")} blockedReason={blockedProposalAction(capabilityState, "proposal.decision.approve")?.reason ?? capabilityState.reason} /> : null}

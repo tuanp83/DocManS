@@ -79,8 +79,8 @@ describe("Nghiệm thu đề tài", () => {
     await assert.rejects(env.closure.proposeCouncil(env.as("officer"), "project-1", { members: [...councilMembers.slice(0, 3), { profileId: "prof-pi", role: "MEMBER" }], contextVersion: await env.context() }), /không thể tham gia hội đồng/);
     await env.closure.proposeCouncil(env.as("officer"), "project-1", { members: councilMembers, meetingDate: "2026-12-01", contextVersion: await env.context() });
     assert.equal(env.round().status, "COUNCIL_PROPOSED");
-    assert.equal(env.dispatched.at(-1).type, "ACCEPTANCE_COUNCIL_PROPOSED");
-    assert.deepEqual(env.dispatched.at(-1).userIds, ["leader"]);
+    // Đề xuất hội đồng là tờ trình qua Trưởng ban QLKH → Trưởng phòng → Ban giám đốc (approval-routing.ts).
+    assert.equal(env.dispatched.at(-1).type, "APPROVAL_ROUTING");
     await assert.rejects(env.closure.establishCouncil(env.as("officer"), "project-1", { contextVersion: await env.context() }), (error) => error.status === 403);
     await env.closure.establishCouncil(env.as("leader"), "project-1", { decisionDate: "2026-11-20", contextVersion: await env.context() });
     assert.equal(env.round().status, "COUNCIL_ESTABLISHED");
@@ -181,7 +181,7 @@ describe("Thanh lý và đóng đề tài", () => {
     await assert.rejects(env.closure.prepareLiquidation(env.as("officer"), "project-1", { recoveredAmount: 70_000_000, contextVersion: await env.context() }), /lớn hơn số đã giải ngân/);
     await env.closure.prepareLiquidation(env.as("officer"), "project-1", { recoveredAmount: 3_000_000, liquidationDate: "2026-12-20", evidenceFileIds: ["file-liquidation"], contextVersion: await env.context() });
     assert.equal(env.db.tables.liquidations[0].status, "DRAFT");
-    assert.equal(env.dispatched.at(-1).type, "LIQUIDATION_PREPARED");
+    assert.equal(env.dispatched.at(-1).type, "APPROVAL_ROUTING");
     await assert.rejects(env.closure.approveLiquidation(env.as("officer"), "project-1", { contextVersion: await env.context() }), (error) => error.status === 403);
     await assert.rejects(env.closure.approveLiquidation(env.as("leader"), "project-1", { contextVersion: await env.context() }), /Chưa cân đối kinh phí/);
     await env.closure.prepareLiquidation(env.as("officer"), "project-1", { recoveredAmount: 5_000_000, liquidationDate: "2026-12-20", contextVersion: await env.context() });

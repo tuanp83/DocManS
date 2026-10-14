@@ -7,6 +7,7 @@ import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { readTransactionClockV1 } from "../permissions/authorization-v1.service.js";
 import { getOrganizationScopeIds } from "../proposals-shared/proposal-access.js";
+import { APPROVAL_KINDS, assertReadyForLeadership, boardReviewEvent, closeApprovalSubmission, openApprovalSubmission, pendingApprovalStages } from "../proposals-shared/approval-routing.js";
 import { canAssignProjectOfficer, canDecideProjectExtension, canMonitorProjects, isInProjectScope, isProjectLeadership, isProjectStaff } from "./project-roles.js";
 import { isRelationshipActiveAt } from "../proposals-shared/proposal-participation.js";
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
@@ -158,7 +159,9 @@ export class ApprovedProjectsService {
     const participant = !!actorMember && actorMember.participationRole !== "TOPIC_PI";
     const responsibleMember = !!actorMember && project.milestones.some((milestone: AnyRecord) => milestone.responsibleMemberId === actorMember.id && milestone.status !== "completed");
     const facts = closureFacts(project);
-    const capability = projectViewerAuthorizationV1({ actor, project: { ...project, ownerId: projectPi?.userId ?? "" }, projectOfficer: officer, participant: { isParticipant: participant, role: actorMember?.participationRole, effectiveFrom: actorMember?.effectiveFrom?.toISOString?.(), effectiveUntil: actorMember?.effectiveUntil?.toISOString?.() }, responsibleMember, closure: { acceptanceStatus: facts.acceptanceStatus, liquidationStatus: facts.liquidationStatus, superiorStatus: facts.superiorStatus } });
+    // Tờ trình đang mở của đề tài: Ban giám đốc chỉ thấy nút ký khi tờ trình đã qua Trưởng ban và Trưởng phòng.
+    const routing = (await pendingApprovalStages(tx, "project", [projectId])).get(projectId) ?? {};
+    const capability = projectViewerAuthorizationV1({ actor, project: { ...project, ownerId: projectPi?.userId ?? "" }, projectOfficer: officer, participant: { isParticipant: participant, role: actorMember?.participationRole, effectiveFrom: actorMember?.effectiveFrom?.toISOString?.(), effectiveUntil: actorMember?.effectiveUntil?.toISOString?.() }, responsibleMember, closure: { acceptanceStatus: facts.acceptanceStatus, liquidationStatus: facts.liquidationStatus, superiorStatus: facts.superiorStatus }, routing: Object.fromEntries(Object.entries(routing).map(([kind, value]) => [kind, value!.stage])) });
     if (!capability.allowedActions.includes("project.read")) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Không có quyền xem đề tài này." });
     return { project, officer, capability };
   }
@@ -801,15 +804,40 @@ export class ApprovedProjectsService {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const request = await this.findRequest(tx, project, input.requestId);
       if (request.requestType !== requestType) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
-      if (requestType === ADJUSTMENT || request.status !== "ready_for_head_decision") await this.assertOfficer(tx, currentActor, project);
-      else { this.assertExtensionDecider(currentActor, project); await this.assertNoEvaluationConflict(tx, currentActor.id, project.proposalId); }
-      const allowed = requestType === ADJUSTMENT ? ["submitted", "under_staff_review"] : ["submitted", "under_staff_validation", "ready_for_head_decision"];
+      // Trước khi trình: chuyên viên phụ trách yêu cầu bổ sung; sau khi trình: Ban giám đốc yêu cầu bổ sung.
+      if (request.status !== "ready_for_head_decision") await this.assertOfficer(tx, currentActor, project);
+      else {
+        this.assertExtensionDecider(currentActor, project);
+        await this.assertNoEvaluationConflict(tx, currentActor.id, project.proposalId);
+        // Ban giám đốc yêu cầu bổ sung khi tờ trình đã tới mình: kết thúc tờ trình, chuyên viên trình lại sau khi bổ sung.
+        const key = { kind: requestType === ADJUSTMENT ? APPROVAL_KINDS.projectAdjustment : APPROVAL_KINDS.projectExtension, subjectType: "project" as const, subjectId: project.id, subjectRef: request.id };
+        await assertReadyForLeadership(tx, currentActor, key);
+        await closeApprovalSubmission(tx, currentActor, key, "RETURNED", typeof input.reason === "string" ? input.reason : undefined);
+      }
+      const allowed = requestType === ADJUSTMENT ? ["submitted", "under_staff_review", "ready_for_head_decision"] : ["submitted", "under_staff_validation", "ready_for_head_decision"];
       if (!allowed.includes(request.status)) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
       if (!input.reason || !input.responseDeadline) throw new BadRequestException({ message: "Cần lý do và hạn bổ sung." });
       if (new Date(input.responseDeadline).getTime() <= (await readTransactionClockV1(tx)).getTime()) throw new BadRequestException({ code: "DEADLINE_INVALID", message: "Hạn bổ sung phải ở tương lai." });
       const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: "supplement_requested", decisionNote: input.reason, responseDeadline: input.responseDeadline } });
       await this.recordRequestAction(tx, currentActor, project, request, "request-supplement", "supplement_requested", { reason: input.reason, responseDeadline: input.responseDeadline });
       notify({ type: NOTIFICATION_TYPES.projectRequestSupplement, userIds: [request.requesterId], excludeUserIds: [currentActor.id], title: `Yêu cầu bổ sung ${requestType === EXTENSION ? "hồ sơ gia hạn" : "hồ sơ điều chỉnh"}: ${project.title}`, message: `${requestType === EXTENSION ? "Yêu cầu gia hạn" : "Yêu cầu điều chỉnh"} của đề tài ${label(project)} cần bổ sung trước ${vnDate(input.responseDeadline)}. Nội dung: ${input.reason}`, link: projectLink(project.id), metadata: { projectId: project.id, requestId: request.id } });
+      return updated;
+    });
+  }
+
+  /** Chuyên viên phụ trách thẩm định xong đề nghị điều chỉnh và trình (qua Trưởng ban, Trưởng phòng) lên Ban giám đốc. */
+  async prepareAdjustment(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+    return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
+      await this.assertOfficer(tx, currentActor, project);
+      const request = await this.findRequest(tx, project, input.requestId);
+      if (request.requestType !== ADJUSTMENT || request.status !== "under_staff_review") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
+      const submitted = request.revisions.find((revision: AnyRecord) => revision.revision === request.revision);
+      this.adjustmentUpdate(project, (submitted?.proposedValues ?? request.proposedValues) as AnyRecord);
+      const now = await readTransactionClockV1(tx);
+      const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: "ready_for_head_decision", preparedById: currentActor.id, preparedAt: now, appraisal: { reviewNote: input.note ?? "Đã thẩm định đề nghị điều chỉnh" } } });
+      await this.recordRequestAction(tx, currentActor, project, request, "prepare", "ready_for_head_decision", { note: input.note ?? null });
+      const submission = await openApprovalSubmission(tx, currentActor, { kind: APPROVAL_KINDS.projectAdjustment, subjectType: "project", subjectId: project.id, subjectRef: request.id }, { title: project.title, hostOrganizationUnitId: project.hostOrganizationUnitId, note: input.note ?? undefined });
+      notify((await boardReviewEvent(tx, submission)) as WorkflowEvent);
       return updated;
     });
   }
@@ -823,7 +851,9 @@ export class ApprovedProjectsService {
       const now = await readTransactionClockV1(tx);
       const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: "ready_for_head_decision", preparedById: currentActor.id, preparedAt: now, appraisal: { validationNote: input.note ?? "Đã kiểm tra hành chính" } } });
       await this.recordRequestAction(tx, currentActor, project, request, "prepare", "ready_for_head_decision", { note: input.note ?? null });
-      notify({ type: NOTIFICATION_TYPES.projectRequestAwaitingDecision, userIds: await councilSignerUserIds(tx), excludeUserIds: [currentActor.id, ...this.projectRecipients(project).team], title: `Đề nghị gia hạn chờ phê duyệt: ${project.title}`, message: `Chuyên viên đã thẩm định và trình đề nghị gia hạn của đề tài ${label(project)}. Vui lòng xem xét, quyết định.`, link: projectLink(project.id), metadata: { projectId: project.id, requestId: request.id } });
+      // Trình qua Trưởng ban QLKH và Trưởng phòng KHQS trước khi Ban giám đốc quyết định.
+      const submission = await openApprovalSubmission(tx, currentActor, { kind: APPROVAL_KINDS.projectExtension, subjectType: "project", subjectId: project.id, subjectRef: request.id }, { title: project.title, hostOrganizationUnitId: project.hostOrganizationUnitId, note: input.note ?? undefined });
+      notify((await boardReviewEvent(tx, submission)) as WorkflowEvent);
       return updated;
     });
   }
@@ -831,14 +861,14 @@ export class ApprovedProjectsService {
   async decideRequest(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, decision: "approve" | "reject", input: AnyRecord) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const request = await this.findRequest(tx, project, input.requestId);
-      const required = requestType === ADJUSTMENT ? "under_staff_review" : "ready_for_head_decision";
-      if (request.requestType !== requestType || request.status !== required) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
-      if (requestType === ADJUSTMENT) await this.assertOfficer(tx, currentActor, project);
-      else {
-        this.assertExtensionDecider(currentActor, project);
-        await this.assertNoEvaluationConflict(tx, currentActor.id, project.proposalId);
-        if (!request.preparedById || !request.preparedAt) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
-      }
+      // Điều chỉnh và gia hạn đều do Ban giám đốc (Giám đốc hoặc Phó GĐ phụ trách Khoa học) quyết định, sau khi chuyên
+      // viên trình qua Trưởng ban QLKH và Trưởng phòng KHQS.
+      if (request.requestType !== requestType || request.status !== "ready_for_head_decision") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
+      this.assertExtensionDecider(currentActor, project);
+      await this.assertNoEvaluationConflict(tx, currentActor.id, project.proposalId);
+      if (!request.preparedById || !request.preparedAt) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
+      const routingKey = { kind: requestType === ADJUSTMENT ? APPROVAL_KINDS.projectAdjustment : APPROVAL_KINDS.projectExtension, subjectType: "project" as const, subjectId: project.id, subjectRef: request.id };
+      await assertReadyForLeadership(tx, currentActor, routingKey);
       if (request.requesterId === currentActor.id || this.activeMember(project, currentActor.id)) throw new ForbiddenException({ code: "CONFLICT_DENIED" });
       if (decision === "reject" && !input.reason) throw new BadRequestException({ message: "Cần lý do từ chối." });
       const submitted = request.revisions.find((revision: AnyRecord) => revision.revision === request.revision);
@@ -857,6 +887,7 @@ export class ApprovedProjectsService {
       }
       const status = decision === "approve" ? "approved" : "rejected";
       const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status, decisionById: currentActor.id, decidedAt: now, decisionNote: input.reason ?? input.note ?? null } });
+      await closeApprovalSubmission(tx, currentActor, routingKey, decision === "approve" ? "APPROVED" : "REJECTED", input.reason ?? input.note ?? undefined);
       await this.recordRequestAction(tx, currentActor, project, request, decision, status, { before: request.currentValues, after: decision === "approve" ? nextValues : null, reason: input.reason ?? input.note ?? null });
       const kind = requestType === EXTENSION ? "gia hạn" : "điều chỉnh";
       notify({ type: NOTIFICATION_TYPES.projectRequestDecision, userIds: [request.requesterId], excludeUserIds: [currentActor.id], title: `${decision === "approve" ? "Đã phê duyệt" : "Không phê duyệt"} yêu cầu ${kind}: ${project.title}`, message: `Yêu cầu ${kind} của đề tài ${label(project)} ${decision === "approve" ? "đã được phê duyệt" : "không được phê duyệt"}.${input.reason ? ` Ghi chú: ${input.reason}` : ""}`, link: projectLink(project.id), metadata: { projectId: project.id, requestId: request.id, decision } });

@@ -22,10 +22,16 @@ test("PI can report and request changes but cannot decide them", () => {
   assert(!has(view, "project.officer.assign"));
 });
 
-test("assigned Staff decides adjustments; Leadership decides extensions only", () => {
+test("assigned Staff prepares adjustments; Leadership decides adjustments and extensions", () => {
   const staff = projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project, projectOfficer: officer, request: { requestType: "adjustment", status: "under_staff_review", requesterId: "pi" } });
-  assert(has(staff, "project.adjustment.approve"));
+  assert(has(staff, "project.adjustment.prepare"));
+  assert(!has(staff, "project.adjustment.approve"));
   assert(!has(staff, "project.extension.approve"));
+  const leaderOnAdjustment = projectViewerAuthorizationV1({ actor: actor("leader", "LEADERSHIP_APPROVAL_AUTHORITY"), project, request: { requestType: "adjustment", status: "ready_for_head_decision", requesterId: "pi" } });
+  assert(has(leaderOnAdjustment, "project.adjustment.approve"));
+  // Tờ trình còn ở Phòng KHQS thì Ban giám đốc chưa ký được.
+  const notRouted = projectViewerAuthorizationV1({ actor: actor("leader", "LEADERSHIP_APPROVAL_AUTHORITY"), project, request: { requestType: "adjustment", status: "ready_for_head_decision", requesterId: "pi" }, routing: { PROJECT_ADJUSTMENT: "HEAD_REVIEW" } });
+  assert(!has(notRouted, "project.adjustment.approve"));
   const staffOnExtension = projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project, projectOfficer: officer, request: { requestType: "extension", status: "ready_for_head_decision", requesterId: "pi" } });
   assert(!has(staffOnExtension, "project.extension.approve"));
 
@@ -33,7 +39,6 @@ test("assigned Staff decides adjustments; Leadership decides extensions only", (
   assert(has(leader, "project.monitor"));
   assert(has(leader, "project.extension.approve"));
   assert(has(leader, "project.extension.reject"));
-  assert(!has(leader, "project.adjustment.approve"));
   assert(!has(leader, "project.report.accept"));
 });
 

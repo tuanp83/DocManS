@@ -21,6 +21,7 @@ import { HealthController } from "./infrastructure/health/health.controller.js";
 import { MinioObjectStorageService } from "./infrastructure/minio/minio-object-storage.service.js";
 import { ScheduleModule } from "@nestjs/schedule";
 import { TasksModule } from "./tasks/tasks.module.js";
+import { ApprovalsModule } from "./approvals/approvals.module.js";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { TasksModule } from "./tasks/tasks.module.js";
     ProposalIntakePeriodsModule,
     ResearchProposalsModule,
     ProposalEvaluationsModule,
+    ApprovalsModule,
     ResearcherProfilesModule,
     NotificationsModule,
     ScientificDocumentsModule,

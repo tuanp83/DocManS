@@ -84,6 +84,9 @@ export class ApprovedProjectsController {
   @Post(":id/requests/extension/:requestId/validate")
   async validateExtension(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: any) { return { request: await this.projects.validateExtension(req.currentUser!, id, { ...body, requestId }) }; }
 
+  @Post(":id/requests/adjustment/:requestId/prepare")
+  async prepareAdjustment(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: any) { return { request: await this.projects.prepareAdjustment(req.currentUser!, id, { ...body, requestId }) }; }
+
   @Post(":id/requests/extension/:requestId/prepare")
   async prepareExtension(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: any) { return { request: await this.projects.prepareExtension(req.currentUser!, id, { ...body, requestId }) }; }
 
