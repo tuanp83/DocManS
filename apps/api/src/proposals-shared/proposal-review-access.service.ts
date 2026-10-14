@@ -72,7 +72,8 @@ export class ProposalReviewAccessService {
         })
       ]);
 
-      return { ...resolveProposalReviewAccess(assignments as ReviewAssignmentLike[], asOf), hasPersistedReview: Boolean(persistedReview), hasReviewConflict: Boolean(persistedReview) || assignments.some((assignment) => (assignment.status === "assigned" || assignment.status === "completed") && (!assignment.effectiveUntil || assignment.effectiveUntil > asOf)), conflictUnresolved: false };
+      const irbMember = await this.activeIrbProposalIds(userId, [proposalId]);
+      return { ...resolveProposalReviewAccess(assignments as ReviewAssignmentLike[], asOf), isIrbMember: irbMember.has(proposalId), hasPersistedReview: Boolean(persistedReview), hasReviewConflict: Boolean(persistedReview) || assignments.some((assignment) => (assignment.status === "assigned" || assignment.status === "completed") && (!assignment.effectiveUntil || assignment.effectiveUntil > asOf)), conflictUnresolved: false };
     } catch {
       return { ...resolveProposalReviewAccess(null, asOf), hasPersistedReview: false, conflictUnresolved: true };
     }
@@ -87,8 +88,9 @@ export class ProposalReviewAccessService {
 
     let assignments: AssignmentRow[] = [];
     let persistedReviews: Array<{ proposalId: string }> = [];
+    let irbMember = new Set<string>();
     try {
-      [assignments, persistedReviews] = await Promise.all([
+      [assignments, persistedReviews, irbMember] = await Promise.all([
         this.prisma.proposalReviewAssignment.findMany({
           where: { proposalId: { in: proposalIds }, reviewerUserId: userId },
           select: { id: true, proposalId: true, status: true, assignmentRole: true, assignedAt: true, effectiveFrom: true, effectiveUntil: true, acceptedAt: true }
@@ -96,7 +98,8 @@ export class ProposalReviewAccessService {
         this.prisma.proposalReview.findMany({
           where: { proposalId: { in: proposalIds }, reviewerUserId: userId, status: { in: ["draft", "submitted"] } },
           select: { proposalId: true }
-        }) as Promise<Array<{ proposalId: string }>>
+        }) as Promise<Array<{ proposalId: string }>>,
+        this.activeIrbProposalIds(userId, proposalIds)
       ]);
     } catch {
       for (const proposalId of proposalIds) resolved.set(proposalId, { ...resolveProposalReviewAccess(null, asOf), hasPersistedReview: false, conflictUnresolved: true });
@@ -112,9 +115,17 @@ export class ProposalReviewAccessService {
 
     const persisted = new Set(persistedReviews.map((review) => review.proposalId));
     for (const proposalId of proposalIds) {
-      resolved.set(proposalId, { ...resolveProposalReviewAccess(byProposal.get(proposalId) ?? [], asOf), hasPersistedReview: persisted.has(proposalId), hasReviewConflict: persisted.has(proposalId) || (byProposal.get(proposalId) ?? []).some((assignment) => (assignment.status === "assigned" || assignment.status === "completed") && (!assignment.effectiveUntil || assignment.effectiveUntil > asOf)), conflictUnresolved: false });
+      resolved.set(proposalId, { ...resolveProposalReviewAccess(byProposal.get(proposalId) ?? [], asOf), isIrbMember: irbMember.has(proposalId), hasPersistedReview: persisted.has(proposalId), hasReviewConflict: persisted.has(proposalId) || (byProposal.get(proposalId) ?? []).some((assignment) => (assignment.status === "assigned" || assignment.status === "completed") && (!assignment.effectiveUntil || assignment.effectiveUntil > asOf)), conflictUnresolved: false });
     }
 
     return resolved;
+  }
+
+  /** Hồ sơ mà người dùng là thành viên Hội đồng IRB đã được ký thành lập (CSDL giả lập không có bảng: rỗng). */
+  private async activeIrbProposalIds(userId: string, proposalIds: string[]) {
+    const table = (this.prisma as unknown as { proposalIrbMember?: { findMany(args: unknown): Promise<Array<{ proposalId: string }>> } }).proposalIrbMember;
+    if (!table?.findMany || !proposalIds.length) return new Set<string>();
+    const rows = await table.findMany({ where: { userId, proposalId: { in: proposalIds }, status: "active" }, select: { proposalId: true } });
+    return new Set(rows.map((row) => row.proposalId));
   }
 }

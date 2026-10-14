@@ -118,6 +118,8 @@ export type ProposalReviewAccess = {
   hasReviewConflict?: boolean;
   /** True when the review history could not be resolved safely. */
   conflictUnresolved?: boolean;
+  /** Thành viên Hội đồng Đạo đức (IRB) đã được ký thành lập: chỉ được đọc hồ sơ, không chấm phiếu đánh giá. */
+  isIrbMember?: boolean;
 };
 
 const NO_REVIEW_ACCESS: ProposalReviewAccess = {

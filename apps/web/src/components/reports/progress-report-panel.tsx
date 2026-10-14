@@ -173,8 +173,9 @@ export function ProgressReportPanel() {
       const disbursedPercent = budgetTotal > 0 ? Math.min(100, Math.round((disbursedTotal / budgetTotal) * 100)) : 0;
 
       // Dữ liệu Đạo đức Y sinh (IRB)
-      const irbStatus = proposal.irbMetadata?.status || "PENDING";
-      const irbCert = proposal.irbMetadata?.certificateNumber || null;
+      // Giấy chứng nhận nằm ở irbMetadata.certificate (status APPROVED / REJECTED).
+      const irbStatus = proposal.irbMetadata?.certificate?.status || "PENDING";
+      const irbCert = proposal.irbMetadata?.certificate?.certificateNumber || null;
 
       // Dữ liệu Nghiệm thu
       // Kết quả nghiệm thu do máy chủ ghi ở evaluationResult (totalScore, classification).

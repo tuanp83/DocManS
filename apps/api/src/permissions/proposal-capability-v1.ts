@@ -72,7 +72,8 @@ export function projectProposalViewerAuthorizationV1(input: ProposalCapabilityIn
     input.actor.systemRole === "LEADERSHIP_APPROVAL_AUTHORITY" ? "LEADERSHIP_APPROVAL_AUTHORITY_OVERSIGHT" : "",
     isScienceDeputyDirector(input.actor) ? "SCIENCE_DEPUTY_DIRECTOR_OVERSIGHT" : "",
     input.participation?.isParticipant ? input.participation.role : "",
-    input.reviewAccess?.isAssignedReviewer ? "REVIEWER_ASSIGNMENT" : ""
+    input.reviewAccess?.isAssignedReviewer ? "REVIEWER_ASSIGNMENT" : "",
+    input.reviewAccess?.isIrbMember ? "IRB_COUNCIL_MEMBER" : ""
   ].filter(Boolean);
 
   return {

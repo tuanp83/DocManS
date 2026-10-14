@@ -52,7 +52,12 @@ export const NOTIFICATION_TYPES = {
   productResult: "PRODUCT_RESULT",
   superiorRequestDue: "SUPERIOR_REQUEST_DUE",
   superiorRequestOverdue: "SUPERIOR_REQUEST_OVERDUE",
-  superiorRequestSent: "SUPERIOR_REQUEST_SENT"
+  superiorRequestSent: "SUPERIOR_REQUEST_SENT",
+  irbInvitation: "IRB_INVITATION",
+  irbInvitationAccepted: "IRB_INVITATION_ACCEPTED",
+  irbInvitationDeclined: "IRB_INVITATION_DECLINED",
+  irbCouncilEstablished: "IRB_COUNCIL_ESTABLISHED",
+  irbUpdate: "IRB_UPDATE"
 } as const;
 
 export const RESEARCH_MANAGEMENT_ROLES = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD"];

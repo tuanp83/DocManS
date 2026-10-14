@@ -216,6 +216,13 @@ async function revertOnReturn(tx: any, submission: ApprovalSubmissionRow, actor:
       if (irb.council?.status === "submitted") await tx.researchProposal.update({ where: { id: submission.subjectId }, data: { irbMetadata: { ...irb, council: { ...irb.council, status: "returned", ...returnedInfo } } } });
       return;
     }
+    case "IRB_CERTIFICATE": {
+      // Kết luận về lại thư ký hội đồng để sửa; chuyên viên trình lại sau khi thư ký chốt.
+      const proposal = await tx.researchProposal.findUnique({ where: { id: submission.subjectId }, select: { irbMetadata: true } });
+      const irb = (proposal?.irbMetadata ?? {}) as Record<string, any>;
+      if (irb.conclusion?.status === "submitted") await tx.researchProposal.update({ where: { id: submission.subjectId }, data: { irbMetadata: { ...irb, conclusion: { ...irb.conclusion, status: "returned", ...returnedInfo } } } });
+      return;
+    }
     case "DECISION_PACKAGE": {
       // Gói đánh giá về lại "đã chốt": người điều phối mở lại để sửa hoặc trình lại.
       const moved = await tx.researchProposal.updateMany({ where: { id: submission.subjectId, status: "ready_for_approval" }, data: { status: "under_review" } });

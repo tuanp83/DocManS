@@ -47,6 +47,12 @@ export class ProposalEvaluationsController {
   // ST-3.2 ------------------------------------------------------------------------------------
 
   /** Two path segments, so it can never be captured by `@Get(":id")` on the proposals controller. */
+  /** Lời mời và tư cách thành viên Hội đồng IRB của người xem (chỉ tên đề tài). */
+  @Get("irb-invitations/mine")
+  async listMyIrbInvitations(@Req() request: RequestWithCurrentUser) {
+    return { invitations: await this.decisions.listMyIrbInvitations(request.currentUser!) };
+  }
+
   @Get("review-assignments/mine")
   async listMyAssignments(@Req() request: RequestWithCurrentUser) {
     return { assignments: await this.assignments.listMyAssignments(request.currentUser!) };
@@ -271,6 +277,39 @@ export class ProposalEvaluationsController {
     @Body() body: Record<string, unknown> = {}
   ) {
     return this.decisions.approveIrbCouncil(request.currentUser!, id, body ?? {});
+  }
+
+  @Post(":id/irb/members/:memberId/accept")
+  async acceptIrbInvitation(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Param("memberId") memberId: string) {
+    return this.decisions.respondToIrbInvitation(request.currentUser!, id, memberId, { response: "accept" });
+  }
+
+  @Post(":id/irb/members/:memberId/decline")
+  async declineIrbInvitation(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Param("memberId") memberId: string, @Body() body: Record<string, unknown> = {}) {
+    return this.decisions.respondToIrbInvitation(request.currentUser!, id, memberId, { response: "decline", reason: body?.reason });
+  }
+
+  @Post(":id/irb/reject-council")
+  async rejectIrbCouncil(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown> = {}) {
+    return this.decisions.rejectIrbCouncil(request.currentUser!, id, body ?? {});
+  }
+
+  /** Thư ký lập kết luận: action=save|finalize. */
+  @Post(":id/irb/conclusion")
+  async saveIrbConclusion(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown> = {}) {
+    return this.decisions.saveIrbConclusion(request.currentUser!, id, body ?? {});
+  }
+
+  /** Chuyên viên trình kết luận đã chốt qua Phòng KHQS. */
+  @Post(":id/irb/conclusion/submit")
+  async submitIrbConclusion(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown> = {}) {
+    return this.decisions.submitIrbConclusion(request.currentUser!, id, body ?? {});
+  }
+
+  /** Ban giám đốc trả kết luận về thư ký. */
+  @Post(":id/irb/conclusion/return")
+  async returnIrbConclusion(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown> = {}) {
+    return this.decisions.returnIrbConclusion(request.currentUser!, id, body ?? {});
   }
 
   @Post(":id/irb/review")

@@ -55,6 +55,9 @@ import { ProposalAuditTimeline } from "@/components/research-proposals/proposal-
 import { useSession } from "@/components/auth/session-provider";
 import { HeartPulse } from "lucide-react";
 
+const IRB_COUNCIL_LABELS: Record<string, string> = { draft: "Đang soạn / mời", submitted: "Đang trình", returned: "Bị trả lại", rejected: "Ban giám đốc trả lại", approved: "Đã ký thành lập" };
+const IRB_CONCLUSION_LABELS: Record<string, string> = { draft: "Thư ký đang soạn", finalized: "Chờ chuyên viên trình", submitted: "Đang trình ký", returned: "Bị trả lại", signed: "Đã ký" };
+
 type ActiveTab = "progress" | "council" | "minutes" | "irb" | "audit" | "portfolio";
 
 function formatDate(dateStr?: string) {
@@ -944,24 +947,20 @@ function ReviewsWorkspaceContent() {
               <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
                   <div>
-                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Trạng thái IRB</span>
-                    <span style={{ fontSize: "14px", fontWeight: 700, color: selectedProposal.irbMetadata?.status === "APPROVED" ? "#15803d" : "#b45309" }}>
-                      {selectedProposal.irbMetadata?.status === "APPROVED" ? "Đã phê duyệt" : "Chưa phê duyệt"}
-                    </span>
+                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Hội đồng IRB</span>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>{IRB_COUNCIL_LABELS[selectedProposal.irbMetadata?.council?.status ?? ""] ?? "Chưa lập"}</span>
                   </div>
                   <div>
-                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Số giấy chứng nhận</span>
-                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>{selectedProposal.irbMetadata?.certificateNumber || "Chưa cấp"}</span>
+                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Kết luận</span>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>{IRB_CONCLUSION_LABELS[selectedProposal.irbMetadata?.conclusion?.status ?? ""] ?? "Chưa có"}</span>
                   </div>
                   <div>
-                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Ngày cấp</span>
-                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>{formatDate(selectedProposal.irbMetadata?.approvedAt)}</span>
+                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Giấy chứng nhận</span>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>{selectedProposal.irbMetadata?.certificate ? (selectedProposal.irbMetadata.certificate.status === "APPROVED" ? `Số ${selectedProposal.irbMetadata.certificate.certificateNumber}` : "Không chấp thuận") : "Chưa cấp"}</span>
                   </div>
                   <div>
-                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Phân loại nghiên cứu</span>
-                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>
-                      {selectedProposal.irbMetadata?.reviewType === "exempt" ? "Miễn trừ" : selectedProposal.irbMetadata?.reviewType === "expedited" ? "Rút gọn" : selectedProposal.irbMetadata?.reviewType === "full_board" ? "Đầy đủ" : "Chưa xác định"}
-                    </span>
+                    <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, display: "block", marginBottom: "4px" }}>Ngày ký</span>
+                    <span style={{ fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>{formatDate(selectedProposal.irbMetadata?.certificate?.decisionDate)}</span>
                   </div>
                 </div>
               </div>
@@ -988,8 +987,6 @@ function ReviewsWorkspaceContent() {
             setModalTargetProposal(null);
           }}
           proposal={modalTargetProposal}
-          currentUserRole={account?.systemRole}
-          currentUserUsername={account?.username}
           onSuccess={() => void loadData()}
         />
       )}
