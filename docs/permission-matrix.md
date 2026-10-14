@@ -23,6 +23,8 @@ document must be updated in the same change set.
 
 ## 2. Canonical Roles
 
+> **Cập nhật 10/2026 — phân cấp vai trò.** Có thêm ba vai trò: Phó Giám đốc phụ trách Khoa học (`SCIENCE_DEPUTY_DIRECTOR`), Phó phòng KHQS (`RESEARCH_MANAGEMENT_DEPUTY_HEAD`), Trưởng ban QLKH (`RESEARCH_BOARD_HEAD`). `RESEARCH_OVERSIGHT_AUTHORITY` nay là **các Phó Giám đốc chỉ theo dõi** (không phải Phó GĐ phụ trách Khoa học). Mọi thủ tục lên Ban giám đốc đi qua Trưởng ban và Trưởng phòng. Quy tắc hiện hành: [docs/design/phan-cap-va-trinh-duyet.md](design/phan-cap-va-trinh-duyet.md); các mục dưới đây giữ lại làm lịch sử.
+
 ### System Administrator / Quan tri he thong
 
 - Main responsibility: manage accounts, roles, organization scopes, shared
