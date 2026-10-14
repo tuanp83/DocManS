@@ -62,9 +62,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <div>
                   <span className="user-name">{account.name}</span>
                   <span className="user-role">
-                    {account.unit && !account.systemRoleLabel.toLowerCase().includes(account.unit.toLowerCase())
-                      ? `${account.systemRoleLabel} - ${account.unit}`
-                      : account.systemRoleLabel}
+                    {account.positions.length
+                      ? `${account.positions[0]}${account.positions.length > 1 ? ` (+${account.positions.length - 1})` : ""}`
+                      : account.unit && !account.systemRoleLabel.toLowerCase().includes(account.unit.toLowerCase())
+                        ? `${account.systemRoleLabel} - ${account.unit}`
+                        : account.systemRoleLabel}
                   </span>
                 </div>
                 <ChevronDown className="user-caret" size={16} aria-hidden="true" />
@@ -76,6 +78,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     ? `${account.systemRoleLabel} - ${account.unit}`
                     : account.systemRoleLabel}
                 </p>
+                {account.positions.map((position) => (
+                  <p key={position} className="user-menu-meta" style={{ fontWeight: 600 }}>
+                    {position}
+                  </p>
+                ))}
                 {account.systemRole === "RESEARCHER_INTERNAL_USER" || account.systemRole === "EXTERNAL_RESEARCHER_USER" || account.researcherProfileId ? (
                   <>
                     <a className="button" href="/my-profile">Lý lịch khoa học</a>

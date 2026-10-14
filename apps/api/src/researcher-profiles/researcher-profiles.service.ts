@@ -1,4 +1,5 @@
 import { PasswordService } from "../auth/password.service.js";
+import { positionDisplay } from "../organization/unit-positions.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
@@ -42,10 +43,12 @@ type ProfileWithRelations = {
   expertiseKeywords: Array<{ keyword: string; keywordKey: string }>;
   credentialDeliveries: Array<{ id: string; status: string; recipientEmail: string; expiresAt: Date | null; createdAt: Date }>;
   linkedUserId: string | null;
-  linkedUser: { id: string; username: string | null; displayName: string; status: string; systemRole: string | null; mustChangePassword: boolean; credentialEmail: string | null } | null;
+  linkedUser: { id: string; username: string | null; displayName: string; status: string; systemRole: string | null; mustChangePassword: boolean; credentialEmail: string | null; unitPositions?: AccountPositionRow[] } | null;
   publications: Array<{ id: string; title: string; venue: string | null; publicationYear: number | null; doi: string | null; authors: string | null; status: string; notes: string | null; createdAt: Date; updatedAt: Date }>;
   participations: Array<{ id: string; projectTitle: string; participationRole: string; level: string; startsOn: Date | null; endsOn: Date | null; status: string; notes: string | null; sourceType: string; sourceRecordId: string | null; supersedesId: string | null; createdAt: Date; updatedAt: Date }>;
 };
+
+type AccountPositionRow = { positionCode: string; organizationUnit: { name: string; unitType: string; status: string } };
 
 const profileInclude = {
   managementOrganizationUnit: { select: { id: true, code: true, name: true, status: true } },
@@ -54,7 +57,7 @@ const profileInclude = {
   researchFields: { include: { catalogItem: { select: { id: true, code: true, name: true, type: true } } }, orderBy: { catalogItem: { name: "asc" } } },
   expertiseKeywords: { orderBy: { keywordKey: "asc" } },
   credentialDeliveries: { select: { id: true, status: true, recipientEmail: true, expiresAt: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 },
-  linkedUser: { select: { id: true, username: true, displayName: true, status: true, systemRole: true, mustChangePassword: true, credentialEmail: true } },
+  linkedUser: { select: { id: true, username: true, displayName: true, status: true, systemRole: true, mustChangePassword: true, credentialEmail: true, unitPositions: { select: { positionCode: true, organizationUnit: { select: { name: true, unitType: true, status: true } } }, orderBy: { createdAt: "asc" } } } },
   publications: { orderBy: [{ publicationYear: "desc" }, { title: "asc" }] },
   participations: { orderBy: [{ startsOn: "desc" }, { projectTitle: "asc" }] }
 } satisfies Prisma.ResearcherProfileInclude;
@@ -580,8 +583,18 @@ export class ResearcherProfilesService {
     }
   }
 
-  private safeAccount(user: { id: string; username: string | null; displayName: string; status: string; systemRole: string | null; mustChangePassword: boolean; credentialEmail?: string | null }) {
-    return { id: user.id, username: user.username, email: user.credentialEmail ?? null, displayName: user.displayName, status: user.status, systemRole: user.systemRole, mustChangePassword: user.mustChangePassword };
+  private safeAccount(user: { id: string; username: string | null; displayName: string; status: string; systemRole: string | null; mustChangePassword: boolean; credentialEmail?: string | null; unitPositions?: AccountPositionRow[] }) {
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.credentialEmail ?? null,
+      displayName: user.displayName,
+      status: user.status,
+      systemRole: user.systemRole,
+      mustChangePassword: user.mustChangePassword,
+      // Chức danh tại đơn vị của tài khoản (chỉ để hiển thị).
+      positions: (user.unitPositions ?? []).filter((item) => item.organizationUnit.status === "active").map((item) => positionDisplay(item.organizationUnit.unitType, item.positionCode, item.organizationUnit.name))
+    };
   }
 
   private activationUrl(token: string) {

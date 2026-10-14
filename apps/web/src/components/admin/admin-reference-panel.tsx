@@ -59,6 +59,14 @@ export function AdminRolesPanel() {
   );
 }
 
+const UNIT_TYPE_OPTIONS = [
+  { code: "INSTITUTE", label: "Viện" },
+  { code: "DEPARTMENT", label: "Phòng" },
+  { code: "FACULTY", label: "Khoa" },
+  { code: "DIVISION", label: "Bộ môn" },
+  { code: "OTHER", label: "Khác" }
+];
+
 export function AdminUnitsPanel() {
   const [units, setUnits] = useState<OrganizationUnit[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -88,9 +96,11 @@ export function AdminUnitsPanel() {
     setFormError("");
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const unitType = String(form.get("unitType") ?? "");
     const input = {
       code: String(form.get("code") ?? "").trim(),
-      name: String(form.get("name") ?? "").trim()
+      name: String(form.get("name") ?? "").trim(),
+      ...(unitType ? { unitType } : {})
     };
 
     if (!input.code || !input.name) {
@@ -122,9 +132,10 @@ export function AdminUnitsPanel() {
       return;
     }
     try {
-      const result = await updateOrganizationUnit(editing.id, { name, parentId: String(form.get("parentId") ?? "") });
-      setUnits((current) => current.map((unit) => (unit.id === editing.id ? result.organizationUnit : unit)));
+      const parentId = String(form.get("parentId") ?? "");
+      await updateOrganizationUnit(editing.id, { name, ...(parentId ? { parentId } : {}), unitType: String(form.get("unitType") ?? editing.unitType ?? "OTHER") });
       setEditing(null);
+      await refresh();
       setMessage("Đã cập nhật đơn vị.");
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Không thể cập nhật đơn vị.");
@@ -165,7 +176,12 @@ export function AdminUnitsPanel() {
               <Building2 size={18} aria-hidden="true" />
               <div>
                 <span className="record-title">{unit.name}</span>
-                <span className="record-meta">{unit.code}{unit.parentId ? ` · thuộc ${nameOf(unit.parentId) || "đơn vị khác"}` : ""}</span>
+                <span className="record-meta">{unit.unitTypeLabel ? `${unit.unitTypeLabel} · ` : ""}{unit.code}{unit.parentId ? ` · thuộc ${nameOf(unit.parentId) || "đơn vị khác"}` : ""}</span>
+                {unit.positions?.map((position) => (
+                  <span key={`${position.userId}-${position.positionCode}`} className="record-meta" style={{ display: "block", color: "#065f46" }}>
+                    {position.label}: {position.displayName}
+                  </span>
+                ))}
               </div>
               <StatusBadge status={unit.status} />
               <div className="button-row">
@@ -184,6 +200,14 @@ export function AdminUnitsPanel() {
             <label className="field">
               <span>Tên đơn vị</span>
               <input name="name" defaultValue={editing.name} maxLength={160} />
+            </label>
+            <label className="field">
+              <span>Loại đơn vị</span>
+              <select name="unitType" defaultValue={editing.unitType ?? "OTHER"}>
+                {UNIT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.code} value={option.code}>{option.label}</option>
+                ))}
+              </select>
             </label>
             <label className="field">
               <span>Đơn vị cấp cha</span>
@@ -214,6 +238,15 @@ export function AdminUnitsPanel() {
             <label className="field">
               <span>Tên đơn vị</span>
               <input name="name" />
+            </label>
+            <label className="field">
+              <span>Loại đơn vị</span>
+              <select name="unitType" defaultValue="">
+                <option value="">Tự xác định theo tên</option>
+                {UNIT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.code} value={option.code}>{option.label}</option>
+                ))}
+              </select>
             </label>
             {formError ? <p className="form-error">{formError}</p> : null}
             {message ? <p className="state-message success">{message}</p> : null}

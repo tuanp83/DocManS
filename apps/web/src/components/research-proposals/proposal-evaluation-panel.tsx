@@ -1283,7 +1283,7 @@ export function ProposalEvaluationPanel({
                       <option value="">-- Chọn Chủ tịch Hội đồng --</option>
                       {councilCandidates.map((c) => (
                         <option key={c.id} value={c.id} disabled={c.isConflicted}>
-                          {c.fullName} — {c.academicTitle} ({c.unit}) {c.isConflicted ? "⚠️ [XUNG ĐỘT LỢI ÍCH]" : ""}
+                          {c.fullName} — {c.academicTitle} ({c.unit}){c.unitPositions?.length ? ` · ${c.unitPositions.join("; ")}` : ""} {c.isConflicted ? "⚠️ [XUNG ĐỘT LỢI ÍCH]" : ""}
                         </option>
                       ))}
                     </select>
@@ -1370,7 +1370,7 @@ export function ProposalEvaluationPanel({
                       <option value="">-- Chọn Thư ký khoa học --</option>
                       {councilCandidates.map((c) => (
                         <option key={c.id} value={c.id} disabled={c.isConflicted}>
-                          {c.fullName} — {c.academicTitle} ({c.unit}) {c.isConflicted ? "⚠️ [XUNG ĐỘT LỢI ÍCH]" : ""}
+                          {c.fullName} — {c.academicTitle} ({c.unit}){c.unitPositions?.length ? ` · ${c.unitPositions.join("; ")}` : ""} {c.isConflicted ? "⚠️ [XUNG ĐỘT LỢI ÍCH]" : ""}
                         </option>
                       ))}
                     </select>
@@ -1499,7 +1499,7 @@ export function ProposalEvaluationPanel({
                           <option value="">-- Chọn Phản biện {idx + 1} --</option>
                           {councilCandidates.map((c) => (
                             <option key={c.id} value={c.id} disabled={c.isConflicted}>
-                              {c.fullName} — {c.academicTitle} ({c.unit}) {c.isConflicted ? "⚠️ [XUNG ĐỘT LỢI ÍCH]" : ""}
+                              {c.fullName} — {c.academicTitle} ({c.unit}){c.unitPositions?.length ? ` · ${c.unitPositions.join("; ")}` : ""} {c.isConflicted ? "⚠️ [XUNG ĐỘT LỢI ÍCH]" : ""}
                             </option>
                           ))}
                         </select>
@@ -1633,7 +1633,7 @@ export function ProposalEvaluationPanel({
                             <option value="">-- Chọn Ủy viên Hội đồng --</option>
                             {councilCandidates.map((c) => (
                               <option key={c.id} value={c.id} disabled={c.isConflicted}>
-                                {c.fullName} — {c.academicTitle} ({c.unit}) {c.isConflicted ? "⚠️ [XUNG ĐỘT LỢI ÍCH]" : ""}
+                                {c.fullName} — {c.academicTitle} ({c.unit}){c.unitPositions?.length ? ` · ${c.unitPositions.join("; ")}` : ""} {c.isConflicted ? "⚠️ [XUNG ĐỘT LỢI ÍCH]" : ""}
                               </option>
                             ))}
                           </select>

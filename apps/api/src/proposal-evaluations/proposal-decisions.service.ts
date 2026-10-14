@@ -29,6 +29,7 @@ import { label, NOTIFICATION_TYPES, proposalLink, researchManagersInScope, type 
 import { councilEstablishedEvent, reviewInvitationEvent } from "./evaluation-notifications.js";
 import { readApproveCouncilInput, readCouncilMembers, readCouncilMinutesInput, readProposeCouncilInput, readRejectCouncilInput, type CouncilMemberInput } from "./council-input.js";
 import { isRoundActiveStatus } from "../proposals-shared/proposal-review-access.js";
+import { positionDisplay } from "../organization/unit-positions.js";
 
 export const PROPOSAL_DECISIONS = {
   approved: "approved",
@@ -544,7 +545,7 @@ export class ProposalDecisionsService {
         academicRankCatalogItem: true,
         academicDegreeCatalogItem: true,
         managementOrganizationUnit: true,
-        linkedUser: { select: { id: true, username: true, displayName: true, systemRole: true, unit: true } }
+        linkedUser: { select: { id: true, username: true, displayName: true, systemRole: true, unit: true, unitPositions: { select: { positionCode: true, organizationUnit: { select: { name: true, unitType: true, status: true } } }, orderBy: { createdAt: "asc" } } } }
       },
       orderBy: { fullName: "asc" },
       take: 1000
@@ -552,7 +553,7 @@ export class ProposalDecisionsService {
       id: string; linkedUserId: string | null; fullName: string; title?: string | null; militaryRank?: string | null; position?: string | null; profileType?: string | null;
       managementOrganizationUnitId?: string | null; managementOrganizationUnit?: { name: string } | null;
       academicRankCatalogItem?: { name: string } | null; academicDegreeCatalogItem?: { name: string } | null;
-      linkedUser?: { username: string | null; systemRole: string | null; unit: string | null } | null;
+      linkedUser?: { username: string | null; systemRole: string | null; unit: string | null; unitPositions?: Array<{ positionCode: string; organizationUnit: { name: string; unitType: string; status: string } }> } | null;
     }>;
 
     const candidates = profiles.map((p) => {
@@ -592,6 +593,8 @@ export class ProposalDecisionsService {
         unit: p.managementOrganizationUnit?.name || p.linkedUser?.unit || (p.profileType === "EXTERNAL" ? "Đơn vị ngoài" : "Học viện Quân y"),
         militaryRank: p.militaryRank || "",
         position: p.position || "",
+        // Chức danh tại đơn vị của tài khoản (chỉ để hiển thị khi chọn thành viên hội đồng).
+        unitPositions: (p.linkedUser?.unitPositions ?? []).filter((item) => item.organizationUnit.status === "active").map((item) => positionDisplay(item.organizationUnit.unitType, item.positionCode, item.organizationUnit.name)),
         profileType: p.profileType,
         isConflicted,
         isWarning,

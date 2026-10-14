@@ -43,6 +43,8 @@ model User {
   proposalManagementOfficerAssignments ProposalManagementOfficer[]    @relation("ProposalManagementOfficerUser")
   assignedProposalManagementOfficers   ProposalManagementOfficer[]    @relation("ProposalManagementOfficerAssigner")
   managementPortfolios                 ManagementPortfolio[]          @relation("ManagementPortfolioOfficer")
+  unitPositions                        UnitPosition[]                 @relation("UnitPositionHolder")
+  assignedUnitPositions                UnitPosition[]                 @relation("UnitPositionAssigner")
   createdManagementPortfolios          ManagementPortfolio[]          @relation("ManagementPortfolioCreator")
   proposalReviews                      ProposalReview[]               @relation("ProposalReviewReviewer")
   createdEvaluationSummaries           ProposalEvaluationSummary[]    @relation("EvaluationSummaryCreator")
@@ -117,9 +119,12 @@ model OrganizationUnit {
   parent                  OrganizationUnit?       @relation("OrganizationHierarchy", fields: [parentId], references: [id])
   children                OrganizationUnit[]      @relation("OrganizationHierarchy")
   status                  String                  @default("active")
+  /// Loại đơn vị: INSTITUTE (Viện), DEPARTMENT (Phòng), FACULTY (Khoa), DIVISION (Bộ môn), OTHER.
+  unitType                String                  @default("OTHER") @map("unit_type")
   createdAt               DateTime                @default(now()) @map("created_at")
   updatedAt               DateTime                @updatedAt @map("updated_at")
   userScopes              UserOrganizationScope[]
+  unitPositions           UnitPosition[]
   proposalIntakePeriods   ProposalIntakePeriod[]
   hostedResearchProposals ResearchProposal[]
   researcherProfiles      ResearcherProfile[]
@@ -130,6 +135,25 @@ model OrganizationUnit {
 
   @@index([parentId])
   @@map("organization_units")
+}
+
+/// Chức danh của một tài khoản tại một đơn vị (Giám đốc/Phó Giám đốc Viện, Trưởng/Phó phòng, Trưởng/Phó khoa,
+/// Chủ nhiệm/Phó Chủ nhiệm Bộ môn). Chỉ để hiển thị, không cấp quyền. Mỗi người tối đa một chức danh trong một
+/// đơn vị, được kiêm nhiệm ở nhiều đơn vị; số người tối đa mỗi chức danh kiểm tra ở organization/unit-positions.ts.
+model UnitPosition {
+  id                 String           @id @default(uuid())
+  organizationUnitId String           @map("organization_unit_id")
+  organizationUnit   OrganizationUnit @relation(fields: [organizationUnitId], references: [id], onDelete: Restrict)
+  userId             String           @map("user_id")
+  user               User             @relation("UnitPositionHolder", fields: [userId], references: [id], onDelete: Restrict)
+  positionCode       String           @map("position_code")
+  assignedById       String           @map("assigned_by_id")
+  assignedBy         User             @relation("UnitPositionAssigner", fields: [assignedById], references: [id], onDelete: Restrict)
+  createdAt          DateTime         @default(now()) @map("created_at")
+
+  @@unique([organizationUnitId, userId])
+  @@index([userId])
+  @@map("unit_positions")
 }
 
 model UserOrganizationScope {

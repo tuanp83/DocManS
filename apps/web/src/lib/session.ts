@@ -5,6 +5,8 @@ export const AUTH_SESSION_COOKIE = "rtms_session";
 export type CurrentUser = {
   mustChangePassword?: boolean;
   researcherProfileId?: string;
+  /** Chức danh tại đơn vị, ví dụ "Trưởng khoa – Khoa Nội" (chỉ để hiển thị). */
+  positions?: string[];
   id: string;
   username: string;
   displayName: string;
@@ -27,6 +29,8 @@ export type ShellAccount = {
   systemRole: CurrentUser["systemRole"];
   systemRoleLabel: string;
   unit: string;
+  /** Chức danh tại đơn vị (chỉ để hiển thị). */
+  positions: string[];
   initials: string;
   organizationScopes?: CurrentUser["organizationScopes"];
 };
@@ -45,6 +49,7 @@ export function toShellAccount(user: CurrentUser): ShellAccount {
     systemRole: user.systemRole,
     systemRoleLabel: getSystemRoleLabel(user.systemRole),
     unit: user.unit,
+    positions: user.positions ?? [],
     initials: user.displayName.trim().charAt(0).toUpperCase() || "U",
     organizationScopes: user.organizationScopes
   };

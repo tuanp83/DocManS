@@ -693,6 +693,9 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                     <tr key={profile.id}>
                       <td>
                         <strong>{profile.fullName}</strong>
+                        {profile.account?.positions?.map((position) => (
+                          <small key={position} className="text-secondary" style={{ display: "block", color: "#065f46" }}>{position}</small>
+                        ))}
                       </td>
                       <td>
                         {profile.profileType === "EXTERNAL" ? "Nước ngoài" : "Trong nước"}
@@ -743,6 +746,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
           <div className="section-header">
             <div>
               <h2>{self ? "Lý lịch khoa học của tôi" : editing ? `Lý lịch khoa học: ${editing.fullName}` : "Tạo mới lý lịch khoa học"}</h2>
+              {editing?.account?.positions?.length ? <p className="record-meta" style={{ color: "#065f46", fontWeight: 600 }}>{editing.account.positions.join(" · ")}</p> : null}
               <p className="record-meta">Chuẩn hóa theo Cổng thông tin Khoa học & Công nghệ Quốc gia (STM - Bộ KH&CN) & Học viện Quân y</p>
             </div>
             {editing ? (
