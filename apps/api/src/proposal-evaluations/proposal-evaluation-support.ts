@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import type { PrismaService } from "../infrastructure/prisma/prisma.service.js";
-import { assertHasOrganizationScope, isLeadership, isResearchManagementStaff } from "../proposals-shared/proposal-access.js";
+import { assertHasOrganizationScope, isLeadership, isResearchManagementHead, isResearchManagementStaff } from "../proposals-shared/proposal-access.js";
+import { ProposalManagementOfficerService } from "../proposals-shared/proposal-management-officer.service.js";
 import type { ProposalConflictDecision } from "../proposals-shared/proposal-participation.js";
 import { isWorkflowVisibleStatus, PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
 
@@ -128,49 +129,42 @@ export function assertScientificManagementScope(actor: SafeUserContext | undefin
 }
 
 /**
- * Người điều phối vòng đánh giá (quy định 10/2026): chuyên viên QLKH hoặc Trưởng phòng QLKH có phạm vi đơn vị
- * chủ trì. Dùng cho phân công (kể cả tự phân công) và tổng hợp kết quả. Xung đột lợi ích (tham gia đề tài,
- * tự tổng hợp phiếu của mình) được kiểm tra riêng ở từng thao tác.
+ * Người điều phối vòng đánh giá: Trưởng phòng QLKH có phạm vi đơn vị chủ trì, hoặc chuyên viên QLKH đang là
+ * chuyên viên phụ trách của chính hồ sơ (giao theo mảng hoặc do Trưởng phòng giao). Dùng cho phân công phản biện,
+ * tờ trình hội đồng, biên bản và tổng hợp kết quả. Xung đột lợi ích được kiểm tra riêng ở từng thao tác.
  */
-export function isEvaluationCoordinator(actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
-  return !!actor && (isResearchManagementStaff(actor) || actor.systemRole === "RESEARCH_MANAGEMENT_HEAD") && actor.organizationScopes.some((scope) => scope.id === proposal.hostOrganizationUnitId);
+export async function isEvaluationCoordinator(prisma: PrismaService, actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
+  if (!actor || !actor.organizationScopes.some((scope) => scope.id === proposal.hostOrganizationUnitId)) return false;
+  if (isResearchManagementHead(actor)) return true;
+  if (!isResearchManagementStaff(actor)) return false;
+  return new ProposalManagementOfficerService(prisma).isCurrentOfficer(proposal.id, actor.id);
 }
 
-export function assertEvaluationCoordinator(actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
-  if (!actor || !(isResearchManagementStaff(actor) || actor.systemRole === "RESEARCH_MANAGEMENT_HEAD")) {
+export async function assertEvaluationCoordinator(prisma: PrismaService, actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
+  if (!actor || !(isResearchManagementStaff(actor) || isResearchManagementHead(actor))) {
     throw new ForbiddenException({ message: "Chỉ chuyên viên hoặc Trưởng phòng quản lý khoa học được thực hiện thao tác này." });
   }
   assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
+  if (!(await isEvaluationCoordinator(prisma, actor, proposal))) {
+    throw new ForbiddenException({ code: "NOT_PROPOSAL_OFFICER", message: "Chỉ chuyên viên phụ trách hồ sơ này (hoặc Trưởng phòng) được thực hiện thao tác này." });
+  }
   return actor;
 }
 
 /**
  * Read access to the evaluation surfaces (assignment roster, review progress, submitted reviews).
  *
- * Staff read inside their organization scope only — the read side has to be scoped as tightly as
- * the write side, or out-of-scope staff could read every reviewer's name and score for a unit they
- * do not operate. Leadership reads without an organization scope because approval authority is
- * academy-wide. Section 7.4 of the permission matrix gives the system administrator `None` for
- * these actions, so an admin role is not accepted here.
+ * Lãnh đạo đọc toàn Học viện (thẩm quyền phê duyệt). Trưởng phòng đọc trong phạm vi đơn vị; chuyên viên chỉ đọc
+ * hồ sơ mình đang phụ trách — đọc phải chặt như ghi, nếu không chuyên viên khác mảng đọc được tên và điểm của
+ * người phản biện. Quản trị hệ thống không có quyền này (ma trận quyền mục 7.4).
  */
-export function assertCanReadEvaluation(actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
+export async function assertCanReadEvaluation(prisma: PrismaService, actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
   // A draft has no evaluation to read, and `canReadProposal` keeps drafts private to their owner.
-  // Gating here too stops the evaluation read models from becoming a side channel that reports a
-  // draft's existence and attachment count to a viewer the proposal read itself would refuse.
   if (!isWorkflowVisibleStatus(proposal.status)) {
     throw new ForbiddenException({ message: "Không có quyền xem thông tin đánh giá của hồ sơ này." });
   }
-
-  if (actor && isLeadership(actor)) {
-    return actor;
-  }
-
-  if (actor && isResearchManagementStaff(actor)) {
-    // Quy định 10/2026: mọi chuyên viên QLKH có phạm vi đơn vị được điều phối đánh giá (không còn phân biệt theo tên đơn vị).
-    assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
-    return actor;
-  }
-
+  if (actor && isLeadership(actor)) return actor;
+  if (actor && (await isEvaluationCoordinator(prisma, actor, proposal))) return actor;
   throw new ForbiddenException({ message: "Không có quyền xem thông tin đánh giá của hồ sơ này." });
 }
 

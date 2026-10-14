@@ -50,6 +50,7 @@ function defaultForm(hostOrganizationUnitId = ""): ProposalDraftInput {
     hostOrganizationUnitId,
     researchFieldCode: "biomedical-tech",
     proposalTypeCode: "academy-level",
+    militaryScope: "military",
     startDate: todayInput(30),
     endDate: todayInput(210),
     objectives: "",
@@ -493,6 +494,13 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
                   <span>Loại đề tài</span>
                   <select disabled={isSubmitting} value={form.proposalTypeCode} onChange={(event) => setForm({ ...form, proposalTypeCode: event.target.value })}>
                     <option value="">Chọn loại đề tài</option>{catalogs.filter((item) => item.type === "proposal-type" && item.status === "active").map((item) => <option key={item.id} value={item.code}>{item.name}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Tính chất đề tài</span>
+                  <select disabled={isSubmitting} value={form.militaryScope ?? "military"} onChange={(event) => setForm({ ...form, militaryScope: event.target.value as "military" | "civilian" })}>
+                    <option value="military">Quân sự</option>
+                    <option value="civilian">Dân sự</option>
                   </select>
                 </label>
               </div>

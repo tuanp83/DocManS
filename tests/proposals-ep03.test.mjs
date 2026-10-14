@@ -439,10 +439,27 @@ function createPrisma() {
     proposalManagementOfficer: {
       async findMany({ where }) {
         return store.officers.filter((item) => {
-          if (where.proposalId && item.proposalId !== where.proposalId) return false;
+          if (where.proposalId && typeof where.proposalId === "string" && item.proposalId !== where.proposalId) return false;
           if (where.proposalId?.in && !where.proposalId.in.includes(item.proposalId)) return false;
           if (where.status && item.status !== where.status) return false;
           return true;
+        });
+      },
+      async count({ where }) {
+        return store.officers.filter((item) => item.officerUserId === where.officerUserId && item.status === where.status).length;
+      },
+      async create({ data }) {
+        const record = { id: `officer-${store.officers.length + 1}`, createdAt: new Date(), updatedAt: new Date(), ...data };
+        store.officers.push(record);
+        return record;
+      }
+    },
+    // Mảng phụ trách của chuyên viên (management-portfolio.ts).
+    managementPortfolio: {
+      async findMany() {
+        return (store.portfolios ?? []).map((rule) => {
+          const officer = ACCOUNTS.find((account) => account.id === rule.officerUserId);
+          return { ...rule, officer: officer ? { id: officer.id, status: officer.status ?? "active", systemRole: officer.systemRole, organizationScopes: (officer.organizationScopes ?? []).map((scope) => ({ organizationUnitId: scope.id, organizationUnit: { status: "active" } })) } : null };
         });
       }
     },
@@ -519,7 +536,7 @@ function createServices(options = {}) {
 }
 
 /** A proposal that has been formally submitted — the entry state for every EP-03 operation. */
-async function createSubmittedProposal(services, { members = TEAM } = {}) {
+async function createSubmittedProposal(services, { members = TEAM, assignStaffOfficer = true } = {}) {
   const intake = await services.intakeService.createPeriod(staffUser, {
     code: "INTAKE-2026",
     title: "Đợt tiếp nhận 2026",
@@ -558,9 +575,16 @@ async function createSubmittedProposal(services, { members = TEAM } = {}) {
   });
 
   const submitted = await services.proposalService.submitProposal(piUser, draft.id);
-  // Chuyên viên phụ trách xác nhận hồ sơ đầy đủ cho đúng lần nộp này (submission-evidence.ts).
+  // Trưởng phòng giao staffUser phụ trách hồ sơ (người điều phối đánh giá), rồi chuyên viên xác nhận hồ sơ đầy đủ
+  // cho đúng lần nộp này (submission-evidence.ts).
+  if (assignStaffOfficer) assignOfficer(services.prisma.store, submitted.id, staffUser.id);
   recordCompletenessCheck(services.prisma.store, submitted.id);
   return submitted;
+}
+
+function assignOfficer(store, proposalId, officerUserId) {
+  const past = new Date(Date.now() - 60_000);
+  store.officers.push({ id: `officer-${store.officers.length + 1}`, proposalId, officerUserId, assignedById: "user-head", status: "ACTIVE", effectiveFrom: past, effectiveUntil: null, reason: "Giao phụ trách", createdAt: past, updatedAt: past });
 }
 
 /** Tổng hợp ba bước: lưu nháp → chốt → trình lãnh đạo. */
@@ -872,6 +896,48 @@ describe("Nhà khoa học đồng ý / từ chối lời mời phản biện", (
   });
 });
 
+describe("Điều phối đánh giá: chuyên viên phụ trách theo mảng", () => {
+  const head = { ...staffUser, id: "user-head", username: "truongphong", displayName: "Trưởng phòng", systemRole: "RESEARCH_MANAGEMENT_HEAD" };
+
+  it("hồ sơ nộp vào được tự giao cho chuyên viên có mảng khớp (quy tắc cụ thể nhất được ưu tiên)", async () => {
+    const services = createServices();
+    const generalist = { ...staffUser, id: "user-staff-general", username: "cv-chung", displayName: "CV phụ trách chung" };
+    ACCOUNTS.push(generalist);
+    try {
+      services.prisma.store.portfolios = [
+        { id: "r1", officerUserId: generalist.id, proposalLevel: null, militaryScope: "military" },
+        { id: "r2", officerUserId: staffUser.id, proposalLevel: "academy-level", militaryScope: "military" }
+      ];
+      const proposal = await createSubmittedProposal(services, { assignStaffOfficer: false });
+      const officers = services.prisma.store.officers.filter((row) => row.proposalId === proposal.id);
+      assert.equal(officers.length, 1);
+      assert.equal(officers[0].officerUserId, staffUser.id, "quy tắc Học viện – Quân sự cụ thể hơn quy tắc chỉ Quân sự");
+      assert.match(officers[0].reason, /tự giao theo mảng/);
+      assert.ok(services.prisma.store.auditLogs.some((log) => log.action === "auto-assign-proposal-management-officer"));
+    } finally {
+      ACCOUNTS.splice(ACCOUNTS.indexOf(generalist), 1);
+    }
+  });
+
+  it("không ai khớp mảng thì hồ sơ chờ Trưởng phòng giao; chuyên viên không phụ trách không điều phối hay xem tiến độ được, Trưởng phòng thì được", async () => {
+    const services = createServices();
+    services.prisma.store.portfolios = [{ id: "r1", officerUserId: staffUser.id, proposalLevel: "national-level", militaryScope: null }];
+    const proposal = await createSubmittedProposal(services, { assignStaffOfficer: false });
+    assert.equal(services.prisma.store.officers.filter((row) => row.proposalId === proposal.id).length, 0);
+
+    await assert.rejects(() => services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: reviewerUser.id }), /chuyên viên phụ trách/);
+    await assert.rejects(() => services.summaries.getReviewProgress(staffUser, proposal.id), ForbiddenException);
+    // Trưởng phòng (trước đây bị 403 khi đọc tiến độ) điều phối được mọi hồ sơ trong phạm vi đơn vị.
+    ACCOUNTS.push(head);
+    try {
+      await services.assignments.assignReviewer(head, proposal.id, { reviewerUserId: reviewerUser.id });
+      assert.equal((await services.summaries.getReviewProgress(head, proposal.id)).activeAssignmentCount, 1);
+    } finally {
+      ACCOUNTS.splice(ACCOUNTS.indexOf(head), 1);
+    }
+  });
+});
+
 describe("ST-3.3 reviewer scoring and comments", () => {
   it("AC-ST-3.3-01/03: an assigned reviewer submits a review that staff can see as completed", async () => {
     const services = createServices();
@@ -1103,7 +1169,8 @@ describe("EP-03 hardening found by adversarial review", () => {
     const proposal = await createSubmittedProposal(services);
 
     // Chuyên viên không tham gia đề tài được tự phân công mình và chấm phiếu.
-    const collaborator = { ...staffUser, id: "user-staff-2", username: "hdtien1", displayName: "HD Tiến 1" };
+    // Người thu hồi là Trưởng phòng (chuyên viên khác không phụ trách hồ sơ thì không điều phối được).
+    const collaborator = { ...staffUser, id: "user-staff-2", username: "nmphuong", displayName: "Trưởng phòng", systemRole: "RESEARCH_MANAGEMENT_HEAD" };
     ACCOUNTS.push(collaborator);
     try {
       await services.assignments.assignReviewer(staffUser, proposal.id, { reviewerUserId: staffUser.id });

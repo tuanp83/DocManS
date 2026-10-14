@@ -162,6 +162,8 @@ describe("Council and IRB writes on real PostgreSQL", () => {
 
   it("verifies contextVersion: a stale token is 409, the current token succeeds and the response carries the new token", async () => {
     const proposal = await newProposal();
+    // staff là chuyên viên phụ trách hồ sơ: được đọc thông tin đánh giá và lập tờ trình hội đồng.
+    await db.proposalManagementOfficer.create({ data: { proposalId: proposal.id, officerUserId: staff.id, assignedById: leader.id, status: "ACTIVE", effectiveFrom: new Date(Date.now() - 60_000), reason: "Giao phụ trách" } });
     const { contextVersion: initial } = await decisions.getIRBInfo(staff, proposal.id);
     assert.equal(initial.domain, "proposal");
     assert.equal(initial.recordId, proposal.id);

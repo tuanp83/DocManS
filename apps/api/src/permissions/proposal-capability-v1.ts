@@ -147,7 +147,7 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
     return input.proposal.status === "under_review" ? null : blocked("WORKFLOW_STATE_DENIED");
   }
 
-  // Phân công và tổng hợp đánh giá (quy định 10/2026): chuyên viên hoặc Trưởng phòng QLKH có phạm vi đơn vị;
+  // Phân công và tổng hợp đánh giá: Trưởng phòng QLKH có phạm vi đơn vị, hoặc chuyên viên phụ trách hồ sơ;
   // tổng hợp (lưu nháp, chốt, trình) còn cho thư ký hội đồng của chính hồ sơ. Không được tham gia đề tài; người đã
   // chấm phiếu không tự tổng hợp. Người tự phân công mình chấm vẫn được tiếp tục phân công người khác.
   if (action === "proposal.review.assign" || SUMMARY_ACTIONS.includes(action)) {
@@ -159,6 +159,8 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
     // Xung đột do tham gia đề tài đã biết thì báo trước, kể cả khi chưa có ngữ cảnh phân công.
     if (evaluateProposalConflict(input.participation).conflicted || input.participation.isParticipant) return blocked("CONFLICT_DENIED");
     if (!input.reviewAccess || input.reviewAccess.conflictUnresolved) return blocked("CONTEXT_UNRESOLVED");
+    // Chuyên viên chỉ điều phối hồ sơ mình đang phụ trách (giao theo mảng hoặc do Trưởng phòng giao).
+    if (!councilSecretary && isResearchManagementStaff(input.actor) && !isCurrentOfficer(input)) return { code: "ACTION_NOT_GRANTED", reason: "Chỉ chuyên viên phụ trách hồ sơ này (hoặc Trưởng phòng) được điều phối đánh giá." };
     if (SUMMARY_ACTIONS.includes(action)) {
       const scoredOrScoring = (input.reviewAccess.isAssignedReviewer && isScoringRole(input.reviewAccess.assignmentRole)) || input.reviewAccess.hasPersistedReview;
       if (scoredOrScoring) return blocked("CONFLICT_DENIED");

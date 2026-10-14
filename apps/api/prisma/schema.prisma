@@ -42,6 +42,8 @@ model User {
   assignedProposalReviews              ProposalReviewAssignment[]     @relation("ReviewAssignmentAssigner")
   proposalManagementOfficerAssignments ProposalManagementOfficer[]    @relation("ProposalManagementOfficerUser")
   assignedProposalManagementOfficers   ProposalManagementOfficer[]    @relation("ProposalManagementOfficerAssigner")
+  managementPortfolios                 ManagementPortfolio[]          @relation("ManagementPortfolioOfficer")
+  createdManagementPortfolios          ManagementPortfolio[]          @relation("ManagementPortfolioCreator")
   proposalReviews                      ProposalReview[]               @relation("ProposalReviewReviewer")
   createdEvaluationSummaries           ProposalEvaluationSummary[]    @relation("EvaluationSummaryCreator")
   updatedEvaluationSummaries           ProposalEvaluationSummary[]    @relation("EvaluationSummaryEditor")
@@ -470,6 +472,8 @@ model ResearchProposal {
   hostOrganizationUnit             OrganizationUnit            @relation(fields: [hostOrganizationUnitId], references: [id])
   researchFieldCode                String?                     @map("research_field_code")
   proposalTypeCode                 String?                     @map("proposal_type_code")
+  /// Tính chất đề tài: "military" (Quân sự) | "civilian" (Dân sự). Cùng cấp đề tài xác định mảng giao chuyên viên.
+  militaryScope                    String?                     @map("military_scope")
   title                            String
   objectives                       String?
   summary                          String?
@@ -574,6 +578,23 @@ model ProposalManagementOfficer {
   @@index([proposalId, status, effectiveUntil])
   @@index([officerUserId, status, effectiveUntil])
   @@map("proposal_management_officers")
+}
+
+/// Mảng đề tài một chuyên viên QLKH phụ trách, do Trưởng phòng giao. Mỗi dòng là một quy tắc: cấp đề tài
+/// (proposalLevel = mã loại đề tài) và/hoặc tính chất (militaryScope); null = mọi giá trị. Hồ sơ nộp vào được
+/// tự giao cho chuyên viên có quy tắc khớp.
+model ManagementPortfolio {
+  id            String   @id @default(uuid())
+  officerUserId String   @map("officer_user_id")
+  officer       User     @relation("ManagementPortfolioOfficer", fields: [officerUserId], references: [id], onDelete: Restrict)
+  proposalLevel String?  @map("proposal_level")
+  militaryScope String?  @map("military_scope")
+  createdById   String   @map("created_by_id")
+  createdBy     User     @relation("ManagementPortfolioCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([officerUserId])
+  @@map("management_portfolios")
 }
 
 model ProposalAttachment {

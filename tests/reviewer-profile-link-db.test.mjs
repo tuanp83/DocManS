@@ -28,6 +28,11 @@ after(async () => {
 
 const actorFor = (user, org) => ({ id: user.id, username: user.username, displayName: user.displayName, status: user.status, systemRole: user.systemRole, unit: user.unit, organizationScopes: [{ id: org.id, code: org.code, name: org.name }] });
 
+/** Trưởng phòng giao chuyên viên phụ trách hồ sơ (người điều phối đánh giá). */
+async function assignOfficer(proposalId, officerUserId) {
+  await db.proposalManagementOfficer.create({ data: { proposalId, officerUserId, assignedById: officerUserId, status: 'ACTIVE', effectiveFrom: new Date(Date.now() - 60_000), reason: 'Giao phụ trách' } });
+}
+
 async function createUser(username, systemRole, org) {
   return db.user.create({ data: { username, usernameKey: username, displayName: username, passwordHash: 'test-only-disabled', status: 'active', systemRole, unit: org.name, organizationScopes: { create: [{ organizationUnitId: org.id, isPrimary: true }] } } });
 }
@@ -47,6 +52,7 @@ test('assigning a reviewer links the reviewer\'s own researcher profile, so the 
   const proposal = await db.researchProposal.create({ data: { intakePeriodId: intake.id, ownerId: pi.id, hostOrganizationUnitId: org.id, title: 'Hồ sơ thử', status: 'submitted', submittedAt } });
   const submission = await db.proposalSubmissionEvent.create({ data: { proposalId: proposal.id, actorId: pi.id, fromStatus: 'draft', toStatus: 'submitted', submittedAt, snapshot: { members: [], attachments: [], requiredPackage: [] } } });
   await db.proposalSubmissionEvent.create({ data: { proposalId: proposal.id, actorId: staff.id, fromStatus: 'submitted', toStatus: 'submitted', snapshot: { kind: 'completeness_check', submissionEventId: submission.id, readiness: { ready: true } } } });
+  await assignOfficer(proposal.id, staff.id);
 
   const participation = new ProposalParticipationService(db);
   const reviewAccess = new ProposalReviewAccessService(db);
@@ -91,6 +97,7 @@ test('a reviewer can decline an invitation with a reason; only the invitee may a
   const proposal = await db.researchProposal.create({ data: { intakePeriodId: intake.id, ownerId: pi.id, hostOrganizationUnitId: org.id, title: 'Hồ sơ thử 2', status: 'submitted', submittedAt } });
   const submission = await db.proposalSubmissionEvent.create({ data: { proposalId: proposal.id, actorId: pi.id, fromStatus: 'draft', toStatus: 'submitted', submittedAt, snapshot: { members: [], attachments: [], requiredPackage: [] } } });
   await db.proposalSubmissionEvent.create({ data: { proposalId: proposal.id, actorId: staff.id, fromStatus: 'submitted', toStatus: 'submitted', snapshot: { kind: 'completeness_check', submissionEventId: submission.id, readiness: { ready: true } } } });
+  await assignOfficer(proposal.id, staff.id);
 
   const assignments = new ProposalReviewAssignmentsService(db, new AuditLogService(db), new ProposalParticipationService(db), new ProposalReviewAccessService(db));
   const staffActor = actorFor(staff, org);
@@ -134,6 +141,7 @@ test('any scientist may be invited to review, whatever their unit; only the PI, 
   await db.proposalMember.create({ data: { proposalId: proposal.id, userId: secretary.id, name: secretary.displayName, role: 'TOPIC_SECRETARY', participationRole: 'TOPIC_SECRETARY', organization: host.name } });
   const submission = await db.proposalSubmissionEvent.create({ data: { proposalId: proposal.id, actorId: pi.id, fromStatus: 'draft', toStatus: 'submitted', submittedAt, snapshot: { members: [], attachments: [], requiredPackage: [] } } });
   await db.proposalSubmissionEvent.create({ data: { proposalId: proposal.id, actorId: staff.id, fromStatus: 'submitted', toStatus: 'submitted', snapshot: { kind: 'completeness_check', submissionEventId: submission.id, readiness: { ready: true } } } });
+  await assignOfficer(proposal.id, staff.id);
 
   const assignments = new ProposalReviewAssignmentsService(db, new AuditLogService(db), new ProposalParticipationService(db), new ProposalReviewAccessService(db));
   const staffActor = actorFor(staff, host);

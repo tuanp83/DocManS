@@ -7,6 +7,8 @@ import { ProposalParticipationService } from "../research-proposals/proposal-par
 import { ProposalDecisionsService } from "./proposal-decisions.service.js";
 import { ProposalEvaluationSummaryService } from "./proposal-evaluation-summary.service.js";
 import { ProposalEvaluationsController } from "./proposal-evaluations.controller.js";
+import { EvaluationCoordinationController } from "./evaluation-coordination.controller.js";
+import { EvaluationCoordinationService } from "./evaluation-coordination.service.js";
 import { ProposalReviewAssignmentsService } from "./proposal-review-assignments.service.js";
 import { ProposalReviewsService } from "./proposal-reviews.service.js";
 
@@ -17,7 +19,7 @@ import { ProposalReviewsService } from "./proposal-reviews.service.js";
  */
 @Module({
   imports: [AuthModule, NotificationsModule],
-  controllers: [ProposalEvaluationsController],
+  controllers: [ProposalEvaluationsController, EvaluationCoordinationController],
   providers: [
     AuditLogService,
     ProposalParticipationService,
@@ -25,7 +27,8 @@ import { ProposalReviewsService } from "./proposal-reviews.service.js";
     ProposalReviewAssignmentsService,
     ProposalReviewsService,
     ProposalEvaluationSummaryService,
-    ProposalDecisionsService
+    ProposalDecisionsService,
+    EvaluationCoordinationService
   ],
   exports: [ProposalReviewAccessService]
 })

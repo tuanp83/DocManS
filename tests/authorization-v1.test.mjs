@@ -167,13 +167,16 @@ describe("Story 1.8 viewer capability V1", () => {
 
   it("staff and head may assign reviewers (including themselves) and consolidate when not participating", () => {
     const none = { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} };
-    for (const systemRole of ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD"]) {
+    // Chuyên viên điều phối khi đang phụ trách hồ sơ; Trưởng phòng điều phối mọi hồ sơ trong phạm vi đơn vị.
+    const asOfficer = { resolved: true, officer: { officerUserId: actor.id, username: actor.username, effectiveFrom: new Date() } };
+    for (const [systemRole, managementOfficer] of [["RESEARCH_MANAGEMENT_STAFF", asOfficer], ["RESEARCH_MANAGEMENT_HEAD", { resolved: true, officer: null }]]) {
       const capability = projectProposalViewerAuthorizationV1({
         actor: { ...actor, systemRole },
         proposal: { ...proposal, status: "under_review" },
         completenessCheckCompleted: true,
         participation: none,
         reviewAccess: { isAssignedReviewer: false },
+        managementOfficer,
         canRead: true,
         canEdit: false,
         canManageFiles: false
@@ -181,6 +184,19 @@ describe("Story 1.8 viewer capability V1", () => {
       assert.ok(capability.allowedActions.includes("proposal.review.assign"), systemRole);
       assert.ok(capability.allowedActions.includes("proposal.review.consolidate"), systemRole);
     }
+    const otherStaff = projectProposalViewerAuthorizationV1({
+      actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" },
+      proposal: { ...proposal, status: "under_review" },
+      completenessCheckCompleted: true,
+      participation: none,
+      reviewAccess: { isAssignedReviewer: false },
+      managementOfficer: { resolved: true, officer: { officerUserId: "someone-else", username: "x", effectiveFrom: new Date() } },
+      canRead: true,
+      canEdit: false,
+      canManageFiles: false
+    });
+    assert.equal(otherStaff.blockedActions.find((item) => item.action === "proposal.review.assign")?.code, "ACTION_NOT_GRANTED");
+    assert.equal(otherStaff.blockedActions.find((item) => item.action === "proposal.review.consolidate")?.code, "ACTION_NOT_GRANTED");
     const outOfScope = projectProposalViewerAuthorizationV1({
       actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF", organizationScopes: [{ id: "org-2" }] },
       proposal: { ...proposal, status: "under_review" },
@@ -196,7 +212,7 @@ describe("Story 1.8 viewer capability V1", () => {
 
   it("summary lifecycle: consolidate on draft, finalize a draft, submit a finalized package; decisions need a routed package", () => {
     const none = { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} };
-    const staff = (evaluationSummaryStatus, status = "under_review") => projectProposalViewerAuthorizationV1({ actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" }, proposal: { ...proposal, status }, participation: none, reviewAccess: { isAssignedReviewer: false }, canRead: true, canEdit: false, canManageFiles: false, completenessCheckCompleted: true, evaluationSummaryStatus });
+    const staff = (evaluationSummaryStatus, status = "under_review") => projectProposalViewerAuthorizationV1({ actor: { ...actor, systemRole: "RESEARCH_MANAGEMENT_STAFF" }, proposal: { ...proposal, status }, participation: none, reviewAccess: { isAssignedReviewer: false }, managementOfficer: { resolved: true, officer: { officerUserId: actor.id, username: actor.username, effectiveFrom: new Date() } }, canRead: true, canEdit: false, canManageFiles: false, completenessCheckCompleted: true, evaluationSummaryStatus });
     const allowed = (capability) => ["proposal.review.consolidate", "proposal.review.finalize", "proposal.review.submit-package"].filter((action) => capability.allowedActions.includes(action));
     assert.deepEqual(allowed(staff(null)), ["proposal.review.consolidate"]);
     assert.deepEqual(allowed(staff("draft")), ["proposal.review.consolidate", "proposal.review.finalize"]);

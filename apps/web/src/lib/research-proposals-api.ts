@@ -207,6 +207,7 @@ export type ResearchProposal = {
   hostOrganizationUnitName?: string;
   researchFieldCode: string;
   proposalTypeCode: string;
+  militaryScope?: "military" | "civilian";
   title: string;
   objectives: string;
   summary: string;
@@ -261,6 +262,8 @@ export type ProposalDraftInput = {
   title: string;
   researchFieldCode?: string;
   proposalTypeCode?: string;
+  /** Tính chất đề tài: Quân sự / Dân sự (cùng cấp đề tài xác định mảng giao chuyên viên phụ trách). */
+  militaryScope?: "military" | "civilian";
   startDate?: string;
   endDate?: string;
   objectives?: string;
