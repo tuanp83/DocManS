@@ -27,6 +27,7 @@ let staff;
 let otherStaff;
 let outsiderStaff;
 let leader;
+let boardHead;
 let researcher;
 let sequence = 0;
 
@@ -89,6 +90,7 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     otherStaff = await createUser("RESEARCH_MANAGEMENT_STAFF", orgA);
     outsiderStaff = await createUser("RESEARCH_MANAGEMENT_STAFF", orgB);
     leader = await createUser("LEADERSHIP_APPROVAL_AUTHORITY", orgB); // academy-wide, no scope on orgA
+    boardHead = await createUser("RESEARCH_BOARD_HEAD", orgA); // giao / thu hồi chuyên viên phụ trách
   });
 
   after(async () => {
@@ -126,10 +128,12 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     await assert.rejects(projects.getProject(outsiderStaff, id), ForbiddenException);
     await assert.rejects(projects.getProject(researcher, id), ForbiddenException);
 
-    // Only the assigned officer operates; leadership (or in-scope staff) assigns; the PI cannot.
+    // Only the assigned officer operates; only the Head or Board Head assigns (not leadership, staff or the PI).
     await assert.rejects(projects.configureSetup(staff, id, { contextVersion: await context(staff, id), milestones: [], checkpoints: [] }), ForbiddenException);
     await assert.rejects(projects.assignOfficer(pi, id, { contextVersion: await context(pi, id), officerUserId: staff.id }), ForbiddenException);
-    await projects.assignOfficer(leader, id, { contextVersion: await context(leader, id), officerUserId: staff.id, reason: "Phân công" });
+    await assert.rejects(projects.assignOfficer(leader, id, { contextVersion: await context(leader, id), officerUserId: staff.id }), ForbiddenException);
+    await assert.rejects(projects.assignOfficer(otherStaff, id, { contextVersion: await context(otherStaff, id), officerUserId: staff.id }), ForbiddenException);
+    await projects.assignOfficer(boardHead, id, { contextVersion: await context(boardHead, id), officerUserId: staff.id, reason: "Phân công" });
 
     await projects.configureSetup(staff, id, {
       contextVersion: await context(staff, id),
@@ -190,7 +194,7 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
   it("tracks progress: weights, baseline versions, member updates, officer assessment and the work queue", async () => {
     const proposal = await approvedProposal();
     const { id } = await projects.createFromApprovedProposal(staff, proposal.id);
-    await projects.assignOfficer(leader, id, { contextVersion: await context(leader, id), officerUserId: staff.id, reason: "Phân công" });
+    await projects.assignOfficer(boardHead, id, { contextVersion: await context(boardHead, id), officerUserId: staff.id, reason: "Phân công" });
     const memberRow = (await projects.getProject(staff, id)).members.find((item) => item.userId === member.id);
 
     // Mỗi mốc phải có kỳ báo cáo (mốc chỉ hoàn thành qua báo cáo được chấp nhận).
@@ -293,8 +297,8 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
   it("a stale context version is rejected", async () => {
     const proposal = await approvedProposal();
     const { id } = await projects.createFromApprovedProposal(staff, proposal.id);
-    const stale = await context(leader, id);
-    await projects.assignOfficer(leader, id, { contextVersion: stale, officerUserId: staff.id });
-    await assert.rejects(projects.assignOfficer(leader, id, { contextVersion: stale, officerUserId: otherStaff.id }), (error) => error.getResponse?.().code === "CONTEXT_VERSION_MISMATCH");
+    const stale = await context(boardHead, id);
+    await projects.assignOfficer(boardHead, id, { contextVersion: stale, officerUserId: staff.id });
+    await assert.rejects(projects.assignOfficer(boardHead, id, { contextVersion: stale, officerUserId: otherStaff.id }), (error) => error.getResponse?.().code === "CONTEXT_VERSION_MISMATCH");
   });
 });

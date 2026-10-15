@@ -280,7 +280,7 @@ Ký hiệu: ✅ được phép · 🔸 có điều kiện (xem ghi chú) · 👁
 | **Hồ sơ đề xuất** | | | | | | | | | | |
 | Tạo, sửa, nộp đề xuất (tư cách chủ nhiệm) | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | Xem hồ sơ | — | 👁² | 👁² | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 🔸³ | 🔸⁴ | 🔸⁵ |
-| Giao chuyên viên phụ trách hồ sơ, phân mảng | — | — | — | — | ✅¹ | — | — | — | — | — |
+| Giao chuyên viên phụ trách hồ sơ, phân mảng | — | — | — | — | ✅¹ | — | ✅¹ | — | — | — |
 | Kiểm tra đầy đủ, yêu cầu bổ sung | — | — | — | — | — | — | ✅¹ | 🔸³ | — | — |
 | Phân công phản biện, lập hội đồng | — | — | — | — | ✅¹ | — | ✅¹ | 🔸³ | — | — |
 | Chấm phiếu đánh giá | — | — | — | — | — | — | — | 🔸⁵ | 🔸⁵ | 🔸⁵ |
@@ -295,7 +295,7 @@ Ký hiệu: ✅ được phép · 🔸 có điều kiện (xem ghi chú) · 👁
 | **Đề tài đang thực hiện** | | | | | | | | | | |
 | Xem và theo dõi đề tài | — | ✅ | ✅ | 👁¹ | 👁 | 👁¹ | 👁 | 👁¹ | 🔸⁴ | 🔸⁴ |
 | Xem chi tiết kinh phí từng đề tài | — | ✅ | ✅ | — | ✅ | 🔸⁴ | ✅ | 🔸³ | 🔸⁴ | 🔸⁴ |
-| Giao/thu hồi chuyên viên phụ trách đề tài | — | ✅ | — | — | ✅¹ | — | — | ✅¹ | — | — |
+| Giao/thu hồi chuyên viên phụ trách đề tài | — | — | — | — | ✅¹ | — | ✅¹ | — | — | — |
 | Nghiệp vụ hằng ngày (thiết lập mốc, xét báo cáo, thẩm định, nghiệm thu, sản phẩm, lập thanh lý, đóng đề tài) | — | — | — | — | — | — | — | 🔸³ | — | — |
 | Việc của chủ nhiệm (báo cáo, xin điều chỉnh/gia hạn, nộp nghiệm thu, nộp sản phẩm) | — | — | — | — | — | — | — | — | 🔸⁴ | — |
 | Cập nhật tiến độ mốc mình phụ trách | — | — | — | — | — | — | — | — | 🔸⁴ | 🔸⁴ |

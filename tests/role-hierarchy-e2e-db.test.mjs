@@ -92,8 +92,10 @@ test("a proposal goes from submission to the Director's approval through every r
     council.push({ role, account: await account(name, "RESEARCHER_INTERNAL_USER", [khoa]) });
   }
 
-  // Trưởng phòng giao mảng: chuyên viên phụ trách đề tài cấp Cơ sở.
-  await assert.rejects(() => s.coordination.setPortfolio(board, officer.id, { rules: [{ proposalLevel: "grassroots-level" }] }), { status: 403 });
+  // Trưởng phòng (hoặc Trưởng ban) giao mảng: chuyên viên phụ trách đề tài cấp Cơ sở. Phó phòng, chuyên viên không giao được.
+  await assert.rejects(() => s.coordination.setPortfolio(deputyHead, officer.id, { rules: [{ proposalLevel: "grassroots-level" }] }), { status: 403 });
+  await assert.rejects(() => s.coordination.setPortfolio(otherStaff, officer.id, { rules: [{ proposalLevel: "grassroots-level" }] }), { status: 403 });
+  await s.coordination.setPortfolio(board, officer.id, { rules: [{ proposalLevel: "grassroots-level" }] });
   await s.coordination.setPortfolio(head, officer.id, { rules: [{ proposalLevel: "grassroots-level" }] });
 
   // Chủ nhiệm lập và nộp hồ sơ; hồ sơ tự giao cho chuyên viên phụ trách mảng.

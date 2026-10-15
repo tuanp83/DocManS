@@ -108,3 +108,14 @@ test("Board Head assigns reviewers and coordinates the council in unit scope; De
   assert.equal(view(boardHead, { completenessCheckCompleted: false }).blockedActions.find((item) => item.action === "proposal.review.assign")?.code, "WORKFLOW_STATE_DENIED");
   assert.ok(has(view(boardHead, { proposal: { status: "under_review" } }), "proposal.review.consolidate"));
 });
+
+test("Board Head assigns and revokes the proposal management officer in unit scope; Deputy Head and staff cannot", () => {
+  const proposal = { id: "p", ownerId: "pi", hostOrganizationUnitId: "unit-1", status: "submitted", updatedAt: now, authorizationContextUpdatedAt: now, authorizationRelationshipVersion: 1, authorizationConflictVersion: 1, authorizationDelegationVersion: 1 };
+  const none = { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} };
+  const view = (who, officer = null) => projectProposalViewerAuthorizationV1({ actor: who, proposal, participation: none, reviewAccess: { isAssignedReviewer: false }, managementOfficer: { resolved: true, officer }, canRead: true, canEdit: false, canManageFiles: false, completenessCheckCompleted: false });
+  const current = { officerUserId: "cv", username: "cv", effectiveFrom: now };
+  assert.ok(has(view(boardHead), "proposal.management-officer.assign"));
+  assert.ok(has(view(boardHead, current), "proposal.management-officer.revoke"));
+  assert.equal(view({ ...boardHead, organizationScopes: [] }).blockedActions.find((item) => item.action === "proposal.management-officer.assign")?.code, "ORG_SCOPE_DENIED");
+  for (const who of [deputyHead, actor("cv", "RESEARCH_MANAGEMENT_STAFF")]) assert.ok(!has(view(who), "proposal.management-officer.assign"), who.systemRole);
+});

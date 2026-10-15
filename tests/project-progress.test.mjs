@@ -202,9 +202,13 @@ test("officer gets review items and a health assessment when the project is red 
   assert.deepEqual(items.map((item) => item.kind).sort(), ["adjustment_review", "extension_validation", "health_assess", "report_review"]);
 });
 
-test("leadership gets extension decisions; officer assignment only for head and leadership", () => {
-  const leader = projectWorkItems(project({ status: "preparing", officer: null, viewerAuthorization: capability(["project.read", "project.officer.assign", "project.extension.approve"]), requests: [{ id: "q", requestType: "extension", status: "ready_for_head_decision" }] }), { id: "leader", systemRole: "LEADERSHIP_APPROVAL_AUTHORITY" }, today);
-  assert.deepEqual(leader.map((item) => item.kind).sort(), ["extension_decision", "officer_assign"]);
+test("leadership gets extension decisions; officer assignment only for the Head and the Board Head", () => {
+  const leader = projectWorkItems(project({ status: "preparing", officer: null, viewerAuthorization: capability(["project.read", "project.extension.approve"]), requests: [{ id: "q", requestType: "extension", status: "ready_for_head_decision" }] }), { id: "leader", systemRole: "LEADERSHIP_APPROVAL_AUTHORITY" }, today);
+  assert.deepEqual(leader.map((item) => item.kind).sort(), ["extension_decision"]);
+  for (const systemRole of ["RESEARCH_MANAGEMENT_HEAD", "RESEARCH_BOARD_HEAD"]) {
+    const assigner = projectWorkItems(project({ status: "preparing", officer: null, viewerAuthorization: capability(["project.read", "project.officer.assign"]) }), { id: systemRole, systemRole }, today);
+    assert.deepEqual(assigner.map((item) => item.kind), ["officer_assign"], systemRole);
+  }
   const staff = projectWorkItems(project({ status: "preparing", officer: null, viewerAuthorization: capability(["project.read", "project.officer.assign"]) }), { id: "s", systemRole: "RESEARCH_MANAGEMENT_STAFF" }, today);
   assert.deepEqual(staff, []);
 });

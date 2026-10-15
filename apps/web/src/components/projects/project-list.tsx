@@ -49,7 +49,7 @@ export function ProjectList({ mine = false }: { mine?: boolean }) {
       const proposal = await loadResearchProposal(proposalId);
       const contextVersion = proposal.viewerAuthorization?.contextVersion;
       const result = await createProject(proposalId, contextVersion);
-      setMessage("Đã tạo đề tài. Lãnh đạo hoặc chuyên viên QLKH cần phân công chuyên viên phụ trách trước khi thiết lập mốc.");
+      setMessage("Đã tạo đề tài. Trưởng phòng hoặc Trưởng ban QLKH cần giao chuyên viên phụ trách trước khi thiết lập mốc.");
       await refresh();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Không thể tạo đề tài."); }
     finally { setBusy(false); }

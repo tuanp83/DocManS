@@ -362,7 +362,7 @@ export class ProposalDecisionsService {
           userIds: managers,
           excludeUserIds: [actor.id, proposal.ownerId],
           title: `Cần lập đề tài: ${proposal.title}`,
-          message: `Hồ sơ ${name} đã được phê duyệt. Vui lòng lập đề tài thực hiện và phân công chuyên viên phụ trách.`,
+          message: `Hồ sơ ${name} đã được phê duyệt. Vui lòng lập đề tài thực hiện; Trưởng phòng hoặc Trưởng ban QLKH giao chuyên viên phụ trách.`,
           link: proposalLink(proposalId),
           metadata: { proposalId, decision, decisionId: created.id }
         }] : [])

@@ -953,7 +953,7 @@ export class ApprovedProjectsService {
     }
   }
 
-  /** Phân công / thu hồi chuyên viên phụ trách: lãnh đạo hoặc chuyên viên QLKH trong phạm vi, không tham gia đề tài. */
+  /** Giao / thu hồi chuyên viên phụ trách: Trưởng phòng hoặc Trưởng ban QLKH trong phạm vi, không tham gia đề tài. */
   private assertOfficerAssigner(actor: SafeUserContext, project: AnyRecord) {
     this.assertScope(actor, project);
     if (!canAssignProjectOfficer(actor) || this.activeMember(project, actor.id)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });

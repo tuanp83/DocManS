@@ -111,8 +111,8 @@ export function projectWorkItems(project: AnyRecord, actor: { id: string; system
     push("health", "health_assess", summary.needsReassessment ? "Đánh giá lại sức khoẻ đề tài" : `Đánh giá sức khoẻ đề tài (${summary.computedLevel === "red" ? "Đỏ" : "Vàng"})`, null);
   }
 
-  // Phân công chuyên viên: chỉ Trưởng phòng QLKH và lãnh đạo nhận việc này, để chuyên viên không bị ngập việc.
-  if (!project.officer && project.status === "preparing" && can("project.officer.assign") && ["RESEARCH_MANAGEMENT_HEAD", "LEADERSHIP_APPROVAL_AUTHORITY"].includes(actor.systemRole ?? "")) {
+  // Giao chuyên viên phụ trách: chỉ Trưởng phòng KHQS và Trưởng ban QLKH (người có quyền project.officer.assign).
+  if (!project.officer && project.status === "preparing" && can("project.officer.assign") && ["RESEARCH_MANAGEMENT_HEAD", "RESEARCH_BOARD_HEAD"].includes(actor.systemRole ?? "")) {
     push("officer", "officer_assign", "Phân công chuyên viên phụ trách", null);
   }
   return items;

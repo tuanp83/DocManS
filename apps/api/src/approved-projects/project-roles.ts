@@ -26,9 +26,9 @@ export function isProjectLeadership(actor?: SafeUserContext) {
   return isAcademyLeadership(actor);
 }
 
-/** Người được phân công / thu hồi chuyên viên phụ trách đề tài. */
+/** Giao / thu hồi chuyên viên phụ trách đề tài: chỉ Trưởng phòng KHQS hoặc Trưởng ban QLKH (trong phạm vi đơn vị). */
 export function canAssignProjectOfficer(actor?: SafeUserContext) {
-  return isLeadership(actor) || isResearchManagement(actor);
+  return isResearchManagementHead(actor) || isResearchBoardHead(actor);
 }
 
 /** Quyết định gia hạn (không đổi kinh phí) và thành lập hội đồng nghiệm thu: Giám đốc hoặc Phó GĐ phụ trách Khoa học. */

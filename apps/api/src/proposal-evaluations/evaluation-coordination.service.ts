@@ -3,7 +3,7 @@ import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { autoAssignPortfolioOfficer, defaultMilitaryScope, MILITARY_SCOPE_LABELS, readMilitaryScope } from "../proposals-shared/management-portfolio.js";
-import { isResearchDepartmentLeadership, isResearchManagementHead, isResearchManagementStaff } from "../proposals-shared/proposal-access.js";
+import { isResearchBoardHead, isResearchDepartmentLeadership, isResearchManagementHead, isResearchManagementStaff } from "../proposals-shared/proposal-access.js";
 import { MANAGEMENT_OFFICER_STATUS, ProposalManagementOfficerService } from "../proposals-shared/proposal-management-officer.service.js";
 import { isRoundActiveStatus, REVIEW_ASSIGNMENT_STATUS, REVIEW_STATUS } from "../proposals-shared/proposal-review-access.js";
 import { PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
@@ -46,8 +46,8 @@ export class EvaluationCoordinationService {
   ) {}
 
   async overview(actor: SafeUserContext) {
-    const isHead = isResearchManagementHead(actor);
-    // Phó phòng và Trưởng ban xem toàn bộ hồ sơ trong phạm vi (chỉ xem); chuyên viên xem hồ sơ mình phụ trách.
+    // Trưởng phòng, Trưởng ban giao chuyên viên phụ trách và phân mảng; Phó phòng chỉ xem; chuyên viên xem hồ sơ mình phụ trách.
+    const isHead = isResearchManagementHead(actor) || isResearchBoardHead(actor);
     const seesAll = isResearchDepartmentLeadership(actor);
     if (!seesAll && !isResearchManagementStaff(actor)) {
       throw new ForbiddenException({ message: "Trang điều phối đánh giá dành cho Phòng Khoa học quân sự (Trưởng phòng, Phó phòng, Trưởng ban, chuyên viên)." });
@@ -238,7 +238,7 @@ export class EvaluationCoordinationService {
   }
 
   private assertHead(actor: SafeUserContext) {
-    if (!isResearchManagementHead(actor)) throw new ForbiddenException({ message: "Chỉ Trưởng phòng quản lý khoa học được phân công mảng cho chuyên viên." });
+    if (!isResearchManagementHead(actor) && !isResearchBoardHead(actor)) throw new ForbiddenException({ message: "Chỉ Trưởng phòng hoặc Trưởng ban quản lý khoa học được phân công mảng cho chuyên viên." });
   }
 
   private async proposalLevels() {

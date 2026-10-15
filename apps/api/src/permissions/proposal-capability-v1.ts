@@ -183,7 +183,8 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
   // Protected management actions: role, scope, resolved context and no conflict, in that order.
   // Kiểm tra đầy đủ, yêu cầu bổ sung: chuyên viên phụ trách hồ sơ, hoặc Trưởng ban QLKH trong phạm vi đơn vị.
   if (STAFF_ACTIONS.includes(action) && !isResearchManagementStaff(input.actor) && !isResearchBoardHead(input.actor)) return blocked("ACTION_NOT_GRANTED");
-  if (HEAD_ACTIONS.includes(action) && !isResearchManagementHead(input.actor)) return blocked("ACTION_NOT_GRANTED");
+  // Giao / thu hồi chuyên viên phụ trách hồ sơ: Trưởng phòng hoặc Trưởng ban QLKH.
+  if (HEAD_ACTIONS.includes(action) && !isResearchManagementHead(input.actor) && !isResearchBoardHead(input.actor)) return blocked("ACTION_NOT_GRANTED");
   if (DECISION_ACTIONS.includes(action) && input.actor.systemRole !== "LEADERSHIP_APPROVAL_AUTHORITY") return blocked("ACTION_NOT_GRANTED");
   if (!STAFF_ACTIONS.includes(action) && !HEAD_ACTIONS.includes(action) && !DECISION_ACTIONS.includes(action)) return blocked("ACTION_NOT_GRANTED");
   if (!inScope(input)) return blocked("ORG_SCOPE_DENIED");

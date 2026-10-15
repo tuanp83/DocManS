@@ -45,17 +45,17 @@ test("assigned Staff prepares adjustments; Leadership decides adjustments and ex
 test("Leadership is academy-wide; Staff needs the host unit scope", () => {
   const leaderNoScope = projectViewerAuthorizationV1({ actor: actor("leader", "LEADERSHIP_APPROVAL_AUTHORITY", false), project });
   assert(has(leaderNoScope, "project.read"));
-  assert(has(leaderNoScope, "project.officer.assign"));
+  assert(!has(leaderNoScope, "project.officer.assign"), "Giám đốc không giao chuyên viên phụ trách");
   const staffNoScope = projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF", false), project, projectOfficer: officer });
   assert(!has(staffNoScope, "project.read"));
   assert(!has(staffNoScope, "project.adjustment.approve"));
 });
 
-test("Staff in scope reads and assigns officers but operates only when assigned", () => {
+test("Staff in scope reads but never assigns officers, and operates only when assigned", () => {
   const staff = actor("staff", "RESEARCH_MANAGEMENT_STAFF");
   const unassigned = projectViewerAuthorizationV1({ actor: staff, project, request: { requestType: "adjustment", status: "under_staff_review", requesterId: "pi" } });
   assert(has(unassigned, "project.read"));
-  assert(has(unassigned, "project.officer.assign"));
+  assert(!has(unassigned, "project.officer.assign"));
   assert(!has(unassigned, "project.adjustment.approve"));
   assert(!has(unassigned, "project.report.accept"));
   const expired = projectViewerAuthorizationV1({ actor: staff, project, projectOfficer: { ...officer, effectiveUntil: new Date(now.getTime() - 1) } });
@@ -106,4 +106,16 @@ test("health assessment: only the assigned officer, while executing or paused", 
   assert(!has(projectViewerAuthorizationV1({ actor: actor("staff", "RESEARCH_MANAGEMENT_STAFF"), project }), "project.health.assess"), "unassigned staff");
   assert(!has(projectViewerAuthorizationV1({ actor: actor("leader", "LEADERSHIP_APPROVAL_AUTHORITY"), project }), "project.health.assess"));
   assert(!has(projectViewerAuthorizationV1({ actor: actor("pi", "RESEARCHER_INTERNAL_USER"), project }), "project.health.assess"));
+});
+
+test("only the Head and the Board Head assign or revoke the project officer, within their unit scope", () => {
+  for (const role of ["RESEARCH_MANAGEMENT_HEAD", "RESEARCH_BOARD_HEAD"]) {
+    const view = projectViewerAuthorizationV1({ actor: actor(role, role), project, projectOfficer: officer });
+    assert(has(view, "project.officer.assign"), role);
+    assert(has(view, "project.officer.revoke"), role);
+    assert(!has(projectViewerAuthorizationV1({ actor: actor(role, role, false), project }), "project.officer.assign"), `${role} ngoài phạm vi`);
+  }
+  for (const role of ["LEADERSHIP_APPROVAL_AUTHORITY", "SCIENCE_DEPUTY_DIRECTOR", "RESEARCH_MANAGEMENT_DEPUTY_HEAD", "RESEARCH_MANAGEMENT_STAFF"]) {
+    assert(!has(projectViewerAuthorizationV1({ actor: actor(role, role), project }), "project.officer.assign"), role);
+  }
 });

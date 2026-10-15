@@ -1040,8 +1040,8 @@ export class ResearchProposalsService {
   }
 
   private assertManagementOfficerAuthority(actor: SafeUserContext, proposal: ResearchProposalRecord) {
-    if (!isResearchManagementHead(actor)) {
-      throw new ForbiddenException({ message: "Chỉ Trưởng phòng quản lý khoa học được phân công hoặc thu hồi cán bộ phụ trách hồ sơ." });
+    if (!isResearchManagementHead(actor) && !isResearchBoardHead(actor)) {
+      throw new ForbiddenException({ message: "Chỉ Trưởng phòng hoặc Trưởng ban quản lý khoa học được phân công hoặc thu hồi cán bộ phụ trách hồ sơ." });
     }
     assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
   }
