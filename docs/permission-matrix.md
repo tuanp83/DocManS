@@ -235,7 +235,7 @@ never grants an action by itself.
 
 ## 7. System-role comparison matrix
 
-> **Cập nhật 15/10/2026 — đối chiếu code.** Mục 7 nay là ma trận 10 vai trò hệ thống, lập trực tiếp từ code
+> **Cập nhật 15/10/2026 — đối chiếu code.** Mục 7 là ma trận 10 vai trò hệ thống, lập trực tiếp từ code
 > (`packages/permissions/src/system-roles.js`, `apps/api/src/proposals-shared/proposal-access.ts`,
 > `apps/api/src/permissions/proposal-capability-v1.ts`, `apps/api/src/approved-projects/project-roles.ts`,
 > `apps/api/src/approved-projects/project-capability-v1.ts`, `apps/api/src/proposals-shared/approval-routing.ts`,
@@ -265,14 +265,16 @@ Ngoài vai trò hệ thống, quyền còn phụ thuộc phạm vi đơn vị (`
 
 ### 7.2 Ma trận hiện hành
 
-Ký hiệu: ✅ được phép · 🔸 có điều kiện (xem ghi chú) · 👁 chỉ xem · — không được.
+Đối chiếu code ngày 15/10/2026 (sau các commit `1a99a83` → `09be795`).
+Ký hiệu: ✅ được phép · 🔸 có điều kiện (số là ghi chú) · 👁 chỉ xem · — không được.
+Chỉ số ¹ sau ✅ hoặc 👁 nghĩa là chỉ trong phạm vi đơn vị.
 
 | Chức năng | QT | GĐ | PGĐ-KH | PGĐ-TD | TP | PP | TB | CV | NCV | NNB |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **Quản trị** | | | | | | | | | | |
-| Quản lý tài khoản, vai trò, đơn vị, danh mục | ✅ | — | — | — | — | — | — | — | — | — |
-| Quản lý hồ sơ nhà khoa học (tạo, cấp/liên kết tài khoản) | ✅ | — | — | — | 🔸¹ | — | — | 🔸¹ | — | — |
-| Có hồ sơ nhà khoa học, tự cập nhật lý lịch khoa học của mình | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Quản trị và tài khoản** | | | | | | | | | | |
+| Quản lý tài khoản, vai trò, đơn vị, danh mục, cấu hình | ✅ | — | — | — | — | — | — | — | — | — |
+| Quản lý hồ sơ nhà khoa học (tạo, cấp / liên kết tài khoản) | ✅ | — | — | — | ✅¹ | — | — | ✅¹ | — | — |
+| Có lý lịch khoa học, tự cập nhật | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Quản lý văn bản khoa học | ✅ | — | — | — | ✅ | — | ✅ | ✅ | — | — |
 | **Đợt tiếp nhận** | | | | | | | | | | |
 | Tạo, mở, đóng đợt | — | — | — | — | ✅ | — | — | ✅ | — | — |
@@ -280,53 +282,52 @@ Ký hiệu: ✅ được phép · 🔸 có điều kiện (xem ghi chú) · 👁
 | **Hồ sơ đề xuất** | | | | | | | | | | |
 | Tạo, sửa, nộp đề xuất (tư cách chủ nhiệm) | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | Xem hồ sơ | — | 👁² | 👁² | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 🔸³ | 🔸⁴ | 🔸⁵ |
-| Giao chuyên viên phụ trách hồ sơ, phân mảng | — | — | — | — | ✅¹ | — | ✅¹ | — | — | — |
+| Giao / thu hồi chuyên viên phụ trách hồ sơ, phân mảng | — | — | — | — | ✅¹ | — | ✅¹ | — | — | — |
 | Kiểm tra đầy đủ, yêu cầu bổ sung | — | — | — | — | — | — | ✅¹ | 🔸³ | — | — |
-| Phân công phản biện, lập hội đồng | — | — | — | — | ✅¹ | — | ✅¹ | 🔸³ | — | — |
+| Phân công phản biện, lập hội đồng đánh giá | — | — | — | — | ✅¹ | — | ✅¹ | 🔸³ | — | — |
 | Chấm phiếu đánh giá | — | — | — | — | — | — | — | 🔸⁵ | 🔸⁵ | 🔸⁵ |
 | Tổng hợp, chốt, trình kết quả đánh giá | — | — | — | — | ✅¹ | — | ✅¹ | 🔸³ | 🔸⁶ | 🔸⁶ |
-| Xem tiến độ đánh giá | — | 👁 | 👁 | 👁 | 👁 | 👁 | 👁 | 🔸³ | — | — |
-| Duyệt tờ trình, bước Trưởng ban | — | — | — | — | — | — | ✅¹ | lập tờ trình | — | — |
-| Duyệt tờ trình, bước Trưởng phòng | — | — | — | — | ✅¹ | — | — | — | — | — |
-| Ký thành lập hội đồng đánh giá/IRB, cấp giấy IRB | — | ✅ | ✅ | — | — | — | — | — | — | — |
-| Phê duyệt/từ chối đề tài và kinh phí | — | ✅ | — | — | — | — | — | — | — | — |
+| Xem tiến độ đánh giá | — | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 🔸³ | — | — |
 | Lập hội đồng IRB (mời thành viên), trình kết luận IRB | — | — | — | — | ✅¹ | — | ✅¹ | 🔸³ | — | — |
 | Nhận xét IRB (thành viên), lập kết luận IRB (thư ký) | — | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ |
+| **Tờ trình qua Phòng KHQS** | | | | | | | | | | |
+| Lập tờ trình | — | — | — | — | ✅¹ | — | ✅¹ | 🔸³ | — | — |
+| Rà soát, trình Trưởng phòng (bước Trưởng ban) | — | — | — | — | — | — | ✅¹ | — | — | — |
+| Duyệt, trình Ban giám đốc (bước Trưởng phòng) | — | — | — | — | ✅¹ | — | — | — | — | — |
+| Ký thành lập hội đồng đánh giá, IRB, nghiệm thu; cấp giấy IRB; gia hạn, điều chỉnh | — | ✅ | ✅ | — | — | — | — | — | — | — |
+| Phê duyệt đề tài và kinh phí; phê duyệt thanh lý | — | ✅ | — | — | — | — | — | — | — | — |
 | **Đề tài đang thực hiện** | | | | | | | | | | |
 | Xem và theo dõi đề tài | — | ✅ | ✅ | 👁¹ | 👁 | 👁¹ | 👁 | 👁¹ | 🔸⁴ | 🔸⁴ |
 | Xem chi tiết kinh phí từng đề tài | — | ✅ | ✅ | — | ✅ | 🔸⁴ | ✅ | 🔸³ | 🔸⁴ | 🔸⁴ |
-| Giao/thu hồi chuyên viên phụ trách đề tài | — | — | — | — | ✅¹ | — | ✅¹ | — | — | — |
-| Nghiệp vụ hằng ngày (thiết lập mốc, xét báo cáo, thẩm định, nghiệm thu, sản phẩm, lập thanh lý, đóng đề tài) | — | — | — | — | — | — | — | 🔸³ | — | — |
-| Việc của chủ nhiệm (báo cáo, xin điều chỉnh/gia hạn, nộp nghiệm thu, nộp sản phẩm) | — | — | — | — | — | — | — | — | 🔸⁴ | — |
-| Cập nhật tiến độ mốc mình phụ trách | — | — | — | — | — | — | — | — | 🔸⁴ | 🔸⁴ |
-| Quyết định điều chỉnh/gia hạn, thành lập hội đồng nghiệm thu | — | ✅ | ✅ | — | — | — | — | — | — | — |
-| Quản lý kinh phí, giải ngân, quyết toán đề tài | — | ✅ | — | — | ✅ | — | ✅ | 🔸³ | — | — |
-| Phê duyệt thanh lý | — | ✅ | — | — | — | — | — | — | — | — |
+| Quản lý kinh phí, giải ngân, quyết toán | — | ✅ | — | — | ✅ | — | ✅ | 🔸³ | — | — |
+| Giao / thu hồi chuyên viên phụ trách đề tài | — | — | — | — | ✅¹ | — | ✅¹ | — | — | — |
+| Nghiệp vụ hằng ngày (thiết lập mốc, xét báo cáo, thẩm định điều chỉnh / gia hạn, nghiệm thu, sản phẩm, lập thanh lý, đóng đề tài) | — | — | — | — | — | — | — | 🔸³ | — | — |
+| Việc của chủ nhiệm (báo cáo, xin điều chỉnh / gia hạn, nộp nghiệm thu, nộp sản phẩm) | — | 🔸⁴ | 🔸⁴ | 🔸⁴ | 🔸⁴ | 🔸⁴ | 🔸⁴ | 🔸⁴ | 🔸⁴ | — |
+| Cập nhật tiến độ mốc mình phụ trách (thành viên) | — | — | — | — | — | — | — | — | 🔸⁴ | 🔸⁴ |
 | **Đề tài sinh viên NCKH** | | | | | | | | | | |
-| Đăng ký đề tài | — | — | — | — | — | — | — | ✅ | ✅ (GV hướng dẫn) | — |
-| Duyệt, quản lý, hoàn thành | — | — | — | — | — | — | — | 🔸¹ | — | — |
-| **Dashboard** | ✅ (riêng) | ✅ | ✅ | ✅ (ẩn kinh phí) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Đăng ký đề tài (giảng viên hướng dẫn) | — | — | — | — | — | — | — | ✅ | ✅ | — |
+| Duyệt, quản lý, hoàn thành | — | — | — | — | — | — | — | ✅¹ | — | — |
+| **Tổng quan** | | | | | | | | | | |
+| Dashboard nghiệp vụ, xuất Excel | — | ✅ | ✅ | ✅⁷ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 Ghi chú điều kiện:
 
 1. Chỉ trong phạm vi đơn vị của người dùng.
-2. Chỉ hồ sơ đã vào luồng xử lý (đã nộp trở đi), trong phạm vi đơn vị.
-3. Chỉ hồ sơ/đề tài mà chuyên viên **đang được phân công phụ trách**.
-4. Chỉ hồ sơ/đề tài mà người đó là chủ nhiệm hoặc thành viên.
-5. Chỉ khi được phân công phản biện, thành viên hội đồng hoặc IRB (đọc được hồ sơ ngoài đơn vị). Thành viên IRB được mời từ mọi tài khoản có hồ sơ nhà khoa học (trừ người tham gia đề tài).
-6. Chỉ khi là thư ký hội đồng của chính hồ sơ đó; thư ký không chấm phiếu.
+2. Hồ sơ đã vào luồng xử lý (đã nộp trở đi), trong phạm vi đơn vị.
+3. Chỉ hồ sơ / đề tài mà chuyên viên **đang được phân công phụ trách**.
+4. Chỉ hồ sơ / đề tài mà người đó là chủ nhiệm hoặc thành viên (Phó phòng: chỉ xem kinh phí đề tài mình tham gia).
+5. Chỉ khi được phân công phản biện, thành viên hội đồng hoặc IRB; đọc được hồ sơ ngoài đơn vị. Phản biện hội đồng đánh giá mời từ nhà nghiên cứu nội bộ, bên ngoài; thành viên IRB mời từ mọi tài khoản có lý lịch khoa học. Người tham gia đề tài không được mời.
+6. Thư ký hội đồng của chính hồ sơ: lập tổng hợp, ghi biên bản, không chấm phiếu.
+7. Phó GĐ chỉ theo dõi thấy số tổng hợp kinh phí, không thấy kinh phí từng đề tài.
 
 Quy tắc chung:
 
-- **Xung đột lợi ích:** chủ nhiệm, thành viên hoặc phản biện của một hồ sơ/đề tài không được dùng quyền quản lý
-  trên chính hồ sơ/đề tài đó (phân công, tổng hợp, quyết định, thao tác chuyên viên). Chủ nhiệm và phản biện không
-  xem nhật ký hành động của hồ sơ (ẩn danh hai chiều).
-- **QT chỉ quản trị nền tảng**, không tham gia nghiệp vụ và không được phân công phản biện.
-- **Luồng tờ trình:** chuyên viên lập → Trưởng ban rà soát → Trưởng phòng duyệt → Ban giám đốc ký. Trưởng ban tự lập (phân công phản biện, lập hội đồng) thì tờ trình đi thẳng Trưởng phòng duyệt rồi trình Ban giám đốc.
-- **Trưởng phòng, Trưởng ban** xem đề tài và quản lý kinh phí, giải ngân, quyết toán toàn Học viện; các thao tác khác với đề tài (giao chuyên viên phụ trách…) vẫn theo phạm vi đơn vị.
-- **Phó phòng (PP)** chỉ theo dõi trong phạm vi, không có bước duyệt trong luồng trình; chỉ xem kinh phí đề tài mình là chủ nhiệm hoặc thành viên.
-- **PGĐ-TD** bị ẩn kinh phí chi tiết ở hồ sơ, đề tài, dashboard và file xuất, nhưng vẫn được tạo/nộp đề xuất.
-- **NNB** không tạo đề xuất, không xem đợt tiếp nhận; chỉ tham gia với tư cách phản biện, IRB hoặc thành viên đề tài.
+- **Xung đột lợi ích:** chủ nhiệm, thành viên hoặc phản biện của một hồ sơ / đề tài không dùng quyền quản lý trên chính hồ sơ / đề tài đó (phân công, kiểm tra, tổng hợp, quyết định, kinh phí). Chủ nhiệm và phản biện không xem nhật ký hành động của hồ sơ (ẩn danh hai chiều).
+- **Luồng tờ trình:** chuyên viên lập → Trưởng ban rà soát → Trưởng phòng duyệt → Ban giám đốc ký. Trưởng ban tự lập thì đi thẳng Trưởng phòng; Trưởng phòng tự lập hiện vẫn qua bước Trưởng ban rà soát. Trả lại ở bước nào cũng về người lập. Giám đốc ký phê duyệt đề tài, kinh phí, thanh lý; Giám đốc hoặc Phó GĐ phụ trách Khoa học ký hội đồng, IRB, gia hạn, điều chỉnh.
+- **Phạm vi xem đề tài:** Ban giám đốc, Trưởng phòng, Trưởng ban xem mọi đề tài trong Học viện; Trưởng phòng, Trưởng ban quản lý kinh phí toàn Học viện nhưng các thao tác khác với đề tài (giao chuyên viên phụ trách…) chỉ trong đơn vị. Hồ sơ đề xuất vẫn theo phạm vi đơn vị.
+- **Phó phòng** chỉ theo dõi, không có bước duyệt trong luồng tờ trình.
+- **Quản trị hệ thống** chỉ quản trị nền tảng: không có lý lịch khoa học, không vào dashboard nghiệp vụ, không được phân công phản biện.
+- **Tên hiển thị** của tài khoản có lý lịch khoa học được ghép từ lý lịch: quân hàm, học hàm, học vị, họ tên (ví dụ "Thượng tá, PGS. TS. Đỗ Minh Trung"); cập nhật mỗi khi lý lịch được lưu hoặc liên kết tài khoản.
 
 ### 7.3 Lịch sử: ma trận 7 vai trò (trước 10/2026, đã thay thế)
 
