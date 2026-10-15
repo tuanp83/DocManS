@@ -25,15 +25,16 @@ The seed file stores precomputed `scrypt` password hashes only. Plaintext creden
 The `Unit` column above is each account's home unit. Backend authorization checks the account's
 **organization scopes**, which are not always just that one unit.
 
-The scientific-management accounts (`nmphuong`, `dmtrung`, `hdtien1`, `hdtien2`) are scoped
-to the entire Academy (10/10 organization units) so they operate intake, supplement, reviewer-assignment,
-project tracking, and consolidation flows across all units.
+The leadership and scientific-management accounts (`tvtien`, `pgiamdoc`, `ttlan`, `nmphuong`, `pphong`,
+`dmtrung`, `hdtien1`, `hdtien2`) are scoped to the entire Academy (every organization unit) so they operate
+intake, supplement, reviewer-assignment, project tracking, monitoring and consolidation flows across all units.
+Each keeps its home unit as the primary scope (`org-bgq` for the Board of Directors, `org-khqs` for Phòng KHQS).
 
 | Username | Organization scopes |
 | --- | --- |
-| `admin`, `admin2` | `org-khti` |
-| `tvtien` | `org-bgq` |
-| `nmphuong`, `dmtrung`, `hdtien1`, `hdtien2` | Toàn Học viện (10/10 units) |
+| `admin`, `admin2` | Toàn Học viện, primary `org-khti` |
+| `tvtien`, `pgiamdoc`, `ttlan` | Toàn Học viện, primary `org-bgq` |
+| `nmphuong`, `pphong`, `dmtrung`, `hdtien1`, `hdtien2` | Toàn Học viện, primary `org-khqs` |
 | `patuan` | `org-khti` |
 
 Leadership (`tvtien`) does not need a matching organization scope to read or decide a proposal:

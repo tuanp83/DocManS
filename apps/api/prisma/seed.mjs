@@ -99,7 +99,7 @@ const users = [
     status: "active",
     systemRole: "RESEARCH_OVERSIGHT_AUTHORITY",
     unit: "Ban Giám Đốc"
-  }
+  },
   {
     id: "user-deputy-head",
     username: "pphong",
@@ -109,7 +109,7 @@ const users = [
     status: "active",
     systemRole: "RESEARCH_MANAGEMENT_DEPUTY_HEAD",
     unit: "Phó phòng KHQS"
-  },,
+  },
   {
     id: "user-researcher1",
     username: "researcher1",
@@ -362,7 +362,10 @@ const additionalOrganizationScopes = {
   "user-admin": allUnitIds,
   "user-admin2": allUnitIds,
   "user-leadership": allUnitIds,
+  // Phó GĐ phụ trách Khoa học và Phó phòng KHQS: phạm vi toàn Học viện như Giám đốc, Trưởng phòng.
+  "user-vicedirector": allUnitIds,
   "user-oversight": allUnitIds,
+  "user-deputy-head": allUnitIds,
   "user-staff": allUnitIds,
   "user-reviewer": allUnitIds,
   "user-staff-hdtien1": allUnitIds,
@@ -435,7 +438,8 @@ for (const user of users) {
       where: {
         userId_organizationUnitId: { userId: user.id, organizationUnitId }
       },
-      update: { isPrimary: false },
+      // Giữ nguyên cờ đơn vị chính đã đặt ở trên (phạm vi bổ sung gồm cả đơn vị chính).
+      update: {},
       create: { userId: user.id, organizationUnitId, isPrimary: false }
     });
   }
