@@ -50,7 +50,8 @@ export function toShellAccount(user: CurrentUser): ShellAccount {
     systemRoleLabel: getSystemRoleLabel(user.systemRole),
     unit: user.unit,
     positions: user.positions ?? [],
-    initials: user.displayName.trim().charAt(0).toUpperCase() || "U",
+    // Chữ cái đầu của tên gọi (từ cuối họ tên), không phải của quân hàm hay học hàm đứng trước.
+    initials: user.displayName.trim().split(/\s+/).pop()?.charAt(0).toUpperCase() || "U",
     organizationScopes: user.organizationScopes
   };
 }

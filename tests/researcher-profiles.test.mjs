@@ -5,6 +5,7 @@ import { isPermissionActionV1 } from "../packages/permissions/src/index.js";
 import { createResearcherProfilePipe } from "../dist/apps/api/researcher-profiles/researcher-profiles.dto.js";
 import { normalizeResearcherKey, ResearcherProfilesService } from "../dist/apps/api/researcher-profiles/researcher-profiles.service.js";
 import { canHoldResearcherProfile, profileAccountRoles, projectResearcherProfileAuthorization } from "../dist/apps/api/researcher-profiles/researcher-profile-access.js";
+import { formatResearcherDisplayName } from "../dist/apps/api/researcher-profiles/researcher-display-name.js";
 
 const staff = {
   id: "staff-1",
@@ -328,5 +329,22 @@ describe("scientific CV for leadership and research-management accounts", () => 
     const authorization = projectResearcherProfileAuthorization(director, { id: "p-1", managementOrganizationUnitId: "org-1", aggregateVersion: 1, linkedUserId: director.id, status: "ACTIVE" });
     assert.ok(authorization.allowedActions.includes("researcher-profile.self.update"));
     assert.ok(!authorization.allowedActions.includes("researcher-profile.create"));
+  });
+});
+
+describe("account display name from the scientific CV", () => {
+  const rank = (code, name) => ({ code, name });
+  it("puts military rank, academic rank and degree before the name", () => {
+    assert.equal(formatResearcherDisplayName({ fullName: "Đỗ Minh Trung", militaryRank: "Thượng tá", academicRankCatalogItem: rank("associate-professor", "Phó giáo sư"), academicDegreeCatalogItem: rank("doctor", "Tiến sĩ") }), "Thượng tá, PGS. TS. Đỗ Minh Trung");
+    assert.equal(formatResearcherDisplayName({ fullName: "Nguyễn Minh Phương", academicRankCatalogItem: rank("professor", "Giáo sư"), academicDegreeCatalogItem: rank("doctor", "Tiến sĩ") }), "GS. TS. Nguyễn Minh Phương");
+    assert.equal(formatResearcherDisplayName({ fullName: "Hoàng Đình Tiến", militaryRank: "đại úy", academicDegreeCatalogItem: rank("master", "Thạc sĩ") }), "Đại úy, ThS. Hoàng Đình Tiến");
+    assert.equal(formatResearcherDisplayName({ fullName: "Lê Văn A", militaryRank: "Trung tá" }), "Trung tá Lê Văn A");
+    assert.equal(formatResearcherDisplayName({ fullName: "Lê Văn B", academicDegreeCatalogItem: rank("bsckii", "BSCKII") }), "BSCKII. Lê Văn B");
+  });
+  it("titles chosen in the CV replace titles typed into the full name; otherwise the typed ones are kept", () => {
+    assert.equal(formatResearcherDisplayName({ fullName: "PGS. TS. Nguyễn Minh Phương", academicRankCatalogItem: rank("associate-professor", "Phó giáo sư"), academicDegreeCatalogItem: rank("doctor", "Tiến sĩ") }), "PGS. TS. Nguyễn Minh Phương");
+    assert.equal(formatResearcherDisplayName({ fullName: "TS. Phạm Anh Tuấn", academicDegreeCatalogItem: rank("master", "Thạc sĩ") }), "ThS. Phạm Anh Tuấn");
+    assert.equal(formatResearcherDisplayName({ fullName: "PGS. TS. Nguyễn Minh Phương" }), "PGS. TS. Nguyễn Minh Phương");
+    assert.equal(formatResearcherDisplayName({ fullName: "TS Đỗ Minh Trung", militaryRank: "Thượng tá" }), "Thượng tá, TS. Đỗ Minh Trung");
   });
 });

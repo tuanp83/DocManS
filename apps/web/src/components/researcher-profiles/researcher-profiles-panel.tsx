@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSession } from "@/components/auth/session-provider";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   createResearcherProfile,
@@ -80,6 +81,7 @@ const historyActions: Record<string, string> = {
 type TabType = "info" | "training" | "work" | "experience" | "print";
 
 export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
+  const { refreshCurrentUser } = useSession();
   const [profiles, setProfiles] = useState<ResearcherProfileSummary[]>([]);
   const [organizations, setOrganizations] = useState<ResearcherOrganization[]>([]);
   const [catalogs, setCatalogs] = useState<Awaited<ReturnType<typeof loadResearcherProfileCatalogs>>>({
@@ -341,6 +343,8 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
         if (result.profile) select(result.profile);
       }
       setMessage("Đã lưu lý lịch khoa học thành công.");
+      // Tên trên thanh tài khoản (quân hàm, học hàm, học vị) lấy theo lý lịch vừa lưu.
+      if (self) await refreshCurrentUser();
       if (!self) await load();
     });
   }

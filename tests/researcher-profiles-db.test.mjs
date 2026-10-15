@@ -389,6 +389,19 @@ describe("Epic 2 researcher profiles and account access on real PostgreSQL", () 
     await assert.rejects(() => profiles.updateMyProfile(self, updateMyProfilePipe.transform({ contextVersion: contextVersion(updated), position: "Ngừng hoạt động" })), ForbiddenException);
   });
 
+  it("saving the scientific CV sets the account display name from military rank, academic rank and degree", async () => {
+    const researcher = await createUser({ role: "EXTERNAL_RESEARCHER_USER", email: uniqueEmail() });
+    const profile = await newProfile(staff, { profileType: "EXTERNAL" });
+    await linkAccount(profile.id, researcher);
+    const self = await actorFor(researcher);
+    const rank = await db.catalogItem.create({ data: { type: "academic-rank", code: unique("RANK"), name: "Phó giáo sư" } });
+    const degree = await db.catalogItem.create({ data: { type: "academic-degree", code: unique("DEGREE"), name: "Tiến sĩ" } });
+    const mine = await profiles.getMyProfile(self);
+    await profiles.updateMyProfile(self, updateMyProfilePipe.transform({ contextVersion: contextVersion(mine), fullName: "TS. Nguyễn Văn Kiểm", militaryRank: "thượng tá", academicRankCatalogItemId: rank.id, academicDegreeCatalogItemId: degree.id }));
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: researcher.id } })).displayName, "Thượng tá, PGS. TS. Nguyễn Văn Kiểm");
+    assert.ok(await db.auditLog.findFirst({ where: { action: "sync-display-name-from-researcher-profile", targetEntityId: researcher.id } }));
+  });
+
   it("self-service rejects a management-organization change (contract: researcher-profile-access.md)", async () => {
     const researcher = await createUser({ role: "EXTERNAL_RESEARCHER_USER" });
     const profile = await newProfile(staff, { profileType: "EXTERNAL" });
