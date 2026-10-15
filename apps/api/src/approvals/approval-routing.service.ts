@@ -10,7 +10,7 @@ import {
   type ApprovalStage,
   type ApprovalSubmissionRow
 } from "../proposals-shared/approval-routing.js";
-import { getOrganizationScopeIds, isLeadership, isResearchBoardHead, isResearchManagementHead, isResearchManagementStaff, isScienceDeputyDirector } from "../proposals-shared/proposal-access.js";
+import { getOrganizationScopeIds, isLeadership, isResearchBoardHead, isResearchManagementDeputyHead, isResearchManagementHead, isResearchManagementStaff, isScienceDeputyDirector } from "../proposals-shared/proposal-access.js";
 
 const MAX_NOTE = 2000;
 const INBOX_LIMIT = 300;
@@ -76,7 +76,7 @@ export class ApprovalRoutingService {
     // Đọc theo phạm vi đơn vị (Ban giám đốc toàn Học viện); chủ nhiệm và người ngoài Phòng không xem hồ sơ trình nội bộ.
     const academyWide = isLeadership(actor) || isScienceDeputyDirector(actor);
     const scopeIds = getOrganizationScopeIds(actor);
-    const internal = academyWide || isResearchBoardHead(actor) || isResearchManagementHead(actor) || isResearchManagementStaff(actor) || actor.systemRole === "RESEARCH_MANAGEMENT_DEPUTY_HEAD";
+    const internal = academyWide || isResearchBoardHead(actor) || isResearchManagementHead(actor) || isResearchManagementStaff(actor) || isResearchManagementDeputyHead(actor);
     if (!internal) throw new ForbiddenException({ message: "Không có quyền xem hồ sơ trình nội bộ." });
     return { submissions: rows.filter((row) => academyWide || scopeIds.includes(row.hostOrganizationUnitId)).map((row) => this.toResponse(row)) };
   }

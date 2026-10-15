@@ -1482,7 +1482,11 @@ export class ResearchProposalsService {
       budgetMetadata: isResearchOversightAuthority(actor) ? {} : proposal.budgetMetadata ?? {},
       councilMetadata: proposal.councilMetadata ?? null,
       acceptanceCouncilMetadata: proposal.acceptanceCouncilMetadata ?? null,
-      disbursementMetadata: isResearchOversightAuthority(actor) ? null : proposal.disbursementMetadata ?? null,
+      // Số giải ngân lưu trong hồ sơ (trước khi có module đề tài): cùng quy tắc xem kinh phí với danh sách và đề tài.
+      disbursementMetadata: canReadProjectFinanceDetail(actor, {
+        isAssignedOfficer: managementOfficer?.resolved === true && managementOfficer.officer?.officerUserId === actor?.id,
+        isParticipant: participation?.isParticipant === true || proposal.ownerId === actor?.id
+      }) ? proposal.disbursementMetadata ?? null : null,
       irbMetadata: proposal.irbMetadata ?? null,
       status: proposal.status,
       submittedAt: proposal.submittedAt?.toISOString() ?? "",

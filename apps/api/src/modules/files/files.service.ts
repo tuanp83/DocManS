@@ -9,6 +9,7 @@ import { AuditLogService } from "../../auth/audit-log.service.js";
 import type { SafeUserContext } from "../../auth/auth.types.js";
 import type { ObjectStorage } from "../../infrastructure/minio/minio-object-storage.service.js";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
+import { canReadAllProjectFiles } from "../../approved-projects/project-roles.js";
 import { assertHasOrganizationScope, isInternalResearcherEligible } from "../../proposals-shared/proposal-access.js";
 import { ProposalManagementOfficerService } from "../../proposals-shared/proposal-management-officer.service.js";
 import { ProposalReviewAccessService } from "../../proposals-shared/proposal-review-access.service.js";
@@ -61,18 +62,18 @@ type ProposalRecord = {
   status: string;
 };
 
-/** Vai trò được xem mọi tệp của đề tài (không sửa tệp người khác). */
-const PROJECT_FILE_MANAGER_ROLES: string[] = ["RESEARCH_MANAGEMENT_STAFF", "LEADERSHIP_APPROVAL_AUTHORITY"];
-/** Chứng từ giải ngân: người quản lý kinh phí xem được, khi có quyền xem kinh phí đề tài (chuyên viên chỉ đề tài mình phụ trách). */
-const FINANCE_FILE_READER_ROLES: string[] = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_BOARD_HEAD", "RESEARCH_MANAGEMENT_HEAD", "LEADERSHIP_APPROVAL_AUTHORITY"];
 
 type ProjectViewerAuthorization = { viewerRelationships: Array<{ type: string }>; allowedActions?: string[] };
 
-/** Người xem đề tài thấy tệp nào: chủ nhiệm và người tải lên luôn thấy; chứng từ giải ngân theo quyền xem kinh phí. */
-function canSeeProjectFile(actor: SafeUserContext, authorization: ProjectViewerAuthorization, record: FileRecord) {
+/**
+ * Người xem đề tài thấy tệp nào: chủ nhiệm và người tải lên luôn thấy; người điều hành đề tài (canReadAllProjectFiles)
+ * thấy mọi tệp, riêng chứng từ giải ngân cần thêm quyền xem kinh phí đề tài.
+ */
+export function canSeeProjectFile(actor: SafeUserContext, authorization: ProjectViewerAuthorization, record: FileRecord) {
   if (record.uploadedById === actor.id || authorization.viewerRelationships.some((relationship) => relationship.type === "TOPIC_PI")) return true;
-  if (record.filePurpose === DISBURSEMENT_VOUCHER_PURPOSE) return FINANCE_FILE_READER_ROLES.includes(actor.systemRole) && (authorization.allowedActions ?? []).includes("project.finance.read");
-  return PROJECT_FILE_MANAGER_ROLES.includes(actor.systemRole);
+  if (!canReadAllProjectFiles(actor)) return false;
+  if (record.filePurpose === DISBURSEMENT_VOUCHER_PURPOSE) return (authorization.allowedActions ?? []).includes("project.finance.read");
+  return true;
 }
 
 export type FileUploadInput = {

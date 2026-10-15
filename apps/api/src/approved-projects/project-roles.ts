@@ -1,20 +1,16 @@
 import type { SafeUserContext } from "../auth/auth.types.js";
-import { getOrganizationScopeIds, isAcademyLeadership, isLeadership, isResearchBoardHead, isResearchDepartmentLeadership, isResearchManagement, isResearchManagementDeputyHead, isResearchManagementHead, isResearchManagementStaff, isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
+import { getOrganizationScopeIds, isAcademyLeadership, isLeadership, isResearchBoardHead, isResearchDepartmentLeadership, isResearchManagement, isResearchManagementHead, isResearchManagementStaff, isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
 
 /**
- * Ánh xạ vai trò cho module thực hiện đề tài theo mô hình 5 vai trò của nhánh này.
- *
- * Nhánh chính (thanhdotien278) dùng thêm RESEARCH_MANAGEMENT_HEAD và RESEARCH_OVERSIGHT_AUTHORITY.
- * Ở đây không có hai vai trò đó, nên:
- *   - Phân công / thu hồi chuyên viên phụ trách đề tài: lãnh đạo, hoặc chuyên viên QLKH có phạm vi đơn vị.
- *   - Thao tác nghiệp vụ hằng ngày (thiết lập mốc, xét báo cáo, xét điều chỉnh, thẩm định gia hạn):
- *     chỉ chuyên viên QLKH đang được phân công phụ trách chính đề tài đó.
- *   - Quyết định GIA HẠN và thành lập hội đồng nghiệm thu: Giám đốc hoặc Phó GĐ phụ trách Khoa học; phê duyệt
- *     thanh lý (có kinh phí): chỉ Giám đốc.
- *   - Phạm vi: lãnh đạo toàn Học viện; các vai trò khác cần phạm vi đơn vị chủ trì của đề tài
- *     (cùng nguyên tắc với quyền cấp giấy chứng nhận IRB / giải ngân của nhánh này).
- * Trạng thái nội bộ `ready_for_head_decision` được giữ nguyên tên để dễ đồng bộ dữ liệu với nhánh chính;
- * ý nghĩa ở nhánh này là "chờ lãnh đạo quyết định".
+ * Nguồn duy nhất cho quy tắc vai trò của module thực hiện đề tài (10 vai trò hệ thống, docs/permission-matrix.md mục 7.2).
+ * Capability (project-capability-v1.ts), tệp đề tài (files.service.ts) và danh sách hồ sơ đều gọi các hàm ở đây,
+ * không tự viết danh sách vai trò riêng.
+ *   - Giao / thu hồi chuyên viên phụ trách: Trưởng phòng, Trưởng ban QLKH trong phạm vi đơn vị.
+ *   - Nghiệp vụ hằng ngày (thiết lập mốc, xét báo cáo, thẩm định điều chỉnh, gia hạn): chuyên viên đang phụ trách.
+ *   - Quyết định gia hạn, điều chỉnh, thành lập hội đồng nghiệm thu: Giám đốc hoặc Phó GĐ phụ trách Khoa học;
+ *     phê duyệt thanh lý: chỉ Giám đốc.
+ *   - Kinh phí: xem và quản lý theo canReadProjectFinanceDetail / canManageProjectFinance.
+ * Trạng thái nội bộ `ready_for_head_decision` nghĩa là "chờ Ban giám đốc quyết định".
  */
 
 export function isProjectStaff(actor?: SafeUserContext) {
@@ -58,14 +54,27 @@ export function readsAllProjects(actor?: SafeUserContext) {
 }
 
 /**
- * Xem chi tiết kinh phí từng đề tài: các Phó Giám đốc chỉ theo dõi không xem (chỉ xem báo cáo tổng hợp); chuyên viên
- * QLKH chỉ đề tài mình đang phụ trách; Phó phòng chỉ đề tài mình là chủ nhiệm hoặc thành viên.
+ * Xem chi tiết kinh phí từng đề tài (mặc định chặn: vai trò không nêu ở đây không xem được).
+ *   - Ban giám đốc (GĐ, Phó GĐ phụ trách Khoa học), Trưởng phòng, Trưởng ban QLKH: xem.
+ *   - Chuyên viên QLKH: chỉ đề tài mình đang phụ trách.
+ *   - Các Phó GĐ chỉ theo dõi: không xem (chỉ xem báo cáo tổng hợp).
+ *   - Vai trò khác (Phó phòng, nhà nghiên cứu…): chỉ đề tài mình là chủ nhiệm hoặc thành viên.
+ * Người gọi vẫn phải kiểm tra quyền xem đề tài (project.read) trước.
  */
 export function canReadProjectFinanceDetail(actor?: SafeUserContext, relation: { isAssignedOfficer?: boolean; isParticipant?: boolean } = {}) {
-  if (isResearchOversightAuthority(actor)) return false;
+  if (!actor || isResearchOversightAuthority(actor)) return false;
   if (isResearchManagementStaff(actor)) return relation.isAssignedOfficer === true;
-  if (isResearchManagementDeputyHead(actor)) return relation.isParticipant === true;
-  return true;
+  if (isAcademyLeadership(actor) || isResearchManagementHead(actor) || isResearchBoardHead(actor)) return true;
+  return relation.isParticipant === true;
+}
+
+/**
+ * Xem mọi tệp của đề tài, không chỉ tệp mình tải lên: người điều hành và quyết định đề tài (Ban giám đốc, Trưởng phòng,
+ * Trưởng ban QLKH, chuyên viên QLKH). Phó phòng và các Phó GĐ chỉ theo dõi xem tiến độ, báo cáo trên trang đề tài,
+ * không mở tệp. Chứng từ giải ngân còn cần quyền xem kinh phí (project.finance.read).
+ */
+export function canReadAllProjectFiles(actor?: SafeUserContext) {
+  return isAcademyLeadership(actor) || isResearchManagementHead(actor) || isResearchBoardHead(actor) || isResearchManagementStaff(actor);
 }
 
 /** Quản lý kinh phí, giải ngân, quyết toán: Giám đốc, Trưởng phòng, Trưởng ban QLKH (toàn Học viện), hoặc chuyên viên đang phụ trách đề tài. */

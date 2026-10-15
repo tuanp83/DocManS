@@ -300,6 +300,7 @@ Chỉ số ¹ sau ✅ hoặc 👁 nghĩa là chỉ trong phạm vi đơn vị.
 | Xem và theo dõi đề tài | — | ✅ | ✅ | 👁¹ | 👁 | 👁¹ | 👁 | 👁¹ | 🔸⁴ | 🔸⁴ |
 | Xem chi tiết kinh phí từng đề tài | — | ✅ | ✅ | — | ✅ | 🔸⁴ | ✅ | 🔸³ | 🔸⁴ | 🔸⁴ |
 | Quản lý kinh phí, giải ngân, quyết toán | — | ✅ | — | — | ✅ | — | ✅ | 🔸³ | — | — |
+| Xem mọi tệp của đề tài (chứng từ giải ngân cần thêm quyền xem kinh phí) | — | ✅ | ✅ | — | ✅ | — | ✅ | 👁¹ | 🔸⁸ | 🔸⁸ |
 | Giao / thu hồi chuyên viên phụ trách đề tài | — | — | — | — | ✅¹ | — | ✅¹ | — | — | — |
 | Nghiệp vụ hằng ngày (thiết lập mốc, xét báo cáo, thẩm định điều chỉnh / gia hạn, nghiệm thu, sản phẩm, lập thanh lý, đóng đề tài) | — | — | — | — | — | — | — | 🔸³ | — | — |
 | Việc của chủ nhiệm (báo cáo, xin điều chỉnh / gia hạn, nộp nghiệm thu, nộp sản phẩm) | — | 🔸⁴ | 🔸⁴ | 🔸⁴ | 🔸⁴ | 🔸⁴ | 🔸⁴ | 🔸⁴ | 🔸⁴ | — |
@@ -319,6 +320,7 @@ Ghi chú điều kiện:
 5. Chỉ khi được phân công phản biện, thành viên hội đồng hoặc IRB; đọc được hồ sơ ngoài đơn vị. Phản biện hội đồng đánh giá mời từ nhà nghiên cứu nội bộ, bên ngoài; thành viên IRB mời từ mọi tài khoản có lý lịch khoa học. Người tham gia đề tài không được mời.
 6. Thư ký hội đồng của chính hồ sơ: lập tổng hợp, ghi biên bản, không chấm phiếu.
 7. Phó GĐ chỉ theo dõi thấy số tổng hợp kinh phí, không thấy kinh phí từng đề tài.
+8. Chủ nhiệm xem mọi tệp của đề tài mình; thành viên chỉ xem tệp mình tải lên.
 
 Quy tắc chung:
 

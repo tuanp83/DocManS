@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
-import { isInternalResearcherEligible } from "../proposals-shared/proposal-access.js";
+import { isAcademyLeadership, isInternalResearcherEligible, isResearchDepartmentLeadership, isResearchManagementStaff, isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
 import type { DeliverableInput } from "./proposal-deliverables.dto.js";
 import { ProposalParticipationService } from "./proposal-participation.service.js";
@@ -16,7 +16,8 @@ export function canReadProposalDeliverables(actor: SafeUserContext | undefined, 
   if (!actor?.id) return false;
   const hasOrgScope = (actor.organizationScopes ?? []).some((scope: { id: string }) => scope.id === proposal.hostOrganizationUnitId);
   const isOwner = proposal.ownerId === actor.id;
-  const isStaff = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD", "RESEARCH_MANAGEMENT_DEPUTY_HEAD", "RESEARCH_BOARD_HEAD", "SYSTEM_ADMIN", "LEADERSHIP_APPROVAL_AUTHORITY", "SCIENCE_DEPUTY_DIRECTOR", "RESEARCH_OVERSIGHT_AUTHORITY"].includes(actor.systemRole);
+  // Cán bộ QLKH, lãnh đạo Phòng, Ban giám đốc, các Phó GĐ theo dõi; Quản trị hệ thống không có quyền nghiệp vụ.
+  const isStaff = isResearchManagementStaff(actor) || isResearchDepartmentLeadership(actor) || isAcademyLeadership(actor) || isResearchOversightAuthority(actor);
   return isOwner || (isStaff && hasOrgScope);
 }
 
