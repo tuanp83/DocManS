@@ -310,15 +310,18 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
   SCIENCE_DEPUTY_DIRECTOR: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
+    { href: "/my-proposals", label: "Hồ sơ của tôi", icon: FileText },
     { href: "/proposals", label: "Giám sát hồ sơ đề xuất", icon: Files },
     { href: "/approvals", label: "Hồ sơ chờ ký", icon: FileClock },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
+    { href: "/notifications", label: "Thông báo", icon: Bell },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch }
   ],
   // Phó phòng KHQS: theo dõi tiến độ, số lượng đề tài (chỉ xem).
   RESEARCH_MANAGEMENT_DEPUTY_HEAD: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
     { href: "/proposals", label: "Theo dõi hồ sơ đề xuất", icon: Files },
     { href: "/reviews", label: "Đánh giá hồ sơ", icon: FileSearch },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
