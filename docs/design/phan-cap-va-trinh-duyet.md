@@ -20,7 +20,7 @@ Vai trò quyết định **quyền** của tài khoản. Mỗi tài khoản có 
 |---|---|---|
 | Trưởng phòng KHQS | `RESEARCH_MANAGEMENT_HEAD` | Duyệt mọi tờ trình trước khi lên Ban giám đốc. Giao mảng cho chuyên viên, đổi chuyên viên phụ trách hồ sơ. Điều phối được mọi hồ sơ trong phạm vi đơn vị. |
 | Phó phòng KHQS | `RESEARCH_MANAGEMENT_DEPUTY_HEAD` | Chỉ theo dõi tiến độ và số lượng đề tài trong phạm vi. Không duyệt, kể cả khi Trưởng phòng vắng. |
-| Trưởng ban QLKH (một người) | `RESEARCH_BOARD_HEAD` | Rà soát tờ trình của chuyên viên rồi trình Trưởng phòng, hoặc trả lại chuyên viên. Xem mọi hồ sơ trong phạm vi. |
+| Trưởng ban QLKH (một người) | `RESEARCH_BOARD_HEAD` | Rà soát tờ trình của chuyên viên rồi trình Trưởng phòng, hoặc trả lại chuyên viên. Kiểm tra đầy đủ, yêu cầu bổ sung; phân công phản biện, lập hội đồng và trình Trưởng phòng. Xem mọi hồ sơ trong phạm vi. |
 | Chuyên viên QLKH | `RESEARCH_MANAGEMENT_STAFF` | Làm việc trên hồ sơ mình **phụ trách**: kiểm tra đầy đủ, yêu cầu bổ sung, mời phản biện và hội đồng, tổng hợp, lập tờ trình. Không thao tác trên hồ sơ của chuyên viên khác. |
 
 Nguyên tắc chung: cấp trên xem được mọi thứ cấp dưới xem được; cấp dưới không thay đổi quyết định của cấp trên. Máy chủ kiểm tra mọi quyền; nút trên giao diện chỉ ẩn/hiện cho tiện.
@@ -60,6 +60,7 @@ Chuyên viên lập, bấm "Trình Trưởng ban rà soát"
 ```
 
 - **Trả lại** ở bước nào cũng về chuyên viên lập, bắt buộc ghi lý do; thủ tục trở về trạng thái sửa được để chuyên viên sửa rồi trình lại.
+- Tờ trình do Trưởng ban QLKH tự lập (phân công phản biện, lập hội đồng) bỏ qua bước Trưởng ban: đi thẳng Trưởng phòng duyệt rồi trình Ban giám đốc.
 - Trưởng ban/Trưởng phòng không tự rà soát tờ trình do chính mình lập và chỉ xử lý tờ trình trong phạm vi đơn vị của mình.
 - Mỗi bước gửi thông báo cho người xử lý tiếp theo; lịch sử từng bước hiện ở mục **Tờ trình qua Phòng KHQS** trên trang hồ sơ/đề tài.
 
@@ -99,7 +100,7 @@ Hội đồng IRB đã ký thành lập trước bản này được giữ nguy�
 | Vai trò | Trang chính |
 |---|---|
 | Chuyên viên | Đánh giá hồ sơ (hồ sơ mình phụ trách), Tờ trình (theo dõi tờ trình đã lập), Theo dõi đề tài |
-| Trưởng ban QLKH | Tờ trình (hàng chờ rà soát), Đánh giá hồ sơ (chỉ xem), Quản lý đề tài |
+| Trưởng ban QLKH | Tờ trình (hàng chờ rà soát), Đánh giá hồ sơ (phân công phản biện, lập hội đồng), Quản lý đề tài |
 | Trưởng phòng | Tờ trình (hàng chờ duyệt), Đánh giá hồ sơ (điều phối, giao mảng), Theo dõi đề tài |
 | Phó phòng | Dashboard, Đánh giá hồ sơ (chỉ xem), Theo dõi đề tài, Báo cáo |
 | Giám đốc / Phó GĐ KH | Hồ sơ chờ phê duyệt / Hồ sơ chờ ký (mục Hội đồng, IRB; Giám đốc có thêm Duyệt đề tài, Duyệt kinh phí), trang đề tài (gia hạn, điều chỉnh, nghiệm thu, thanh lý) |

@@ -166,6 +166,18 @@ describe("ScientificDocumentsService", () => {
     assert.equal(audited, true);
   });
 
+  it("allows the research board head (Trưởng ban QLKH) to create documents", async () => {
+    let created = null;
+    const prisma = { scientificDocument: { create: async (args) => { created = args; return { id: "board-doc", ...args.data }; } } };
+    const service = new ScientificDocumentsService(prisma, { record: async () => {} }, { putObject: async () => {} });
+    const boardHead = { ...staffActor, id: "user-board-head", systemRole: "RESEARCH_BOARD_HEAD" };
+
+    const result = await service.createDocument(boardHead, { documentNumber: "BM-02/NCKH", title: "Dự toán kinh phí", category: "FORM_TEMPLATE" }, { originalname: "dutoan.pdf", mimetype: "application/pdf", size: 100, buffer: Buffer.alloc(100, "d") });
+
+    assert.ok(result.id);
+    assert.equal(created.data.documentNumber, "BM-02/NCKH");
+  });
+
   it("allows admin to delete documents and denies researchers", async () => {
     let updatedWhere = null;
     let updatedData = null;

@@ -151,11 +151,11 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
     return input.proposal.status === "under_review" ? null : blocked("WORKFLOW_STATE_DENIED");
   }
 
-  // Phân công và tổng hợp đánh giá: Trưởng phòng QLKH có phạm vi đơn vị, hoặc chuyên viên phụ trách hồ sơ;
+  // Phân công và tổng hợp đánh giá: Trưởng phòng hoặc Trưởng ban QLKH có phạm vi đơn vị, hoặc chuyên viên phụ trách hồ sơ;
   // tổng hợp (lưu nháp, chốt, trình) còn cho thư ký hội đồng của chính hồ sơ. Không được tham gia đề tài; người đã
   // chấm phiếu không tự tổng hợp. Người tự phân công mình chấm vẫn được tiếp tục phân công người khác.
   if (action === "proposal.review.assign" || SUMMARY_ACTIONS.includes(action)) {
-    const coordinator = isResearchManagementStaff(input.actor) || isResearchManagementHead(input.actor);
+    const coordinator = isResearchManagementStaff(input.actor) || isResearchManagementHead(input.actor) || isResearchBoardHead(input.actor);
     const councilSecretary = SUMMARY_ACTIONS.includes(action) && input.reviewAccess?.isAssignedReviewer === true && input.reviewAccess.assignmentRole === "committee_secretary";
     if (!coordinator && !councilSecretary) return blocked("ACTION_NOT_GRANTED");
     if (!councilSecretary && !inScope(input)) return blocked("ORG_SCOPE_DENIED");
@@ -181,7 +181,8 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
   }
 
   // Protected management actions: role, scope, resolved context and no conflict, in that order.
-  if (STAFF_ACTIONS.includes(action) && !isResearchManagementStaff(input.actor)) return blocked("ACTION_NOT_GRANTED");
+  // Kiểm tra đầy đủ, yêu cầu bổ sung: chuyên viên phụ trách hồ sơ, hoặc Trưởng ban QLKH trong phạm vi đơn vị.
+  if (STAFF_ACTIONS.includes(action) && !isResearchManagementStaff(input.actor) && !isResearchBoardHead(input.actor)) return blocked("ACTION_NOT_GRANTED");
   if (HEAD_ACTIONS.includes(action) && !isResearchManagementHead(input.actor)) return blocked("ACTION_NOT_GRANTED");
   if (DECISION_ACTIONS.includes(action) && input.actor.systemRole !== "LEADERSHIP_APPROVAL_AUTHORITY") return blocked("ACTION_NOT_GRANTED");
   if (!STAFF_ACTIONS.includes(action) && !HEAD_ACTIONS.includes(action) && !DECISION_ACTIONS.includes(action)) return blocked("ACTION_NOT_GRANTED");
@@ -190,7 +191,7 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
   if (hasReviewOrParticipationConflict(input)) return blocked("CONFLICT_DENIED");
 
   if (STAFF_ACTIONS.includes(action)) {
-    if (!isCurrentOfficer(input)) return blocked("ACTION_NOT_GRANTED");
+    if (!isResearchBoardHead(input.actor) && !isCurrentOfficer(input)) return blocked("ACTION_NOT_GRANTED");
     if (action === "proposal.completeness.check" && input.completenessCheckCompleted) return blocked("WORKFLOW_STATE_DENIED");
     return ["submitted", "resubmitted"].includes(input.proposal.status) ? null : blocked("WORKFLOW_STATE_DENIED");
   }

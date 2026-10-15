@@ -134,11 +134,13 @@ describe("Kinh phí gắn với đề tài", () => {
     ...overrides
   });
 
-  it("cán bộ QLKH trong phạm vi cập nhật; tổng do máy chủ tính; tên chứng từ lấy từ CSDL; chủ nhiệm chỉ xem", async () => {
+  it("chuyên viên phụ trách cập nhật; tổng do máy chủ tính; tên chứng từ lấy từ CSDL; chủ nhiệm chỉ xem; chuyên viên khác không xem", async () => {
     const env = setup();
     await assert.rejects(env.closure.updateFinance(env.as("pi"), "project-1", { ...finance(), contextVersion: await env.context() }), (error) => error.status === 403);
+    await assert.rejects(env.closure.updateFinance(env.as("staff2"), "project-1", { ...finance(), contextVersion: await env.context() }), (error) => error.status === 403);
+    await assert.rejects(env.closure.getFinance(env.as("staff2"), "project-1"), (error) => error.status === 403);
     await assert.rejects(env.closure.updateFinance(env.as("outsider"), "project-1", { ...finance(), contextVersion: await env.context() }), (error) => error.status === 403);
-    const saved = await env.closure.updateFinance(env.as("staff2"), "project-1", { ...finance(), totalDisbursed: 1, contextVersion: await env.context() });
+    const saved = await env.closure.updateFinance(env.as("officer"), "project-1", { ...finance(), totalDisbursed: 1, contextVersion: await env.context() });
     assert.equal(saved.disbursement.totalBudget, 100_000_000, "ưu tiên kinh phí lãnh đạo phê duyệt (approvedAmount)");
     assert.equal(saved.disbursement.totalDisbursed, 60_000_000);
     assert.equal(saved.disbursement.totalSettled, 50_000_000);
@@ -153,11 +155,11 @@ describe("Kinh phí gắn với đề tài", () => {
 
   it("phiên bản kinh phí cũ bị từ chối; chứng từ của đề tài khác và mốc lạ bị từ chối", async () => {
     const env = setup();
-    await env.closure.updateFinance(env.as("staff2"), "project-1", { ...finance(), contextVersion: await env.context() });
-    await assert.rejects(env.closure.updateFinance(env.as("staff2"), "project-1", { ...finance({ financeVersion: 0 }), contextVersion: await env.context() }), (error) => error.status === 409);
-    await assert.rejects(env.closure.updateFinance(env.as("staff2"), "project-1", { ...finance({ financeVersion: 1, milestones: [{ ...finance().milestones[0], attachments: [{ id: "file-other-project", fileName: "x.pdf" }] }] }), contextVersion: await env.context() }), /không thuộc đề tài/);
-    await assert.rejects(env.closure.updateFinance(env.as("staff2"), "project-1", { ...finance({ financeVersion: 1, milestones: [{ ...finance().milestones[0], projectMilestoneId: "ms-x" }] }), contextVersion: await env.context() }), /không thuộc đề tài/);
-    await assert.rejects(env.closure.updateFinance(env.as("staff2"), "project-1", { ...finance({ financeVersion: 1, milestones: [{ ...finance().milestones[0], expectedAmount: 200_000_000, disbursedAmount: 200_000_000 }] }), contextVersion: await env.context() }), /vượt quá kinh phí/);
+    await env.closure.updateFinance(env.as("officer"), "project-1", { ...finance(), contextVersion: await env.context() });
+    await assert.rejects(env.closure.updateFinance(env.as("officer"), "project-1", { ...finance({ financeVersion: 0 }), contextVersion: await env.context() }), (error) => error.status === 409);
+    await assert.rejects(env.closure.updateFinance(env.as("officer"), "project-1", { ...finance({ financeVersion: 1, milestones: [{ ...finance().milestones[0], attachments: [{ id: "file-other-project", fileName: "x.pdf" }] }] }), contextVersion: await env.context() }), /không thuộc đề tài/);
+    await assert.rejects(env.closure.updateFinance(env.as("officer"), "project-1", { ...finance({ financeVersion: 1, milestones: [{ ...finance().milestones[0], projectMilestoneId: "ms-x" }] }), contextVersion: await env.context() }), /không thuộc đề tài/);
+    await assert.rejects(env.closure.updateFinance(env.as("officer"), "project-1", { ...finance({ financeVersion: 1, milestones: [{ ...finance().milestones[0], expectedAmount: 200_000_000, disbursedAmount: 200_000_000 }] }), contextVersion: await env.context() }), /vượt quá kinh phí/);
   });
 });
 
@@ -166,7 +168,7 @@ describe("Thanh lý và đóng đề tài", () => {
     await toEstablishedCouncil(env);
     await env.closure.recordMinutes(env.as("officer"), "project-1", { ...passingScores, contextVersion: await env.context() });
     assert.equal(env.project().status, "accepted");
-    await env.closure.updateFinance(env.as("staff2"), "project-1", {
+    await env.closure.updateFinance(env.as("officer"), "project-1", {
       financeVersion: 0, settlementStatus: "PARTIALLY_SETTLED",
       milestones: [{ id: "M1", name: "Đợt 1", percentage: 60, expectedAmount: 60_000_000, disbursedAmount: 60_000_000, status: "DISBURSED" }],
       costItems: [{ code: "A", name: "Thù lao", allocatedAmount: 60_000_000, spentAmount: 55_000_000, settledAmount: 55_000_000 }],
@@ -189,7 +191,7 @@ describe("Thanh lý và đóng đề tài", () => {
     const liquidation = env.db.tables.liquidations[0];
     assert.equal(liquidation.status, "APPROVED");
     assert.equal(liquidation.liquidationNumber, "001/BBTL-HVQY/2026");
-    const read = await env.closure.getFinance(env.as("staff2"), "project-1");
+    const read = await env.closure.getFinance(env.as("officer"), "project-1");
     assert.equal(read.canManage, false, "kinh phí bị khoá sau khi thanh lý");
     await env.closure.closeProject(env.as("officer"), "project-1", { note: "Hoàn tất", contextVersion: await env.context() });
     assert.equal(env.project().status, "closed");
@@ -219,6 +221,9 @@ describe("Capability nghiệm thu / thanh lý (một nguồn sự thật cho gia
     pi: { id: "pi", systemRole: "RESEARCHER_INTERNAL_USER", organizationScopes: [{ id: "unit-1" }] },
     officer: { id: "officer", systemRole: "RESEARCH_MANAGEMENT_STAFF", organizationScopes: [{ id: "unit-1" }] },
     staff2: { id: "staff2", systemRole: "RESEARCH_MANAGEMENT_STAFF", organizationScopes: [{ id: "unit-1" }] },
+    head: { id: "head", systemRole: "RESEARCH_MANAGEMENT_HEAD", organizationScopes: [{ id: "unit-1" }] },
+    boardHead: { id: "board-head", systemRole: "RESEARCH_BOARD_HEAD", organizationScopes: [{ id: "unit-1" }] },
+    deputyHead: { id: "deputy-head", systemRole: "RESEARCH_MANAGEMENT_DEPUTY_HEAD", organizationScopes: [{ id: "unit-1" }] },
     leader: { id: "leader", systemRole: "LEADERSHIP_APPROVAL_AUTHORITY", organizationScopes: [] }
   };
   const officerFact = { officerUserId: "officer", status: "ACTIVE", effectiveFrom: new Date(0), effectiveUntil: null };
@@ -235,7 +240,15 @@ describe("Capability nghiệm thu / thanh lý (một nguồn sự thật cho gia
     ["officer", "pending_acceptance", { acceptanceStatus: "COUNCIL_ESTABLISHED", liquidationStatus: null }, "project.acceptance.minutes.record", true],
     ["pi", "pending_acceptance", { acceptanceStatus: "REVISION_REQUIRED", liquidationStatus: null }, "project.acceptance.revision.submit", true],
     ["officer", "pending_acceptance", { acceptanceStatus: "REVISION_SUBMITTED", liquidationStatus: null }, "project.acceptance.revision.confirm", true],
-    ["staff2", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.manage", true],
+    // Kinh phí: chuyên viên phụ trách, Trưởng ban, Trưởng phòng, Giám đốc; chuyên viên khác không xem, không sửa.
+    ["officer", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.manage", true],
+    ["officer", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.read", true],
+    ["staff2", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.manage", false],
+    ["staff2", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.read", false],
+    ["boardHead", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.manage", true],
+    ["head", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.manage", true],
+    ["deputyHead", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.manage", false],
+    ["deputyHead", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.read", false],
     ["leader", "accepted", { acceptanceStatus: "PASSED", liquidationStatus: "DRAFT" }, "project.finance.manage", true],
     ["pi", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.manage", false],
     ["pi", "executing", { acceptanceStatus: null, liquidationStatus: null }, "project.finance.read", true],

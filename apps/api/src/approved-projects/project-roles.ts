@@ -1,5 +1,5 @@
 import type { SafeUserContext } from "../auth/auth.types.js";
-import { getOrganizationScopeIds, isAcademyLeadership, isLeadership, isResearchDepartmentLeadership, isResearchManagement, isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
+import { getOrganizationScopeIds, isAcademyLeadership, isLeadership, isResearchBoardHead, isResearchDepartmentLeadership, isResearchManagement, isResearchManagementDeputyHead, isResearchManagementHead, isResearchManagementStaff, isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
 
 /**
  * Ánh xạ vai trò cho module thực hiện đề tài theo mô hình 5 vai trò của nhánh này.
@@ -49,9 +49,28 @@ export function canMonitorProjects(actor?: SafeUserContext) {
   return isAcademyLeadership(actor) || isResearchOversightAuthority(actor) || isResearchDepartmentLeadership(actor) || isResearchManagement(actor);
 }
 
-/** Được xem chi tiết kinh phí từng đề tài: không gồm các Phó Giám đốc chỉ theo dõi (chỉ xem báo cáo tổng hợp). */
-export function canReadProjectFinanceDetail(actor?: SafeUserContext) {
-  return !isResearchOversightAuthority(actor);
+/**
+ * Xem đề tài toàn Học viện: Ban giám đốc, Trưởng phòng KHQS, Trưởng ban QLKH. Với Trưởng phòng, Trưởng ban chỉ mở rộng
+ * quyền xem và quản lý kinh phí; các thao tác khác (giao chuyên viên phụ trách…) vẫn theo phạm vi đơn vị.
+ */
+export function readsAllProjects(actor?: SafeUserContext) {
+  return isAcademyLeadership(actor) || isResearchManagementHead(actor) || isResearchBoardHead(actor);
+}
+
+/**
+ * Xem chi tiết kinh phí từng đề tài: các Phó Giám đốc chỉ theo dõi không xem (chỉ xem báo cáo tổng hợp); chuyên viên
+ * QLKH chỉ đề tài mình đang phụ trách; Phó phòng chỉ đề tài mình là chủ nhiệm hoặc thành viên.
+ */
+export function canReadProjectFinanceDetail(actor?: SafeUserContext, relation: { isAssignedOfficer?: boolean; isParticipant?: boolean } = {}) {
+  if (isResearchOversightAuthority(actor)) return false;
+  if (isResearchManagementStaff(actor)) return relation.isAssignedOfficer === true;
+  if (isResearchManagementDeputyHead(actor)) return relation.isParticipant === true;
+  return true;
+}
+
+/** Quản lý kinh phí, giải ngân, quyết toán: Giám đốc, Trưởng phòng, Trưởng ban QLKH (toàn Học viện), hoặc chuyên viên đang phụ trách đề tài. */
+export function canManageProjectFinance(actor: SafeUserContext | undefined, isAssignedOfficer: boolean) {
+  return isLeadership(actor) || isResearchManagementHead(actor) || isResearchBoardHead(actor) || (isResearchManagementStaff(actor) && isAssignedOfficer);
 }
 
 export function isInProjectScope(actor: SafeUserContext | undefined, hostOrganizationUnitId: string) {

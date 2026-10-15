@@ -8,7 +8,7 @@ import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { readTransactionClockV1 } from "../permissions/authorization-v1.service.js";
 import { getOrganizationScopeIds } from "../proposals-shared/proposal-access.js";
 import { APPROVAL_KINDS, assertReadyForLeadership, boardReviewEvent, closeApprovalSubmission, openApprovalSubmission, pendingApprovalStages } from "../proposals-shared/approval-routing.js";
-import { canAssignProjectOfficer, canDecideProjectExtension, canMonitorProjects, isInProjectScope, isProjectLeadership, isProjectStaff } from "./project-roles.js";
+import { canAssignProjectOfficer, canDecideProjectExtension, canMonitorProjects, isInProjectScope, isProjectStaff, readsAllProjects } from "./project-roles.js";
 import { isRelationshipActiveAt } from "../proposals-shared/proposal-participation.js";
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
 import { assertProposalContext } from "../proposals-shared/proposal-mutation.js";
@@ -170,8 +170,8 @@ export class ApprovedProjectsService {
     const scopeIds = getOrganizationScopeIds(actor);
     // "Đề tài của tôi": chỉ đề tài người dùng làm chủ nhiệm hoặc đang là thành viên, với mọi vai trò.
     const participating = { OR: [{ members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] };
-    // Lãnh đạo xem toàn Học viện; các vai trò khác lọc theo phạm vi đơn vị hoặc quan hệ với đề tài.
-    const where = isProjectLeadership(actor) ? {} : scopeIds.length ? { OR: [{ hostOrganizationUnitId: { in: scopeIds } }, { members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] } : { OR: [{ members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] };
+    // Ban giám đốc, Trưởng phòng, Trưởng ban xem toàn Học viện; các vai trò khác lọc theo phạm vi đơn vị hoặc quan hệ với đề tài.
+    const where = readsAllProjects(actor) ? {} : scopeIds.length ? { OR: [{ hostOrganizationUnitId: { in: scopeIds } }, { members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] } : { OR: [{ members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] };
     const records = await (this.prisma as any).approvedProject.findMany({ where: options.mine ? { AND: [where, participating] } : where, include: PROJECT_INCLUDE, orderBy: { createdAt: "desc" } });
     const visible = [];
     for (const project of records) {

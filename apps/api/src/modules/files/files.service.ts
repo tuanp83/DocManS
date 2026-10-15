@@ -63,6 +63,17 @@ type ProposalRecord = {
 
 /** Vai trò được xem mọi tệp của đề tài (không sửa tệp người khác). */
 const PROJECT_FILE_MANAGER_ROLES: string[] = ["RESEARCH_MANAGEMENT_STAFF", "LEADERSHIP_APPROVAL_AUTHORITY"];
+/** Chứng từ giải ngân: người quản lý kinh phí xem được, khi có quyền xem kinh phí đề tài (chuyên viên chỉ đề tài mình phụ trách). */
+const FINANCE_FILE_READER_ROLES: string[] = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_BOARD_HEAD", "RESEARCH_MANAGEMENT_HEAD", "LEADERSHIP_APPROVAL_AUTHORITY"];
+
+type ProjectViewerAuthorization = { viewerRelationships: Array<{ type: string }>; allowedActions?: string[] };
+
+/** Người xem đề tài thấy tệp nào: chủ nhiệm và người tải lên luôn thấy; chứng từ giải ngân theo quyền xem kinh phí. */
+function canSeeProjectFile(actor: SafeUserContext, authorization: ProjectViewerAuthorization, record: FileRecord) {
+  if (record.uploadedById === actor.id || authorization.viewerRelationships.some((relationship) => relationship.type === "TOPIC_PI")) return true;
+  if (record.filePurpose === DISBURSEMENT_VOUCHER_PURPOSE) return FINANCE_FILE_READER_ROLES.includes(actor.systemRole) && (authorization.allowedActions ?? []).includes("project.finance.read");
+  return PROJECT_FILE_MANAGER_ROLES.includes(actor.systemRole);
+}
 
 export type FileUploadInput = {
   contextVersion?: unknown;
@@ -231,8 +242,7 @@ export class FilesService {
       await this.assertCanRead(actor, input.relatedEntityType, input.relatedEntityId);
       const records = (await this.prisma.fileRecord.findMany({ where: { relatedEntityType: input.relatedEntityType, relatedEntityId: input.relatedEntityId, status: "active", deletedAt: null }, include: { uploadedBy: { select: { displayName: true } } }, orderBy: { createdAt: "desc" } })) as FileRecord[];
       const project = await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, input.relatedEntityId);
-      const fullAccess = project.viewerAuthorization.viewerRelationships.some((relationship: { type: string }) => relationship.type === "TOPIC_PI") || PROJECT_FILE_MANAGER_ROLES.includes(actor.systemRole);
-      return Promise.all(records.filter((record) => fullAccess || record.uploadedById === actor.id).map(async (record) => this.toFileResponse(record, { canMutate: await this.canMutateFile(actor, record) })));
+      return Promise.all(records.filter((record) => canSeeProjectFile(actor, project.viewerAuthorization as ProjectViewerAuthorization, record)).map(async (record) => this.toFileResponse(record, { canMutate: await this.canMutateFile(actor, record) })));
     }
     const proposal = await new ResearchProposalsService(this.prisma, this.auditLog, this.participation, this.reviewAccess, this.managementOfficers).getProposal(actor, input.relatedEntityId);
     return proposal.attachments;
@@ -440,8 +450,7 @@ export class FilesService {
     if (record.relatedEntityType !== APPROVED_PROJECT_ENTITY_TYPE) return;
     const project = await new ApprovedProjectsService(this.prisma, this.auditLog).getProject(actor, record.relatedEntityId);
     const isPi = project.viewerAuthorization.viewerRelationships.some((relationship: { type: string }) => relationship.type === "TOPIC_PI");
-    const manager = PROJECT_FILE_MANAGER_ROLES.includes(actor.systemRole);
-    if (!isPi && (!manager || mutate) && record.uploadedById !== actor.id) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
+    if (mutate ? !isPi && record.uploadedById !== actor.id : !canSeeProjectFile(actor, project.viewerAuthorization as ProjectViewerAuthorization, record)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
   }
 
   private async canMutateEntity(actor: SafeUserContext, relatedEntityType: string, relatedEntityId: string, filePurpose?: string) {

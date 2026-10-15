@@ -61,7 +61,16 @@ test("other Deputy Directors and department leaders monitor projects; other Depu
     assert.ok(!has(view, "project.report.accept"), who.systemRole);
   }
   assert.ok(!has(projectViewerAuthorizationV1({ actor: otherDeputy, project }), "project.finance.read"));
-  assert.ok(has(projectViewerAuthorizationV1({ actor: deputyHead, project }), "project.finance.read"));
+  // Phó phòng chỉ xem kinh phí đề tài mình là chủ nhiệm hoặc thành viên.
+  assert.ok(!has(projectViewerAuthorizationV1({ actor: deputyHead, project }), "project.finance.read"));
+  assert.ok(has(projectViewerAuthorizationV1({ actor: deputyHead, project, participant: { isParticipant: true, role: "TOPIC_MEMBER" } }), "project.finance.read"));
+  // Trưởng phòng, Trưởng ban xem và quản lý kinh phí mọi đề tài trong Học viện; thao tác khác vẫn theo đơn vị.
+  const head = actor("truong-phong", "RESEARCH_MANAGEMENT_HEAD");
+  for (const who of [head, boardHead]) {
+    const elsewhere = projectViewerAuthorizationV1({ actor: { ...who, organizationScopes: [{ id: "unit-other", code: "OTHER", name: "Khác" }] }, project });
+    for (const action of ["project.read", "project.finance.read", "project.finance.manage"]) assert.ok(has(elsewhere, action), `${who.systemRole} ${action}`);
+    assert.ok(!has(elsewhere, "project.officer.assign"), `${who.systemRole} giao chuyên viên chỉ trong đơn vị`);
+  }
   assert.ok(!has(projectViewerAuthorizationV1({ actor: scienceDeputy, project }), "project.finance.manage"), "Phó GĐ KH không quản lý kinh phí");
 });
 
@@ -74,4 +83,28 @@ test("department leaders read every submitted proposal in their unit scope; Depu
   const view = projectProposalViewerAuthorizationV1({ actor: deputyHead, proposal, participation: none, reviewAccess: { isAssignedReviewer: false }, managementOfficer: { resolved: true, officer: null }, canRead: true, canEdit: false, canManageFiles: false, completenessCheckCompleted: true });
   assert.ok(!view.allowedActions.includes("proposal.review.assign"));
   assert.ok(!view.allowedActions.includes("proposal.management-officer.assign"));
+});
+
+test("Board Head checks completeness and requests supplements in unit scope without being the officer; Deputy Head cannot", () => {
+  const proposal = { id: "p", ownerId: "pi", hostOrganizationUnitId: "unit-1", status: "submitted", updatedAt: now, authorizationContextUpdatedAt: now, authorizationRelationshipVersion: 1, authorizationConflictVersion: 1, authorizationDelegationVersion: 1 };
+  const none = { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} };
+  const view = (who, extra = {}) => projectProposalViewerAuthorizationV1({ actor: who, proposal, participation: none, reviewAccess: { isAssignedReviewer: false }, managementOfficer: { resolved: true, officer: null }, canRead: true, canEdit: false, canManageFiles: false, completenessCheckCompleted: false, ...extra });
+  for (const action of ["proposal.completeness.check", "proposal.supplement.request"]) {
+    assert.ok(has(view(boardHead), action), action);
+    assert.ok(!has(view(deputyHead), action), action);
+    assert.equal(view({ ...boardHead, organizationScopes: [] }).blockedActions.find((item) => item.action === action)?.code, "ORG_SCOPE_DENIED");
+    assert.equal(view(boardHead, { reviewAccess: { isAssignedReviewer: true } }).blockedActions.find((item) => item.action === action)?.code, "CONFLICT_DENIED");
+  }
+  assert.equal(view(boardHead, { completenessCheckCompleted: true }).blockedActions.find((item) => item.action === "proposal.completeness.check")?.code, "WORKFLOW_STATE_DENIED");
+});
+
+test("Board Head assigns reviewers and coordinates the council in unit scope; Deputy Head only monitors", () => {
+  const proposal = { id: "p", ownerId: "pi", hostOrganizationUnitId: "unit-1", status: "submitted", updatedAt: now, authorizationContextUpdatedAt: now, authorizationRelationshipVersion: 1, authorizationConflictVersion: 1, authorizationDelegationVersion: 1 };
+  const none = { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} };
+  const view = (who, extra = {}) => projectProposalViewerAuthorizationV1({ actor: who, proposal: { ...proposal, ...(extra.proposal ?? {}) }, participation: none, reviewAccess: { isAssignedReviewer: false, hasPersistedReview: false }, managementOfficer: { resolved: true, officer: null }, canRead: true, canEdit: false, canManageFiles: false, completenessCheckCompleted: true, ...extra, ...(extra.proposal ? { proposal: { ...proposal, ...extra.proposal } } : {}) });
+  assert.ok(has(view(boardHead), "proposal.review.assign"));
+  assert.ok(!has(view(deputyHead), "proposal.review.assign"));
+  assert.equal(view({ ...boardHead, organizationScopes: [] }).blockedActions.find((item) => item.action === "proposal.review.assign")?.code, "ORG_SCOPE_DENIED");
+  assert.equal(view(boardHead, { completenessCheckCompleted: false }).blockedActions.find((item) => item.action === "proposal.review.assign")?.code, "WORKFLOW_STATE_DENIED");
+  assert.ok(has(view(boardHead, { proposal: { status: "under_review" } }), "proposal.review.consolidate"));
 });

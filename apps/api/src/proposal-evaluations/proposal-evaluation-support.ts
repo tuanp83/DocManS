@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import type { PrismaService } from "../infrastructure/prisma/prisma.service.js";
-import { assertHasOrganizationScope, isAcademyLeadership, isLeadership, isResearchDepartmentLeadership, isResearchManagementHead, isResearchManagementStaff } from "../proposals-shared/proposal-access.js";
+import { assertHasOrganizationScope, isAcademyLeadership, isLeadership, isResearchBoardHead, isResearchDepartmentLeadership, isResearchManagementHead, isResearchManagementStaff } from "../proposals-shared/proposal-access.js";
 import { ProposalManagementOfficerService } from "../proposals-shared/proposal-management-officer.service.js";
 import type { ProposalConflictDecision } from "../proposals-shared/proposal-participation.js";
 import { isWorkflowVisibleStatus, PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
@@ -129,24 +129,24 @@ export function assertScientificManagementScope(actor: SafeUserContext | undefin
 }
 
 /**
- * Người điều phối vòng đánh giá: Trưởng phòng QLKH có phạm vi đơn vị chủ trì, hoặc chuyên viên QLKH đang là
+ * Người điều phối vòng đánh giá: Trưởng phòng hoặc Trưởng ban QLKH có phạm vi đơn vị chủ trì, hoặc chuyên viên QLKH đang là
  * chuyên viên phụ trách của chính hồ sơ (giao theo mảng hoặc do Trưởng phòng giao). Dùng cho phân công phản biện,
  * tờ trình hội đồng, biên bản và tổng hợp kết quả. Xung đột lợi ích được kiểm tra riêng ở từng thao tác.
  */
 export async function isEvaluationCoordinator(prisma: PrismaService, actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
   if (!actor || !actor.organizationScopes.some((scope) => scope.id === proposal.hostOrganizationUnitId)) return false;
-  if (isResearchManagementHead(actor)) return true;
+  if (isResearchManagementHead(actor) || isResearchBoardHead(actor)) return true;
   if (!isResearchManagementStaff(actor)) return false;
   return new ProposalManagementOfficerService(prisma).isCurrentOfficer(proposal.id, actor.id);
 }
 
 export async function assertEvaluationCoordinator(prisma: PrismaService, actor: SafeUserContext | undefined, proposal: EvaluationProposalRecord) {
-  if (!actor || !(isResearchManagementStaff(actor) || isResearchManagementHead(actor))) {
-    throw new ForbiddenException({ message: "Chỉ chuyên viên hoặc Trưởng phòng quản lý khoa học được thực hiện thao tác này." });
+  if (!actor || !(isResearchManagementStaff(actor) || isResearchManagementHead(actor) || isResearchBoardHead(actor))) {
+    throw new ForbiddenException({ message: "Chỉ chuyên viên, Trưởng ban hoặc Trưởng phòng quản lý khoa học được thực hiện thao tác này." });
   }
   assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
   if (!(await isEvaluationCoordinator(prisma, actor, proposal))) {
-    throw new ForbiddenException({ code: "NOT_PROPOSAL_OFFICER", message: "Chỉ chuyên viên phụ trách hồ sơ này (hoặc Trưởng phòng) được thực hiện thao tác này." });
+    throw new ForbiddenException({ code: "NOT_PROPOSAL_OFFICER", message: "Chỉ chuyên viên phụ trách hồ sơ này (hoặc Trưởng ban, Trưởng phòng) được thực hiện thao tác này." });
   }
   return actor;
 }

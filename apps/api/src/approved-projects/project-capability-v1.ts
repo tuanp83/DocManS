@@ -2,8 +2,7 @@
 import type { AuthorizationDecisionCodeV1, PermissionActionV1, ViewerAuthorizationV1, ViewerRelationshipV1 } from "@rtms/permissions";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { publicAuthorizationReasonV1 } from "../permissions/authorization-v1.service.js";
-import { canApproveProjectLiquidation, canAssignProjectOfficer, canDecideProjectExtension, canMonitorProjects, canReadProjectFinanceDetail, isInProjectScope, isProjectLeadership, isProjectStaff } from "./project-roles.js";
-import { isLeadership as isDirector } from "../proposals-shared/proposal-access.js";
+import { canApproveProjectLiquidation, canAssignProjectOfficer, canManageProjectFinance, readsAllProjects, canDecideProjectExtension, canMonitorProjects, canReadProjectFinanceDetail, isInProjectScope, isProjectLeadership, isProjectStaff } from "./project-roles.js";
 
 export const PROJECT_ACTIONS: PermissionActionV1[] = [
   "project.read", "project.monitor", "project.setup.configure", "project.setup.confirm", "project.officer.assign", "project.officer.revoke",
@@ -104,7 +103,9 @@ export function projectViewerAuthorizationV1(input: ProjectCapabilityInput): Vie
   const isPi = input.project.ownerId === input.actor.id && scoped;
   // Đọc/theo dõi: giống quyền đọc đề xuất của nhánh này — chuyên viên QLKH có phạm vi đơn vị và lãnh đạo
   // xem được mọi đề tài trong phạm vi; chủ nhiệm và thành viên xem đề tài của mình.
-  const canRead = scoped && (isPi || participant || isLeadership(input.actor) || isStaff(input.actor) || canMonitorProjects(input.actor));
+  // Trưởng phòng, Trưởng ban xem toàn Học viện; thao tác nghiệp vụ vẫn theo `scoped`.
+  const readScoped = scoped || readsAllProjects(input.actor);
+  const canRead = readScoped && (isPi || participant || isLeadership(input.actor) || isStaff(input.actor) || canMonitorProjects(input.actor));
   const canMonitor = canRead;
   // Thao tác nghiệp vụ: chỉ chuyên viên đang được phân công phụ trách chính, không tham gia đề tài.
   const canOperate = scoped && isStaff(input.actor) && hasOfficer && !participant && !isPi;
@@ -191,14 +192,15 @@ function projectActionDenial(action: PermissionActionV1, input: ProjectCapabilit
   return blocked("ACTION_NOT_GRANTED");
 }
 
-type DenialInput = ProjectCapabilityInput & { scoped: boolean; participantActive: boolean; isPi: boolean; canRead: boolean; canOperate: boolean; canHeadDecide: boolean; canDirectorDecide?: boolean };
+type DenialInput = ProjectCapabilityInput & { scoped: boolean; officer?: boolean; participantActive: boolean; isPi: boolean; canRead: boolean; canOperate: boolean; canHeadDecide: boolean; canDirectorDecide?: boolean };
 
 /**
  * Nghiệm thu → thanh lý → đóng (docs/design/nghiem-thu-thanh-ly-dong-de-tai.md):
  *   - Chủ nhiệm nộp hồ sơ nghiệm thu khi đề tài đang thực hiện, nộp bản hoàn thiện khi hội đồng yêu cầu.
  *   - Chuyên viên phụ trách: trả hồ sơ, đề xuất hội đồng, ghi biên bản, xác nhận hoàn thiện, lập thanh lý, đóng đề tài.
  *   - Lãnh đạo: thành lập hội đồng, phê duyệt thanh lý.
- *   - Kinh phí: lãnh đạo hoặc cán bộ QLKH có phạm vi đơn vị (như trước đây), không tham gia đề tài; khoá khi đã thanh lý.
+ *   - Kinh phí, giải ngân, quyết toán: Giám đốc, Trưởng phòng, Trưởng ban QLKH (toàn Học viện) hoặc chuyên viên đang phụ trách;
+ *     không tham gia đề tài; khoá khi đã thanh lý. Chuyên viên khác không xem kinh phí đề tài.
  */
 function closureActionDenial(action: PermissionActionV1, input: DenialInput): { code: AuthorizationDecisionCodeV1; reason: string } | null {
   const status = input.project.status;
@@ -217,10 +219,10 @@ function closureActionDenial(action: PermissionActionV1, input: DenialInput): { 
     case "project.acceptance.council.establish": return gate(input.canHeadDecide, pending && acceptance === R.councilProposed && routedToLeadership(input, "ACCEPTANCE_COUNCIL"));
     case "project.acceptance.minutes.record": return gate(input.canOperate, pending && acceptance === R.councilEstablished);
     case "project.acceptance.revision.confirm": return gate(input.canOperate, pending && acceptance === R.revisionSubmitted);
-    // Các Phó Giám đốc chỉ theo dõi xem báo cáo kinh phí tổng hợp, không xem chi tiết kinh phí từng đề tài.
-    case "project.finance.read": return input.canRead && canReadProjectFinanceDetail(input.actor) ? null : blocked("ACTION_NOT_GRANTED");
+    // Các Phó Giám đốc chỉ theo dõi xem báo cáo kinh phí tổng hợp; chuyên viên chỉ xem kinh phí đề tài mình phụ trách.
+    case "project.finance.read": return input.canRead && canReadProjectFinanceDetail(input.actor, { isAssignedOfficer: input.officer === true, isParticipant: input.isPi || input.participantActive }) ? null : blocked("ACTION_NOT_GRANTED");
     case "project.finance.manage": {
-      const manager = input.scoped && (isStaff(input.actor) || isDirector(input.actor)) && !input.participantActive && !input.isPi;
+      const manager = (input.scoped || readsAllProjects(input.actor)) && canManageProjectFinance(input.actor, input.officer === true) && !input.participantActive && !input.isPi;
       return gate(manager, status !== PROJECT_STATUSES.closed && liquidation !== LIQUIDATION_STATUSES.approved);
     }
     case "project.liquidation.prepare": return gate(input.canOperate, concluded && liquidation !== LIQUIDATION_STATUSES.approved);

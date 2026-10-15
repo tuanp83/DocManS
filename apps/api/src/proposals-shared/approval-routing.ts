@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import type { SafeUserContext } from "../auth/auth.types.js";
-import { isLeadership, isScienceDeputyDirector } from "./proposal-access.js";
+import { isLeadership, isResearchBoardHead, isScienceDeputyDirector } from "./proposal-access.js";
 
 /**
  * Luồng trình duyệt qua Phòng KHQS (một nguồn quy tắc cho mọi thủ tục lên Ban giám đốc):
@@ -96,8 +96,9 @@ export function canSignApproval(actor: SafeUserContext | undefined, signer: Appr
 }
 
 /**
- * Chuyên viên trình thủ tục: mở hồ sơ trình ở bước Trưởng ban (hồ sơ đang mở trước đó của cùng thủ tục được thay).
- * Gọi trong giao dịch của thao tác "trình"; người gọi gửi thông báo cho Trưởng ban sau khi commit.
+ * Trình thủ tục: chuyên viên trình mở hồ sơ trình ở bước Trưởng ban; Trưởng ban QLKH tự lập thì trình thẳng
+ * Trưởng phòng (không tự rà soát). Hồ sơ đang mở trước đó của cùng thủ tục được thay.
+ * Gọi trong giao dịch của thao tác "trình"; người gọi gửi thông báo (boardReviewEvent) sau khi commit.
  */
 export async function openApprovalSubmission(
   client: RoutingClient,
@@ -108,20 +109,21 @@ export async function openApprovalSubmission(
   // CSDL giả lập của một số bộ test không có bảng tờ trình: bỏ qua luồng (CSDL thật luôn có bảng này).
   if (!client.approvalSubmission?.create) return null;
   const now = new Date();
+  const stage: ApprovalStage = isResearchBoardHead(actor) ? "HEAD_REVIEW" : "BOARD_REVIEW";
   await client.approvalSubmission.updateMany({ where: { ...keyWhere(key), status: "PENDING" }, data: { status: "CANCELLED", stage: "CLOSED", closedAt: now } });
   const submission = (await client.approvalSubmission.create({
     data: {
       ...keyWhere(key),
       title: input.title.slice(0, 500),
       hostOrganizationUnitId: input.hostOrganizationUnitId,
-      stage: "BOARD_REVIEW",
+      stage,
       status: "PENDING",
       signer: input.signer ?? APPROVAL_SIGNERS[key.kind],
       submittedById: actor.id,
       lastNote: input.note ?? null
     }
   })) as ApprovalSubmissionRow;
-  await client.approvalStep.create({ data: { submissionId: submission.id, stage: "BOARD_REVIEW", action: "SUBMIT", actorId: actor.id, note: input.note ?? null } });
+  await client.approvalStep.create({ data: { submissionId: submission.id, stage, action: "SUBMIT", actorId: actor.id, note: input.note ?? null } });
   return submission;
 }
 
@@ -170,18 +172,23 @@ export async function pendingApprovalStages(client: RoutingClient, subjectType: 
   return result;
 }
 
-/** Thông báo Trưởng ban QLKH (trong phạm vi đơn vị) khi chuyên viên vừa trình. */
+/** Thông báo người xử lý bước đầu (trong phạm vi đơn vị): Trưởng ban khi chuyên viên trình, Trưởng phòng khi Trưởng ban trình. */
 export async function boardReviewEvent(client: RoutingClient, submission: ApprovalSubmissionRow | null) {
   if (!submission) return { type: "APPROVAL_ROUTING", userIds: [] as string[], title: "", message: "" };
+  const fromBoardHead = submission.stage === "HEAD_REVIEW";
   const rows = (await client.user.findMany({
-    where: { status: "active", systemRole: "RESEARCH_BOARD_HEAD", organizationScopes: { some: { organizationUnitId: submission.hostOrganizationUnitId } } },
+    where: { status: "active", systemRole: fromBoardHead ? "RESEARCH_MANAGEMENT_HEAD" : "RESEARCH_BOARD_HEAD", organizationScopes: { some: { organizationUnitId: submission.hostOrganizationUnitId } } },
     select: { id: true }
   })) as Array<{ id: string }>;
   return {
     type: "APPROVAL_ROUTING",
     userIds: rows.map((row) => row.id),
-    title: `Tờ trình mới chờ rà soát: ${APPROVAL_KIND_LABELS[submission.kind]} — ${submission.title}`,
-    message: `Chuyên viên đã trình "${APPROVAL_KIND_LABELS[submission.kind]}" cho ${submission.title}. Trưởng ban QLKH rà soát và trình Trưởng phòng.`,
+    title: fromBoardHead
+      ? `Trưởng ban QLKH đã trình: ${APPROVAL_KIND_LABELS[submission.kind]} — ${submission.title}`
+      : `Tờ trình mới chờ rà soát: ${APPROVAL_KIND_LABELS[submission.kind]} — ${submission.title}`,
+    message: fromBoardHead
+      ? `Trưởng ban QLKH đã trình "${APPROVAL_KIND_LABELS[submission.kind]}" cho ${submission.title}. Trưởng phòng duyệt và trình Ban giám đốc.`
+      : `Chuyên viên đã trình "${APPROVAL_KIND_LABELS[submission.kind]}" cho ${submission.title}. Trưởng ban QLKH rà soát và trình Trưởng phòng.`,
     link: "/submissions",
     metadata: { submissionId: submission.id, kind: submission.kind, subjectId: submission.subjectId, stage: submission.stage }
   };

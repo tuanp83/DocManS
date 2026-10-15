@@ -1,5 +1,6 @@
 import { currentSubmissionFromEvents, findCurrentSubmission, hasCompletenessCheckForEvent, readCompletenessState, type SubmissionEventLike } from "../proposals-shared/submission-evidence.js";
 import { isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
+import { canReadProjectFinanceDetail } from "../approved-projects/project-roles.js";
 import { autoAssignPortfolioOfficer, defaultMilitaryScope, readMilitaryScope } from "../proposals-shared/management-portfolio.js";
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
@@ -21,6 +22,7 @@ import {
   isIntakeOpenForSubmission,
   isInternalResearcherEligible,
   isResearchManagementHead,
+  isResearchBoardHead,
   isResearchManagementStaff,
   isSystemAdmin,
   canReadProposalAuditTrail,
@@ -338,8 +340,15 @@ export class ResearchProposalsService {
     if (!results.length || typeof client.approvedProject?.findMany !== "function") return results;
     const projects = await client.approvedProject.findMany({
       where: { proposalId: { in: results.map((item) => item.id) } },
-      select: { id: true, proposalId: true, status: true, finance: true, acceptances: { orderBy: { round: "desc" }, take: 1 } }
+      select: { id: true, proposalId: true, status: true, finance: true, acceptances: { orderBy: { round: "desc" }, take: 1 }, managementOfficers: { where: { status: "ACTIVE" }, select: { officerUserId: true, effectiveFrom: true, effectiveUntil: true } }, members: { where: { userId: actor?.id ?? "", status: "ACTIVE" }, select: { id: true } } }
     });
+    const now = new Date();
+    // Kinh phí từng đề tài: cùng quy tắc với project.finance.read (chuyên viên: đề tài mình phụ trách; Phó phòng: đề tài mình tham gia).
+    const canSeeFinance = (project: { managementOfficers?: Array<{ officerUserId: string; effectiveFrom: Date; effectiveUntil: Date | null }>; members?: unknown[] }) =>
+      canReadProjectFinanceDetail(actor, {
+        isAssignedOfficer: (project.managementOfficers ?? []).some((officer) => officer.officerUserId === actor?.id && officer.effectiveFrom <= now && (!officer.effectiveUntil || now < officer.effectiveUntil)),
+        isParticipant: (project.members ?? []).length > 0
+      });
     const byProposal = new Map(projects.map((project) => [project.proposalId, project]));
     const legacyStatus: Record<string, string> = { SUBMITTED: "PROPOSED", COUNCIL_PROPOSED: "PROPOSED", COUNCIL_ESTABLISHED: "ESTABLISHED", REVISION_REQUIRED: "EVALUATED", REVISION_SUBMITTED: "EVALUATED", PASSED: "EVALUATED", FAILED: "EVALUATED" };
     return results.map((item) => {
@@ -350,7 +359,7 @@ export class ResearchProposalsService {
       return {
         ...item,
         project: { id: project.id, status: project.status },
-        disbursementMetadata: finance && !isResearchOversightAuthority(actor) ? { totalBudget: Number(finance.totalBudget), totalDisbursed: Number(finance.totalDisbursed), totalSettled: Number(finance.totalSettled), settlementStatus: finance.settlementStatus } : null,
+        disbursementMetadata: finance && canSeeFinance(project) ? { totalBudget: Number(finance.totalBudget), totalDisbursed: Number(finance.totalDisbursed), totalSettled: Number(finance.totalSettled), settlementStatus: finance.settlementStatus } : null,
         acceptanceCouncilMetadata: round && round.status !== "RETURNED" ? { status: legacyStatus[round.status] ?? round.status, roundStatus: project.status === "pending_superior_acceptance" ? "PENDING_SUPERIOR" : project.status === "failed" ? "FAILED" : project.status === "accepted" || project.status === "closed" ? (round.status === "FAILED" ? "FAILED" : "PASSED") : round.status, round: round.round, decisionNumber: round.decisionNumber ?? undefined, evaluationResult: round.evaluationResult ?? undefined, resolution: round.resolution ?? undefined } : null
       };
     });
@@ -1018,13 +1027,13 @@ export class ResearchProposalsService {
     return pi;
   }
 
-  /** Completeness and supplement requests belong to the proposal's current Staff officer only. */
+  /** Kiểm tra đầy đủ và yêu cầu bổ sung: chuyên viên đang phụ trách hồ sơ, hoặc Trưởng ban QLKH trong phạm vi đơn vị. */
   private async assertCanRequestSupplement(actor: SafeUserContext, proposal: ResearchProposalRecord) {
-    if (!isResearchManagementStaff(actor)) {
-      throw new ForbiddenException({ message: "Chỉ chuyên viên phụ trách hồ sơ được yêu cầu bổ sung hồ sơ." });
+    if (!isResearchManagementStaff(actor) && !isResearchBoardHead(actor)) {
+      throw new ForbiddenException({ message: "Chỉ chuyên viên phụ trách hồ sơ hoặc Trưởng ban quản lý khoa học được yêu cầu bổ sung hồ sơ." });
     }
     assertHasOrganizationScope(actor, proposal.hostOrganizationUnitId);
-    if (!await this.managementOfficers.isCurrentOfficer(proposal.id, actor.id)) {
+    if (isResearchManagementStaff(actor) && !await this.managementOfficers.isCurrentOfficer(proposal.id, actor.id)) {
       throw new ForbiddenException({ message: "Bạn không còn là chuyên viên phụ trách hồ sơ này." });
     }
     await this.assertNoProposalReviewConflict(actor.id, proposal.id, "Người tham gia hoặc đánh giá hồ sơ không được thực hiện nghiệp vụ quản lý hồ sơ.");

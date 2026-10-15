@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createMigratedDatabase } from './helpers/disposable-database.mjs';
 import { PrismaService } from '../dist/apps/api/infrastructure/prisma/prisma.service.js';
 import { ApprovalRoutingService } from '../dist/apps/api/approvals/approval-routing.service.js';
-import { assertReadyForLeadership, closeApprovalSubmission, openApprovalSubmission } from '../dist/apps/api/proposals-shared/approval-routing.js';
+import { assertReadyForLeadership, boardReviewEvent, closeApprovalSubmission, openApprovalSubmission } from '../dist/apps/api/proposals-shared/approval-routing.js';
 
 // Luồng trình duyệt qua Phòng KHQS trên PostgreSQL thật:
 // chuyên viên → Trưởng ban QLKH → Trưởng phòng KHQS → Ban giám đốc; trả lại luôn về chuyên viên; không bỏ bước.
@@ -106,6 +106,28 @@ test('a submission outside the reviewer\'s unit scope or submitted by themselves
   const submission = await openApprovalSubmission(db, a.people.staff, { kind: 'LIQUIDATION', subjectType: 'project', subjectId: 'project-x' }, { title: 'Đề tài C', hostOrganizationUnitId: a.org.id });
   await assert.rejects(() => b.routing.advance(b.people.board, submission.id, {}), /ngoài phạm vi/);
   assert.deepEqual((await b.routing.inbox(b.people.board)).submissions, []);
+  // Trưởng ban tự lập thì tờ trình đi thẳng Trưởng phòng: Trưởng ban không xử lý tiếp tờ trình của chính mình.
   const own = await openApprovalSubmission(db, a.people.board, { kind: 'LIQUIDATION', subjectType: 'project', subjectId: 'project-y' }, { title: 'Đề tài C2', hostOrganizationUnitId: a.org.id });
-  await assert.rejects(() => a.routing.advance(a.people.board, own.id, {}), /của chính mình/);
+  await assert.rejects(() => a.routing.advance(a.people.board, own.id, {}), { status: 403 });
+});
+
+test('a council set up by the Board Head goes straight to the Head, who approves and submits it to leadership', async () => {
+  const { people, proposal, routing } = await setup('E');
+  const key = { kind: 'EVALUATION_COUNCIL', subjectType: 'proposal', subjectId: proposal.id };
+  const submission = await openApprovalSubmission(db, people.board, key, { title: proposal.title, hostOrganizationUnitId: proposal.hostOrganizationUnitId });
+  assert.equal(submission.stage, 'HEAD_REVIEW');
+
+  const event = await boardReviewEvent(db, submission);
+  assert.deepEqual(event.userIds, [people.head.id], 'thông báo Trưởng phòng, không phải Trưởng ban');
+  assert.match(event.title, /Trưởng ban QLKH đã trình/);
+
+  await assert.rejects(() => assertReadyForLeadership(db, people.director, key), /Chờ Trưởng phòng KHQS/);
+  assert.deepEqual((await routing.inbox(people.board)).submissions, [], 'không chờ Trưởng ban rà soát');
+  assert.deepEqual((await routing.inbox(people.head)).submissions.map((item) => item.id), [submission.id]);
+  await routing.advance(people.head, submission.id, { note: 'Trình Ban giám đốc' });
+
+  assert.ok(await assertReadyForLeadership(db, people.director, key));
+  await closeApprovalSubmission(db, people.director, key, 'APPROVED');
+  const closed = await db.approvalSubmission.findUnique({ where: { id: submission.id }, include: { steps: { orderBy: { createdAt: 'asc' } } } });
+  assert.deepEqual(closed.steps.map((step) => [step.stage, step.action]), [['HEAD_REVIEW', 'SUBMIT'], ['HEAD_REVIEW', 'APPROVE'], ['LEADERSHIP', 'APPROVE']]);
 });

@@ -14,7 +14,7 @@ import type {
 } from "./scientific-documents.dto.js";
 
 const SCIENTIFIC_DOCUMENTS_FILE_CONFIG = "SCIENTIFIC_DOCUMENTS_FILE_CONFIG";
-const MANAGER_ROLES: string[] = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_MANAGEMENT_HEAD", "SYSTEM_ADMIN"];
+const MANAGER_ROLES: string[] = ["RESEARCH_MANAGEMENT_STAFF", "RESEARCH_BOARD_HEAD", "RESEARCH_MANAGEMENT_HEAD", "SYSTEM_ADMIN"];
 
 /** Ngày từ DTO đã kiểm tra: chuỗi rỗng = xoá ngày. */
 function toDate(value: string | undefined) {

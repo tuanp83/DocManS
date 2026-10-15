@@ -189,6 +189,7 @@ export function ScientificDocumentsPanel() {
   const canManage = useMemo(() => {
     return (
       account?.systemRole === "RESEARCH_MANAGEMENT_STAFF" ||
+      account?.systemRole === "RESEARCH_BOARD_HEAD" ||
       account?.systemRole === "RESEARCH_MANAGEMENT_HEAD" ||
       account?.systemRole === "SYSTEM_ADMIN"
     );

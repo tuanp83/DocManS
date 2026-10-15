@@ -187,7 +187,8 @@ describe("Dashboard: phân bố và sản phẩm", () => {
     assert.deepEqual(Object.fromEntries(all.byLevel.map((row) => [row.key, row.count])), { "academy-level": 1, "ministry-level": 1, "national-level": 1 });
     const unit1 = await analytics.distribution(actor(db, "staff2"), { subject: "projects" });
     assert.equal(unit1.totals.count, 2);
-    assert.equal(unit1.totals.totalBudget, 100_000_000);
+    assert.equal(unit1.totals.totalBudget, 0, "chuyên viên không phụ trách đề tài nào trong đơn vị: không thấy kinh phí");
+    assert.equal((await analytics.distribution(actor(db, "head"), { subject: "projects" })).totals.totalBudget, 300_000_000, "Trưởng phòng xem kinh phí mọi đề tài trong Học viện");
     assert.ok(!unit1.byUnit.some((row) => row.key === "unit-2"));
     const filtered = await analytics.distribution(actor(db, "leader"), { subject: "projects", level: "ministry-level" });
     assert.equal(filtered.totals.count, 1);
@@ -279,7 +280,7 @@ describe("Ảnh chụp sức khoẻ hằng tuần và xu hướng", () => {
     assert.equal(leader.series[0].totalBudget, 300_000_000);
     const staff = await analytics.trends(actor(db, "staff2"), {});
     assert.deepEqual(staff.series.map((point) => point.total), [2, 2, 2]);
-    assert.ok(staff.series.every((point) => point.health.red === 0 && point.totalBudget === 100_000_000));
+    assert.ok(staff.series.every((point) => point.health.red === 0 && point.totalBudget === 0), "chuyên viên không phụ trách: không cộng kinh phí");
     const crossUnit = await analytics.trends(actor(db, "staff2"), { unitId: "unit-2" });
     assert.ok(crossUnit.series.every((point) => point.total === 0));
     const outsider = await analytics.trends(actor(db, "outsider"), {});

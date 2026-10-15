@@ -273,7 +273,7 @@ Ký hiệu: ✅ được phép · 🔸 có điều kiện (xem ghi chú) · 👁
 | Quản lý tài khoản, vai trò, đơn vị, danh mục | ✅ | — | — | — | — | — | — | — | — | — |
 | Quản lý hồ sơ nhà khoa học (tạo, cấp/liên kết tài khoản) | ✅ | — | — | — | 🔸¹ | — | — | 🔸¹ | — | — |
 | Có hồ sơ nhà khoa học, tự cập nhật lý lịch khoa học của mình | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Quản lý văn bản khoa học | ✅ | — | — | — | ✅ | — | — | ✅ | — | — |
+| Quản lý văn bản khoa học | ✅ | — | — | — | ✅ | — | ✅ | ✅ | — | — |
 | **Đợt tiếp nhận** | | | | | | | | | | |
 | Tạo, mở, đóng đợt | — | — | — | — | ✅ | — | — | ✅ | — | — |
 | Xem đợt đang mở | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
@@ -281,25 +281,26 @@ Ký hiệu: ✅ được phép · 🔸 có điều kiện (xem ghi chú) · 👁
 | Tạo, sửa, nộp đề xuất (tư cách chủ nhiệm) | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 | Xem hồ sơ | — | 👁² | 👁² | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 🔸³ | 🔸⁴ | 🔸⁵ |
 | Giao chuyên viên phụ trách hồ sơ, phân mảng | — | — | — | — | ✅¹ | — | — | — | — | — |
-| Kiểm tra đầy đủ, yêu cầu bổ sung | — | — | — | — | — | — | — | 🔸³ | — | — |
-| Phân công phản biện, lập hội đồng | — | — | — | — | ✅¹ | — | — | 🔸³ | — | — |
+| Kiểm tra đầy đủ, yêu cầu bổ sung | — | — | — | — | — | — | ✅¹ | 🔸³ | — | — |
+| Phân công phản biện, lập hội đồng | — | — | — | — | ✅¹ | — | ✅¹ | 🔸³ | — | — |
 | Chấm phiếu đánh giá | — | — | — | — | — | — | — | 🔸⁵ | 🔸⁵ | 🔸⁵ |
-| Tổng hợp, chốt, trình kết quả đánh giá | — | — | — | — | ✅¹ | — | — | 🔸³ | 🔸⁶ | 🔸⁶ |
+| Tổng hợp, chốt, trình kết quả đánh giá | — | — | — | — | ✅¹ | — | ✅¹ | 🔸³ | 🔸⁶ | 🔸⁶ |
 | Xem tiến độ đánh giá | — | 👁 | 👁 | 👁 | 👁 | 👁 | 👁 | 🔸³ | — | — |
 | Duyệt tờ trình, bước Trưởng ban | — | — | — | — | — | — | ✅¹ | lập tờ trình | — | — |
 | Duyệt tờ trình, bước Trưởng phòng | — | — | — | — | ✅¹ | — | — | — | — | — |
 | Ký thành lập hội đồng đánh giá/IRB, cấp giấy IRB | — | ✅ | ✅ | — | — | — | — | — | — | — |
 | Phê duyệt/từ chối đề tài và kinh phí | — | ✅ | — | — | — | — | — | — | — | — |
-| Quản lý IRB (mời thành viên), giải ngân | — | ✅ | — | — | — | — | — | 🔸¹ | — | — |
+| Lập hội đồng IRB (mời thành viên), trình kết luận IRB | — | — | — | — | ✅¹ | — | ✅¹ | 🔸³ | — | — |
+| Nhận xét IRB (thành viên), lập kết luận IRB (thư ký) | — | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ | 🔸⁵ |
 | **Đề tài đang thực hiện** | | | | | | | | | | |
-| Xem và theo dõi đề tài | — | ✅ | ✅ | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 🔸⁴ | 🔸⁴ |
-| Xem chi tiết kinh phí từng đề tài | — | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | 🔸⁴ | 🔸⁴ |
+| Xem và theo dõi đề tài | — | ✅ | ✅ | 👁¹ | 👁 | 👁¹ | 👁 | 👁¹ | 🔸⁴ | 🔸⁴ |
+| Xem chi tiết kinh phí từng đề tài | — | ✅ | ✅ | — | ✅ | 🔸⁴ | ✅ | 🔸³ | 🔸⁴ | 🔸⁴ |
 | Giao/thu hồi chuyên viên phụ trách đề tài | — | ✅ | — | — | ✅¹ | — | — | ✅¹ | — | — |
 | Nghiệp vụ hằng ngày (thiết lập mốc, xét báo cáo, thẩm định, nghiệm thu, sản phẩm, lập thanh lý, đóng đề tài) | — | — | — | — | — | — | — | 🔸³ | — | — |
 | Việc của chủ nhiệm (báo cáo, xin điều chỉnh/gia hạn, nộp nghiệm thu, nộp sản phẩm) | — | — | — | — | — | — | — | — | 🔸⁴ | — |
 | Cập nhật tiến độ mốc mình phụ trách | — | — | — | — | — | — | — | — | 🔸⁴ | 🔸⁴ |
 | Quyết định điều chỉnh/gia hạn, thành lập hội đồng nghiệm thu | — | ✅ | ✅ | — | — | — | — | — | — | — |
-| Quản lý kinh phí đề tài | — | ✅ | — | — | — | — | — | 🔸¹ | — | — |
+| Quản lý kinh phí, giải ngân, quyết toán đề tài | — | ✅ | — | — | ✅ | — | ✅ | 🔸³ | — | — |
 | Phê duyệt thanh lý | — | ✅ | — | — | — | — | — | — | — | — |
 | **Đề tài sinh viên NCKH** | | | | | | | | | | |
 | Đăng ký đề tài | — | — | — | — | — | — | — | ✅ | ✅ (GV hướng dẫn) | — |
@@ -312,7 +313,7 @@ Ghi chú điều kiện:
 2. Chỉ hồ sơ đã vào luồng xử lý (đã nộp trở đi), trong phạm vi đơn vị.
 3. Chỉ hồ sơ/đề tài mà chuyên viên **đang được phân công phụ trách**.
 4. Chỉ hồ sơ/đề tài mà người đó là chủ nhiệm hoặc thành viên.
-5. Chỉ khi được phân công phản biện, thành viên hội đồng hoặc IRB (đọc được hồ sơ ngoài đơn vị).
+5. Chỉ khi được phân công phản biện, thành viên hội đồng hoặc IRB (đọc được hồ sơ ngoài đơn vị). Thành viên IRB được mời từ mọi tài khoản có hồ sơ nhà khoa học (trừ người tham gia đề tài).
 6. Chỉ khi là thư ký hội đồng của chính hồ sơ đó; thư ký không chấm phiếu.
 
 Quy tắc chung:
@@ -321,7 +322,9 @@ Quy tắc chung:
   trên chính hồ sơ/đề tài đó (phân công, tổng hợp, quyết định, thao tác chuyên viên). Chủ nhiệm và phản biện không
   xem nhật ký hành động của hồ sơ (ẩn danh hai chiều).
 - **QT chỉ quản trị nền tảng**, không tham gia nghiệp vụ và không được phân công phản biện.
-- **Phó phòng (PP)** chỉ theo dõi trong phạm vi, không có bước duyệt trong luồng trình.
+- **Luồng tờ trình:** chuyên viên lập → Trưởng ban rà soát → Trưởng phòng duyệt → Ban giám đốc ký. Trưởng ban tự lập (phân công phản biện, lập hội đồng) thì tờ trình đi thẳng Trưởng phòng duyệt rồi trình Ban giám đốc.
+- **Trưởng phòng, Trưởng ban** xem đề tài và quản lý kinh phí, giải ngân, quyết toán toàn Học viện; các thao tác khác với đề tài (giao chuyên viên phụ trách…) vẫn theo phạm vi đơn vị.
+- **Phó phòng (PP)** chỉ theo dõi trong phạm vi, không có bước duyệt trong luồng trình; chỉ xem kinh phí đề tài mình là chủ nhiệm hoặc thành viên.
 - **PGĐ-TD** bị ẩn kinh phí chi tiết ở hồ sơ, đề tài, dashboard và file xuất, nhưng vẫn được tạo/nộp đề xuất.
 - **NNB** không tạo đề xuất, không xem đợt tiếp nhận; chỉ tham gia với tư cách phản biện, IRB hoặc thành viên đề tài.
 
