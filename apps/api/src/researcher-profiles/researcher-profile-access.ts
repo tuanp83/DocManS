@@ -1,6 +1,7 @@
 import { ForbiddenException } from "@nestjs/common";
 // @ts-ignore: runtime package is JavaScript; repository consumers use its TypeScript source contract.
 import type { PermissionActionV1, ViewerAuthorizationV1 } from "@rtms/permissions";
+import { SCIENTIFIC_PROFILE_ROLES } from "@rtms/permissions/system-roles";
 import type { SafeUserContext } from "../auth/auth.types.js";
 
 export const RESEARCHER_PROFILE_ACTIONS = [
@@ -21,6 +22,16 @@ export const RESEARCHER_PROFILE_ACTIONS = [
 ] as const satisfies readonly PermissionActionV1[];
 
 export const RESEARCHER_PROFILE_MANAGER_ROLES = ["SYSTEM_ADMIN", "RESEARCH_MANAGEMENT_HEAD", "RESEARCH_MANAGEMENT_STAFF"] as const;
+
+/** Tài khoản có lý lịch khoa học: mọi vai trò trừ Quản trị hệ thống. */
+export function canHoldResearcherProfile(systemRole?: string | null) {
+  return (SCIENTIFIC_PROFILE_ROLES as readonly string[]).includes(systemRole ?? "");
+}
+
+/** Vai trò tài khoản được liên kết với hồ sơ theo loại hồ sơ: hồ sơ ngoài chỉ cho nhà nghiên cứu bên ngoài. */
+export function profileAccountRoles(profileType: string): string[] {
+  return profileType === "EXTERNAL" ? ["EXTERNAL_RESEARCHER_USER"] : SCIENTIFIC_PROFILE_ROLES.filter((role: string) => role !== "EXTERNAL_RESEARCHER_USER");
+}
 
 export function hasResearcherProfileScope(actor: SafeUserContext, organizationId: string) {
   return actor.organizationScopes.some((scope) => scope.id === organizationId);

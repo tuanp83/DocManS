@@ -39,7 +39,9 @@ export function LoginForm() {
     }
 
     startTransition(() => {
-      router.replace(refreshedAccount.mustChangePassword ? "/change-password" : refreshedAccount.researcherProfileId ? "/my-profile" : "/dashboard");
+      // Nhà nghiên cứu vào thẳng lý lịch khoa học; lãnh đạo và cán bộ QLKH (cũng có lý lịch) vào dashboard.
+      const researcher = refreshedAccount.systemRole === "RESEARCHER_INTERNAL_USER" || refreshedAccount.systemRole === "EXTERNAL_RESEARCHER_USER";
+      router.replace(refreshedAccount.mustChangePassword ? "/change-password" : researcher && refreshedAccount.researcherProfileId ? "/my-profile" : "/dashboard");
       router.refresh();
     });
   }

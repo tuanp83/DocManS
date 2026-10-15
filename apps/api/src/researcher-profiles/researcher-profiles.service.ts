@@ -8,7 +8,7 @@ import type { ContextVersionTokenV1 } from "@rtms/permissions";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
-import { assertResearcherProfileAction, canEditOwnResearcherProfile, canManageResearcherProfiles, hasResearcherProfileScope, projectResearcherProfileAuthorization } from "./researcher-profile-access.js";
+import { assertResearcherProfileAction, canEditOwnResearcherProfile, canHoldResearcherProfile, canManageResearcherProfiles, hasResearcherProfileScope, profileAccountRoles, projectResearcherProfileAuthorization } from "./researcher-profile-access.js";
 import type { CreateResearcherProfileDto, ResearcherProfileParticipationInput, ResearcherProfilePublicationInput, UpdateResearcherProfileDto, ResearcherAccountInput } from "./researcher-profiles.dto.js";
 import { MailService } from "../notifications/mail.service.js";
 
@@ -374,7 +374,7 @@ export class ResearcherProfilesService {
 
   async getMyProfile(actor: SafeUserContext) {
     let profile = (await this.prisma.researcherProfile.findFirst({ where: { linkedUserId: actor.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations | null;
-    if (!profile && (actor.systemRole === "RESEARCHER_INTERNAL_USER" || actor.systemRole === "EXTERNAL_RESEARCHER_USER")) {
+    if (!profile && canHoldResearcherProfile(actor.systemRole)) {
       profile = await this.ensureProfileForResearcher(actor);
     }
     if (!profile || !canEditOwnResearcherProfile(actor, profile)) throw new ForbiddenException({ message: "Hồ sơ liên kết không tồn tại, đã ngừng hoạt động hoặc không còn hợp lệ." });
@@ -383,7 +383,7 @@ export class ResearcherProfilesService {
 
   async updateMyProfile(actor: SafeUserContext, input: UpdateResearcherProfileDto) {
     let current = (await this.prisma.researcherProfile.findFirst({ where: { linkedUserId: actor.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations | null;
-    if (!current && (actor.systemRole === "RESEARCHER_INTERNAL_USER" || actor.systemRole === "EXTERNAL_RESEARCHER_USER")) {
+    if (!current && canHoldResearcherProfile(actor.systemRole)) {
       current = await this.ensureProfileForResearcher(actor);
     }
     if (!current || !canEditOwnResearcherProfile(actor, current)) throw new ForbiddenException({ message: "Hồ sơ liên kết không tồn tại, đã ngừng hoạt động hoặc không còn hợp lệ." });
@@ -482,7 +482,7 @@ export class ResearcherProfilesService {
     assertResearcherProfileAction(actor, "researcher-profile.account.link", profile.managementOrganizationUnitId);
     if (profile.status !== "ACTIVE" || profile.linkedUserId) throw new ConflictException({ message: "Hồ sơ phải đang hoạt động và chưa liên kết tài khoản." });
     const accounts = await this.prisma.user.findMany({ where: { id: { not: actor.id }, status: "active", researcherProfile: null,
-      systemRole: profile.profileType === "EXTERNAL" ? "EXTERNAL_RESEARCHER_USER" : "RESEARCHER_INTERNAL_USER",
+      systemRole: { in: profileAccountRoles(profile.profileType) },
       organizationScopes: { some: { organizationUnitId: profile.managementOrganizationUnitId, organizationUnit: { status: "active" } } },
       ...(keyword.trim() ? { OR: [{ username: { contains: keyword.trim().slice(0, 120), mode: "insensitive" as const } }, { displayName: { contains: keyword.trim().slice(0, 120), mode: "insensitive" as const } }] } : {}) },
       select: { id: true, username: true, displayName: true }, orderBy: { displayName: "asc" }, take: 50 });
@@ -522,8 +522,7 @@ export class ResearcherProfilesService {
       if (profile.status !== "ACTIVE" || profile.linkedUserId) throw new ConflictException({ message: "Hồ sơ phải đang hoạt động và chưa liên kết tài khoản." });
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.userId} FOR UPDATE`;
       const user = await tx.user.findUnique({ where: { id: input.userId }, include: { organizationScopes: { include: { organizationUnit: true } }, researcherProfile: true } });
-      const expectedRole = profile.profileType === "EXTERNAL" ? "EXTERNAL_RESEARCHER_USER" : "RESEARCHER_INTERNAL_USER";
-      if (!user || user.id === actor.id || user.status !== "active" || user.systemRole !== expectedRole || user.researcherProfile || !user.organizationScopes.some((scope) => scope.organizationUnitId === profile.managementOrganizationUnitId && scope.organizationUnit.status === "active")) throw new ConflictException({ message: "Tài khoản đã liên kết hoặc không phù hợp loại/phạm vi hồ sơ." });
+      if (!user || user.id === actor.id || user.status !== "active" || !profileAccountRoles(profile.profileType).includes(user.systemRole ?? "") || user.researcherProfile || !user.organizationScopes.some((scope) => scope.organizationUnitId === profile.managementOrganizationUnitId && scope.organizationUnit.status === "active")) throw new ConflictException({ message: "Tài khoản đã liên kết hoặc không phù hợp loại/phạm vi hồ sơ." });
       await tx.researcherProfile.update({ where: { id: profileId }, data: { linkedUserId: user.id, aggregateVersion: { increment: 1 }, updatedById: actor.id } });
       await tx.researcherProfileAccountLink.create({ data: { researcherProfileId: profileId, userId: user.id, effectiveFrom: new Date(), reason: input.reason, createdById: actor.id } });
       await this.auditLog.record({ action: "link-researcher-account", result: "success", actorId: actor.id, targetEntity: "researcher-profile", targetEntityId: profileId, correlationId, afterFacts: { userId: user.id } }, tx);

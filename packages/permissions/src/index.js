@@ -1,4 +1,4 @@
-export { SYSTEM_ROLES } from "./system-roles.js";
+export { SCIENTIFIC_PROFILE_ROLES, SYSTEM_ROLES } from "./system-roles.js";
 import { SYSTEM_ROLES } from "./system-roles.js";
 export const AUTHORIZATION_SCHEMA_VERSION_V1 = "v1";
 export const AUTHORIZATION_DECISION_CODE_ORDER_V1 = [

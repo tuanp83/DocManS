@@ -4,7 +4,7 @@ import { BadRequestException, ConflictException } from "@nestjs/common";
 import { isPermissionActionV1 } from "../packages/permissions/src/index.js";
 import { createResearcherProfilePipe } from "../dist/apps/api/researcher-profiles/researcher-profiles.dto.js";
 import { normalizeResearcherKey, ResearcherProfilesService } from "../dist/apps/api/researcher-profiles/researcher-profiles.service.js";
-import { projectResearcherProfileAuthorization } from "../dist/apps/api/researcher-profiles/researcher-profile-access.js";
+import { canHoldResearcherProfile, profileAccountRoles, projectResearcherProfileAuthorization } from "../dist/apps/api/researcher-profiles/researcher-profile-access.js";
 
 const staff = {
   id: "staff-1",
@@ -306,5 +306,27 @@ describe("Story 2.1 researcher profile contracts", () => {
     const { service } = createService(prisma, audit);
     await assert.rejects(() => service.createProfile(staff, createInput({ profileType: "EXTERNAL" })), /audit failed/);
     assert.equal(prisma.store.profiles.length, 0);
+  });
+});
+
+describe("scientific CV for leadership and research-management accounts", () => {
+  const holders = ["LEADERSHIP_APPROVAL_AUTHORITY", "SCIENCE_DEPUTY_DIRECTOR", "RESEARCH_OVERSIGHT_AUTHORITY", "RESEARCH_MANAGEMENT_HEAD", "RESEARCH_MANAGEMENT_DEPUTY_HEAD", "RESEARCH_BOARD_HEAD", "RESEARCH_MANAGEMENT_STAFF", "RESEARCHER_INTERNAL_USER", "EXTERNAL_RESEARCHER_USER"];
+
+  it("every role except the system administrator holds a researcher profile", () => {
+    for (const role of holders) assert.equal(canHoldResearcherProfile(role), true, role);
+    assert.equal(canHoldResearcherProfile("SYSTEM_ADMIN"), false);
+    assert.equal(canHoldResearcherProfile(undefined), false);
+  });
+
+  it("internal profiles link to any internal holder role; external profiles only to external researchers", () => {
+    assert.deepEqual(profileAccountRoles("EXTERNAL"), ["EXTERNAL_RESEARCHER_USER"]);
+    assert.deepEqual([...profileAccountRoles("INTERNAL")].sort(), holders.filter((role) => role !== "EXTERNAL_RESEARCHER_USER").sort());
+  });
+
+  it("a director edits their own linked profile through My Profile", () => {
+    const director = { ...staff, id: "director-1", systemRole: "LEADERSHIP_APPROVAL_AUTHORITY" };
+    const authorization = projectResearcherProfileAuthorization(director, { id: "p-1", managementOrganizationUnitId: "org-1", aggregateVersion: 1, linkedUserId: director.id, status: "ACTIVE" });
+    assert.ok(authorization.allowedActions.includes("researcher-profile.self.update"));
+    assert.ok(!authorization.allowedActions.includes("researcher-profile.create"));
   });
 });

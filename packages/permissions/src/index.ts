@@ -1,4 +1,4 @@
-export { SYSTEM_ROLES } from "./system-roles.js";
+export { SCIENTIFIC_PROFILE_ROLES, SYSTEM_ROLES } from "./system-roles.js";
 export type { SystemRole } from "./system-roles.js";
 import { SYSTEM_ROLES } from "./system-roles.js";
 import type { SystemRole } from "./system-roles.js";

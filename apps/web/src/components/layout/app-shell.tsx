@@ -83,9 +83,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     {position}
                   </p>
                 ))}
-                {account.systemRole === "RESEARCHER_INTERNAL_USER" || account.systemRole === "EXTERNAL_RESEARCHER_USER" || account.researcherProfileId ? (
+                {account.systemRole !== "SYSTEM_ADMIN" ? <a className="button" href="/my-profile">Lý lịch khoa học</a> : null}
+                {account.systemRole === "RESEARCHER_INTERNAL_USER" || account.systemRole === "EXTERNAL_RESEARCHER_USER" ? (
                   <>
-                    <a className="button" href="/my-profile">Lý lịch khoa học</a>
                     <a className="button" href="/invitation-to-review">Được mời phản biện</a>
                     <a className="button" href="/my-tasks">Việc của tôi</a>
                   </>

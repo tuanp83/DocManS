@@ -235,6 +235,98 @@ never grants an action by itself.
 
 ## 7. System-role comparison matrix
 
+> **Cập nhật 15/10/2026 — đối chiếu code.** Mục 7 nay là ma trận 10 vai trò hệ thống, lập trực tiếp từ code
+> (`packages/permissions/src/system-roles.js`, `apps/api/src/proposals-shared/proposal-access.ts`,
+> `apps/api/src/permissions/proposal-capability-v1.ts`, `apps/api/src/approved-projects/project-roles.ts`,
+> `apps/api/src/approved-projects/project-capability-v1.ts`, `apps/api/src/proposals-shared/approval-routing.ts`,
+> `apps/api/src/researcher-profiles/researcher-profile-access.ts`, `apps/api/src/student-research/student-research-access.ts`).
+> Bảng 7 vai trò cũ giữ ở mục 7.3 làm lịch sử.
+
+### 7.1 Vai trò hệ thống
+
+Chỉ có một model tài khoản `User`; vai trò là trường `systemRole`, mỗi tài khoản đúng một vai trò
+(ràng buộc CHECK ở migration `20261017000000_role_hierarchy`).
+
+| Mã vai trò | Ý nghĩa | Viết tắt |
+| --- | --- | --- |
+| `SYSTEM_ADMIN` | Quản trị hệ thống | QT |
+| `LEADERSHIP_APPROVAL_AUTHORITY` | Giám đốc Học viện | GĐ |
+| `SCIENCE_DEPUTY_DIRECTOR` | Phó GĐ phụ trách Khoa học | PGĐ-KH |
+| `RESEARCH_OVERSIGHT_AUTHORITY` | Các Phó GĐ khác, chỉ theo dõi | PGĐ-TD |
+| `RESEARCH_MANAGEMENT_HEAD` | Trưởng phòng KHQS | TP |
+| `RESEARCH_MANAGEMENT_DEPUTY_HEAD` | Phó phòng KHQS | PP |
+| `RESEARCH_BOARD_HEAD` | Trưởng ban QLKH | TB |
+| `RESEARCH_MANAGEMENT_STAFF` | Chuyên viên QLKH | CV |
+| `RESEARCHER_INTERNAL_USER` | Nhà nghiên cứu nội bộ | NCV |
+| `EXTERNAL_RESEARCHER_USER` | Nhà nghiên cứu bên ngoài | NNB |
+
+Ngoài vai trò hệ thống, quyền còn phụ thuộc phạm vi đơn vị (`UserOrganizationScope`) và quan hệ theo từng hồ sơ
+(`VIEWER_RELATIONSHIP_TYPES_V1`: chủ nhiệm, thư ký, thành viên, phản biện, hội đồng, IRB, chuyên viên phụ trách…).
+
+### 7.2 Ma trận hiện hành
+
+Ký hiệu: ✅ được phép · 🔸 có điều kiện (xem ghi chú) · 👁 chỉ xem · — không được.
+
+| Chức năng | QT | GĐ | PGĐ-KH | PGĐ-TD | TP | PP | TB | CV | NCV | NNB |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **Quản trị** | | | | | | | | | | |
+| Quản lý tài khoản, vai trò, đơn vị, danh mục | ✅ | — | — | — | — | — | — | — | — | — |
+| Quản lý hồ sơ nhà khoa học (tạo, cấp/liên kết tài khoản) | ✅ | — | — | — | 🔸¹ | — | — | 🔸¹ | — | — |
+| Có hồ sơ nhà khoa học, tự cập nhật lý lịch khoa học của mình | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Quản lý văn bản khoa học | ✅ | — | — | — | ✅ | — | — | ✅ | — | — |
+| **Đợt tiếp nhận** | | | | | | | | | | |
+| Tạo, mở, đóng đợt | — | — | — | — | ✅ | — | — | ✅ | — | — |
+| Xem đợt đang mở | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| **Hồ sơ đề xuất** | | | | | | | | | | |
+| Tạo, sửa, nộp đề xuất (tư cách chủ nhiệm) | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Xem hồ sơ | — | 👁² | 👁² | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 🔸³ | 🔸⁴ | 🔸⁵ |
+| Giao chuyên viên phụ trách hồ sơ, phân mảng | — | — | — | — | ✅¹ | — | — | — | — | — |
+| Kiểm tra đầy đủ, yêu cầu bổ sung | — | — | — | — | — | — | — | 🔸³ | — | — |
+| Phân công phản biện, lập hội đồng | — | — | — | — | ✅¹ | — | — | 🔸³ | — | — |
+| Chấm phiếu đánh giá | — | — | — | — | — | — | — | 🔸⁵ | 🔸⁵ | 🔸⁵ |
+| Tổng hợp, chốt, trình kết quả đánh giá | — | — | — | — | ✅¹ | — | — | 🔸³ | 🔸⁶ | 🔸⁶ |
+| Xem tiến độ đánh giá | — | 👁 | 👁 | 👁 | 👁 | 👁 | 👁 | 🔸³ | — | — |
+| Duyệt tờ trình, bước Trưởng ban | — | — | — | — | — | — | ✅¹ | lập tờ trình | — | — |
+| Duyệt tờ trình, bước Trưởng phòng | — | — | — | — | ✅¹ | — | — | — | — | — |
+| Ký thành lập hội đồng đánh giá/IRB, cấp giấy IRB | — | ✅ | ✅ | — | — | — | — | — | — | — |
+| Phê duyệt/từ chối đề tài và kinh phí | — | ✅ | — | — | — | — | — | — | — | — |
+| Quản lý IRB (mời thành viên), giải ngân | — | ✅ | — | — | — | — | — | 🔸¹ | — | — |
+| **Đề tài đang thực hiện** | | | | | | | | | | |
+| Xem và theo dõi đề tài | — | ✅ | ✅ | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 👁¹ | 🔸⁴ | 🔸⁴ |
+| Xem chi tiết kinh phí từng đề tài | — | ✅ | ✅ | — | ✅ | ✅ | ✅ | ✅ | 🔸⁴ | 🔸⁴ |
+| Giao/thu hồi chuyên viên phụ trách đề tài | — | ✅ | — | — | ✅¹ | — | — | ✅¹ | — | — |
+| Nghiệp vụ hằng ngày (thiết lập mốc, xét báo cáo, thẩm định, nghiệm thu, sản phẩm, lập thanh lý, đóng đề tài) | — | — | — | — | — | — | — | 🔸³ | — | — |
+| Việc của chủ nhiệm (báo cáo, xin điều chỉnh/gia hạn, nộp nghiệm thu, nộp sản phẩm) | — | — | — | — | — | — | — | — | 🔸⁴ | — |
+| Cập nhật tiến độ mốc mình phụ trách | — | — | — | — | — | — | — | — | 🔸⁴ | 🔸⁴ |
+| Quyết định điều chỉnh/gia hạn, thành lập hội đồng nghiệm thu | — | ✅ | ✅ | — | — | — | — | — | — | — |
+| Quản lý kinh phí đề tài | — | ✅ | — | — | — | — | — | 🔸¹ | — | — |
+| Phê duyệt thanh lý | — | ✅ | — | — | — | — | — | — | — | — |
+| **Đề tài sinh viên NCKH** | | | | | | | | | | |
+| Đăng ký đề tài | — | — | — | — | — | — | — | ✅ | ✅ (GV hướng dẫn) | — |
+| Duyệt, quản lý, hoàn thành | — | — | — | — | — | — | — | 🔸¹ | — | — |
+| **Dashboard** | ✅ (riêng) | ✅ | ✅ | ✅ (ẩn kinh phí) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+Ghi chú điều kiện:
+
+1. Chỉ trong phạm vi đơn vị của người dùng.
+2. Chỉ hồ sơ đã vào luồng xử lý (đã nộp trở đi), trong phạm vi đơn vị.
+3. Chỉ hồ sơ/đề tài mà chuyên viên **đang được phân công phụ trách**.
+4. Chỉ hồ sơ/đề tài mà người đó là chủ nhiệm hoặc thành viên.
+5. Chỉ khi được phân công phản biện, thành viên hội đồng hoặc IRB (đọc được hồ sơ ngoài đơn vị).
+6. Chỉ khi là thư ký hội đồng của chính hồ sơ đó; thư ký không chấm phiếu.
+
+Quy tắc chung:
+
+- **Xung đột lợi ích:** chủ nhiệm, thành viên hoặc phản biện của một hồ sơ/đề tài không được dùng quyền quản lý
+  trên chính hồ sơ/đề tài đó (phân công, tổng hợp, quyết định, thao tác chuyên viên). Chủ nhiệm và phản biện không
+  xem nhật ký hành động của hồ sơ (ẩn danh hai chiều).
+- **QT chỉ quản trị nền tảng**, không tham gia nghiệp vụ và không được phân công phản biện.
+- **Phó phòng (PP)** chỉ theo dõi trong phạm vi, không có bước duyệt trong luồng trình.
+- **PGĐ-TD** bị ẩn kinh phí chi tiết ở hồ sơ, đề tài, dashboard và file xuất, nhưng vẫn được tạo/nộp đề xuất.
+- **NNB** không tạo đề xuất, không xem đợt tiếp nhận; chỉ tham gia với tư cách phản biện, IRB hoặc thành viên đề tài.
+
+### 7.3 Lịch sử: ma trận 7 vai trò (trước 10/2026, đã thay thế)
+
 The seven account-level roles below are the complete system-role comparison. `None`
 means denied/not applicable; a record relationship or assignment never creates a
 new system role. The action tables that follow intentionally use compact
