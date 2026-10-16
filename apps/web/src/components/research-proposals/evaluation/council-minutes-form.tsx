@@ -99,7 +99,7 @@ export function CouncilMinutesForm({
                         className="button secondary"
                         style={{ padding: "2px 8px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}
                         onClick={() => proposal && exportCouncilMinutesWord(proposal)}
-                        title="Tải Biên bản họp Hội đồng dưới dạng file Word (.doc)"
+                        title="Tải Biên bản họp Hội đồng dưới dạng file Word (.docx)"
                       >
                         <FileDown size={13} /> Lưu Biên bản (Word)
                       </button>
@@ -212,7 +212,7 @@ export function CouncilMinutesForm({
                       };
                       exportCouncilMinutesWord(draftProposal);
                     }}
-                    title="Tải biên bản họp theo nội dung đang soạn thảo (.doc)"
+                    title="Tải biên bản họp theo nội dung đang soạn thảo (.docx)"
                   >
                     <FileDown size={14} /> Xuất dự thảo Biên bản (Word)
                   </button>

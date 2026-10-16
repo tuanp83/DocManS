@@ -1522,6 +1522,29 @@ describe("ST-3.5 approval decision", () => {
     assert.equal(piView.statusLabel, "Từ chối");
   });
 
+  it("lưu số quyết định phê duyệt, không cho trùng số, bỏ qua số khi không phê duyệt", async () => {
+    const services = createServices();
+    const { proposal: first } = await createProposalReadyForApproval(services);
+    const approval = await services.decisions.decide(leadershipUser, first.id, "approved", { decisionNumber: "  1234/QĐ-HVQY ", packageRevision: packageRevision(services, first.id) });
+    assert.equal(approval.decision.decisionNumber, "1234/QĐ-HVQY");
+    assert.equal(services.prisma.store.decisions.at(-1).decisionNumber, "1234/QĐ-HVQY");
+
+    const { proposal: second } = await createProposalReadyForApproval(services);
+    await assert.rejects(
+      () => services.decisions.decide(leadershipUser, second.id, "approved", { decisionNumber: "1234/QĐ-HVQY", packageRevision: packageRevision(services, second.id) }),
+      /đã dùng cho một quyết định khác/
+    );
+    assert.equal(services.prisma.store.proposals.find((item) => item.id === second.id).status, "ready_for_approval");
+
+    // Không số thì để trống cho văn thư; quyết định không phê duyệt không mang số.
+    const unnumbered = await services.decisions.decide(leadershipUser, second.id, "approved", { packageRevision: packageRevision(services, second.id) });
+    assert.equal(unnumbered.decision.decisionNumber, "");
+    const rejecting = createServices();
+    const { proposal: rejected } = await createProposalReadyForApproval(rejecting);
+    const rejection = await rejecting.decisions.decide(leadershipUser, rejected.id, "rejected", { note: "Chưa đạt", decisionNumber: "99/QĐ", packageRevision: packageRevision(rejecting, rejected.id) });
+    assert.equal(rejection.decision.decisionNumber, "");
+  });
+
   it("AC-ST-3.5-03: a proposal that is not ready for approval cannot be decided", async () => {
     const services = createServices();
     const { proposal } = await createProposalUnderReview(services);

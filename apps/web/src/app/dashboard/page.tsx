@@ -5,13 +5,18 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { DashboardAnalytics } from "@/components/dashboard/dashboard-analytics";
 import { getApiBaseUrl } from "@/lib/session";
+import { DASHBOARD_FILTER_KEYS } from "@/lib/dashboard-api";
 import { useNotice } from "@/components/ui/confirm-dialog";
 
 export default function DashboardPage() {
   const notice = useNotice();
   const handleExport = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/dashboard/export-proposals`, { credentials: "include" });
+      // Xuất đúng danh sách theo bộ lọc đang chọn (bộ lọc của Dashboard nằm trên URL).
+      const current = new URLSearchParams(window.location.search);
+      const query = new URLSearchParams();
+      for (const key of DASHBOARD_FILTER_KEYS) if (current.get(key)) query.set(key, current.get(key)!);
+      const response = await fetch(`${getApiBaseUrl()}/dashboard/export-proposals${query.size ? `?${query}` : ""}`, { credentials: "include" });
       if (!response.ok) throw new Error("Export failed");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -37,7 +42,7 @@ export default function DashboardPage() {
         actions={
           <div style={{ display: "flex", gap: "12px" }}>
             <button className="button secondary" onClick={handleExport}>
-              Tải báo cáo Excel
+              Tải Excel theo bộ lọc
             </button>
             <Link className="button primary" href="/my-proposals">
               Hồ sơ của tôi

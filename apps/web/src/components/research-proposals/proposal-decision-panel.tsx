@@ -46,6 +46,7 @@ export function ProposalDecisionPanel({
 
   // Mục 1: Phê duyệt đề tài states
   const [note, setNote] = useState("");
+  const [decisionNumber, setDecisionNumber] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busyDecision, setBusyDecision] = useState<"" | "approve" | "reject">("");
@@ -169,12 +170,14 @@ export function ProposalDecisionPanel({
       // Quyết định gắn với đúng phiên bản gói đánh giá đang hiển thị; gói đã đổi thì máy chủ từ chối và yêu cầu tải lại.
       const payload = {
         note: note.trim(),
+        ...(decision === "approve" && decisionNumber.trim() ? { decisionNumber: decisionNumber.trim() } : {}),
         packageRevision: decisionPackage?.packageRevision ?? 0
       };
 
       const result = await decideProposal(proposalId, decision, payload);
       setMessage(`Đã ghi nhận quyết định: ${result.decision.decisionLabel}.`);
       setNote("");
+      setDecisionNumber("");
       setConfirmingDecision("");
       await refresh();
       onDecision();
@@ -282,7 +285,7 @@ export function ProposalDecisionPanel({
                   className="button secondary"
                   onClick={() => exportProposalApprovalDecisionWord(modalProposalData)}
                   style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", padding: "5px 12px" }}
-                  title="Tải văn bản Quyết định phê duyệt đề tài (.doc)"
+                  title="Tải văn bản Quyết định phê duyệt đề tài (.docx)"
                 >
                   <FileDown size={14} />
                   Lưu Quyết định (Word)
@@ -387,6 +390,7 @@ export function ProposalDecisionPanel({
                       <p className="timeline-title">{decision.decisionLabel}</p>
                       <p className="timeline-meta">
                         {decision.decidedByDisplayName || "Lãnh đạo"} · {formatDate(decision.decidedAt)}
+                        {decision.decisionNumber ? ` · Số ${decision.decisionNumber}` : ""}
                       </p>
                       {decision.note ? <p className="timeline-meta">{decision.note}</p> : null}
                     </div>
@@ -407,6 +411,16 @@ export function ProposalDecisionPanel({
                 onChange={(event) => setNote(event.target.value)}
                 disabled={!canDecide || !decisionPackage.canDecide}
                 placeholder="Nhập ý kiến chỉ đạo hoặc căn cứ quyết định đề tài..."
+              />
+            </label>
+            <label className="field">
+              <span>Số quyết định phê duyệt (nếu văn thư đã cấp; bỏ trống thì văn bản để chỗ trống)</span>
+              <input
+                maxLength={100}
+                value={decisionNumber}
+                onChange={(event) => setDecisionNumber(event.target.value)}
+                disabled={!canDecide || !decisionPackage.canDecide}
+                placeholder="Ví dụ: 1234/QĐ-HVQY"
               />
             </label>
 
@@ -544,10 +558,10 @@ export function ProposalDecisionPanel({
                     className="button secondary"
                     onClick={() => exportProposalApprovalDecisionWord(modalProposalData)}
                     style={{ padding: "4px 10px", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px" }}
-                    title="Lưu Quyết định phê duyệt kinh phí dạng Word (.doc)"
+                    title="Lưu Quyết định phê duyệt kinh phí dạng Word (.docx)"
                   >
                     <FileDown size={14} aria-hidden="true" />
-                    Lưu Word (.doc)
+                    Lưu Word (.docx)
                   </button>
                   <span
                     style={{
@@ -643,10 +657,10 @@ export function ProposalDecisionPanel({
                       fontSize: "13px",
                       padding: "6px 14px"
                     }}
-                    title="Tải văn bản Quyết định dưới dạng file Microsoft Word (.doc)"
+                    title="Tải văn bản Quyết định dưới dạng file Microsoft Word (.docx)"
                   >
                     <FileDown size={15} />
-                    Lưu file Word (.doc)
+                    Lưu file Word (.docx)
                   </button>
                   <button
                     type="button"
@@ -826,10 +840,10 @@ export function ProposalDecisionPanel({
                     className="button button-secondary"
                     style={{ fontSize: "12px", padding: "6px 12px", display: "inline-flex", alignItems: "center", gap: "6px" }}
                     onClick={() => exportProposalApprovalDecisionWord(modalProposalData)}
-                    title="Tải dự thảo Quyết định kèm mức kinh phí dưới dạng file Word (.doc)"
+                    title="Tải dự thảo Quyết định kèm mức kinh phí dưới dạng file Word (.docx)"
                   >
                     <FileDown size={14} />
-                    Lưu dự thảo Word (.doc)
+                    Lưu dự thảo Word (.docx)
                   </button>
                 </div>
 

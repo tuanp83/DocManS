@@ -33,6 +33,7 @@ import {
   getProposalMilitaryScope,
   getProposalMilitaryScopeLabel
 } from "@/lib/proposal-classification";
+import { downloadXlsxReport } from "@/lib/xlsx-export";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -287,31 +288,8 @@ export function ProgressReportPanel() {
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
   }, [filteredProposals]);
 
-  // Xuất file Excel (CSV UTF-8 BOM)
-  function exportToCsv() {
-    const headers = [
-      "STT",
-      "Mã đề tài",
-      "Tên đề tài nghiên cứu",
-      "Cấp đề tài",
-      "Phân loại Quân sự / Dân sự",
-      "Chủ nhiệm đề tài (PI)",
-      "Đơn vị chủ trì",
-      "Ngày bắt đầu",
-      "Ngày kết thúc",
-      "Kinh phí duyệt (VNĐ)",
-      "Đã giải ngân (VNĐ)",
-      "Tỷ lệ giải ngân (%)",
-      "Đạo đức Y sinh (IRB)",
-      "Nghiệm thu kết quả",
-      "Trạng thái hồ sơ",
-      "Tình trạng tiến độ",
-      "Thời hạn còn lại / Quá hạn",
-      "Tiến độ thực tế theo mốc (%)",
-      "Tiến độ kế hoạch (%)",
-      "SPI"
-    ];
-
+  // Xuất tệp Excel (.xlsx) theo đúng danh sách đang lọc.
+  async function exportToExcel() {
     const rows = filteredProposals.map((p, idx) => {
       let assessLabel = "Chưa xác định";
       let timeNote = "—";
@@ -343,68 +321,69 @@ export function ProgressReportPanel() {
 
       return [
         idx + 1,
-        `"${(p.code || p.id).replace(/"/g, '""')}"`,
-        `"${p.title.replace(/"/g, '""')}"`,
-        `"${getProposalLevelLabel(p.proposalTypeCode).replace(/"/g, '""')}"`,
-        `"${getProposalMilitaryScopeLabel(getProposalMilitaryScope(p)).replace(/"/g, '""')}"`,
-        `"${(p.ownerDisplayName || "—").replace(/"/g, '""')}"`,
-        `"${(p.hostOrganizationUnitName || p.hostOrganizationUnitId).replace(/"/g, '""')}"`,
+        p.code || p.id,
+        p.title,
+        getProposalLevelLabel(p.proposalTypeCode),
+        getProposalMilitaryScopeLabel(getProposalMilitaryScope(p)),
+        p.ownerDisplayName || "—",
+        p.hostOrganizationUnitName || p.hostOrganizationUnitId,
         formatDate(p.startDate),
         formatDate(p.endDate),
         p.budgetTotal,
         p.disbursedTotal,
         `${p.disbursedPercent}%`,
-        `"${irbText}"`,
-        `"${acceptText}"`,
-        `"${(STATUS_LABELS[p.status] ?? p.status).replace(/"/g, '""')}"`,
-        `"${assessLabel}"`,
-        `"${timeNote}"`,
+        irbText,
+        acceptText,
+        STATUS_LABELS[p.status] ?? p.status,
+        assessLabel,
+        timeNote,
         p.progressPercent === null ? "" : `${p.progressPercent}%`,
         p.plannedPercent === null ? "" : `${p.plannedPercent}%`,
-        p.spi === null ? "" : p.spi.toFixed(2)
-      ].join(",");
+        p.spi === null ? "" : Number(p.spi.toFixed(2))
+      ];
     });
 
-    const summaryRow = [
-      "",
-      "TỔNG CỘNG",
-      `"${filteredProposals.length} đề tài"`,
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      metrics.totalBudgetSum,
-      metrics.totalDisbursedSum,
-      `${metrics.averageDisbursedPercent}%`,
-      `"Đã duyệt IRB: ${metrics.irbApprovedCount}"`,
-      `"Đã nghiệm thu: ${metrics.acceptanceCompletedCount}"`,
-      "",
-      `"Đúng hạn: ${metrics.onTrackCount} | Sắp hết hạn: ${metrics.endingSoonCount} | Quá hạn: ${metrics.overdueCount}"`,
-      "",
-      ""
-    ].join(",");
-
-    const csvContent = "\uFEFF" + [
-      "HỌC VIỆN QUÂN Y - PHÒNG KHOA HỌC QUÂN SỰ",
-      "BÁO CÁO TỔNG HỢP TÌNH HÌNH THỰC HIỆN VÀ TIẾN ĐỘ ĐỀ TÀI",
-      `Ngày xuất báo cáo: ${new Date().toLocaleDateString("vi-VN")}`,
-      `Người lập: ${account?.name || "Cán bộ quản lý"}`,
-      "",
-      headers.join(","),
-      ...rows,
-      summaryRow
-    ].join("\r\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Bao_cao_tien_do_de_tai_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    await downloadXlsxReport({
+      fileName: `Bao_cao_tien_do_de_tai_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      sheetName: "Tiến độ đề tài",
+      titleLines: [
+        "HỌC VIỆN QUÂN Y - PHÒNG KHOA HỌC QUÂN SỰ",
+        "BÁO CÁO TỔNG HỢP TÌNH HÌNH THỰC HIỆN VÀ TIẾN ĐỘ ĐỀ TÀI",
+        `Ngày xuất báo cáo: ${new Date().toLocaleDateString("vi-VN")}`,
+        `Người lập: ${account?.name || "Cán bộ quản lý"}`
+      ],
+      headers: [
+        "STT",
+        "Mã đề tài",
+        "Tên đề tài nghiên cứu",
+        "Cấp đề tài",
+        "Phân loại Quân sự / Dân sự",
+        "Chủ nhiệm đề tài",
+        "Đơn vị chủ trì",
+        "Ngày bắt đầu",
+        "Ngày kết thúc",
+        "Kinh phí duyệt (VNĐ)",
+        "Đã giải ngân (VNĐ)",
+        "Tỷ lệ giải ngân (%)",
+        "Đạo đức Y sinh (IRB)",
+        "Nghiệm thu kết quả",
+        "Trạng thái hồ sơ",
+        "Tình trạng tiến độ",
+        "Thời hạn còn lại / Quá hạn",
+        "Tiến độ thực tế theo mốc (%)",
+        "Tiến độ kế hoạch (%)",
+        "SPI"
+      ],
+      widths: [6, 16, 44, 18, 16, 24, 26, 13, 13, 18, 18, 12, 20, 18, 18, 22, 18, 14, 14, 8],
+      moneyColumns: [9, 10],
+      rows,
+      summary: [
+        "", "TỔNG CỘNG", `${filteredProposals.length} đề tài`, "", "", "", "", "", "",
+        metrics.totalBudgetSum, metrics.totalDisbursedSum, `${metrics.averageDisbursedPercent}%`,
+        `Đã duyệt IRB: ${metrics.irbApprovedCount}`, `Đã nghiệm thu: ${metrics.acceptanceCompletedCount}`, "",
+        `Đúng hạn: ${metrics.onTrackCount} | Sắp hết hạn: ${metrics.endingSoonCount} | Quá hạn: ${metrics.overdueCount}`, "", "", "", ""
+      ]
+    });
   }
 
   // Chức năng In báo cáo
@@ -429,7 +408,7 @@ export function ProgressReportPanel() {
             <RefreshCw size={15} aria-hidden="true" />
             Làm mới
           </button>
-          <button type="button" className="button secondary" onClick={exportToCsv} disabled={filteredProposals.length === 0} title="Xuất dữ liệu Excel (CSV)">
+          <button type="button" className="button secondary" onClick={() => void exportToExcel()} disabled={filteredProposals.length === 0} title="Xuất tệp Excel (.xlsx)">
             <FileSpreadsheet size={15} aria-hidden="true" />
             Xuất Excel
           </button>

@@ -382,7 +382,7 @@ export function IRBApprovalModal({
                     <div style={{ marginTop: "12px", padding: "12px", borderRadius: "6px", color: "#0f172a", background: certificate.status === "APPROVED" ? "#f0fdf4" : "#fef2f2" }}>
                       <strong>{certificate.status === "APPROVED" ? `Giấy chứng nhận số ${certificate.certificateNumber}` : "Không chấp thuận về đạo đức"}</strong>
                       <span className="record-meta" style={{ display: "block" }}>{certificate.approvedByName} ký ngày {vnDate(certificate.decisionDate)}{certificate.status === "APPROVED" ? `, hiệu lực đến ${vnDate(certificate.validUntil)}` : ""}.</span>
-                      {certificate.status === "APPROVED" ? <button type="button" onClick={handleExportWord} className="cmd-btn outline" style={{ marginTop: "8px" }}>Xuất Giấy chứng nhận (.doc)</button> : null}
+                      {certificate.status === "APPROVED" ? <button type="button" onClick={handleExportWord} className="cmd-btn outline" style={{ marginTop: "8px" }}>Xuất Giấy chứng nhận (.docx)</button> : null}
                     </div>
                   ) : null}
                 </div>

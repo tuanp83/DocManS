@@ -57,7 +57,7 @@ export function CouncilApprovedView({
                   className="button secondary"
                   style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", whiteSpace: "nowrap" }}
                   onClick={() => proposal && exportCouncilDecisionWord(proposal)}
-                  title="Tải văn bản Quyết định thành lập Hội đồng (.doc)"
+                  title="Tải văn bản Quyết định thành lập Hội đồng (.docx)"
                 >
                   <FileDown size={15} /> Lưu Quyết định HĐ (Word)
                 </button>

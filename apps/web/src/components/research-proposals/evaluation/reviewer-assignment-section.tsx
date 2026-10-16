@@ -204,7 +204,7 @@ export function ReviewerAssignmentSection({
                                   reviewRecommendationLabel: assignment.reviewRecommendationLabel
                                 });
                               }}
-                              title="Tải Phiếu nhận xét, đánh giá chuyên môn dưới dạng file Word (.doc)"
+                              title="Tải Phiếu nhận xét, đánh giá chuyên môn dưới dạng file Word (.docx)"
                             >
                               <FileDown size={11} /> Word
                             </button>

@@ -37,6 +37,7 @@ export interface OfficialDecisionModalProps {
       decisionLabel: string;
       decidedAt: string;
       decidedByDisplayName?: string | null;
+      decisionNumber?: string | null;
       note?: string | null;
     }> | null;
   };
@@ -83,7 +84,7 @@ export function OfficialDecisionModal({ isOpen, onClose, proposal }: OfficialDec
   const decisionDate = approvedDecision?.decidedAt ? new Date(approvedDecision.decidedAt) : new Date();
   // Không điền tên, số quyết định giả: chưa có dữ liệu thì để trống cho văn thư, người ký.
   const signatoryName = approvedDecision?.decidedByDisplayName || "…………………………";
-  const decisionNumber = "…………………………";
+  const decisionNumber = approvedDecision?.decisionNumber || "…………………………";
 
   function handlePrint() {
     window.print();
@@ -172,10 +173,10 @@ export function OfficialDecisionModal({ isOpen, onClose, proposal }: OfficialDec
               className="button secondary"
               onClick={() => exportProposalApprovalDecisionWord(proposal)}
               style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
-              title="Tải văn bản Quyết định dưới dạng file Microsoft Word (.doc)"
+              title="Tải văn bản Quyết định dưới dạng file Microsoft Word (.docx)"
             >
               <FileDown size={15} />
-              Lưu file Word (.doc)
+              Lưu file Word (.docx)
             </button>
             <button
               type="button"

@@ -1,7 +1,7 @@
 import type { CouncilMember } from "@/lib/research-proposals-api";
 
 /**
- * Word Document (.doc / .docx compatible) Export Utility
+ * Xuất văn bản Word (.docx)
  * Conforms to Vietnamese Administrative Document Standards (Nghị định 30/2020/NĐ-CP)
  * and Military Science Regulations (Thông tư 57/2021/TT-BQP).
  */
@@ -33,102 +33,60 @@ export interface ProposalExportData {
   hostOrganizationUnit?: string | null;
 }
 
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
 /**
- * Exports HTML content as a Microsoft Word document (.doc) with full styling,
- * margins, typography (Times New Roman), and table structures preserved.
+ * Bộ chuyển đổi DOCX chỉ đọc style viết trên chính thẻ: chép style của các lớp bảng vào thẻ, và cho mỗi đoạn văn
+ * căn lề của khối bao ngoài gần nhất (tiêu đề "QUYẾT ĐỊNH" căn giữa nằm trong <div style="text-align: center">);
+ * đoạn không có căn lề thì căn đều hai bên như CSS cũ của văn bản.
  */
-export function exportHtmlToWord({ filename, title, contentHtml }: ExportWordOptions) {
-  const fullHtml = `
-    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head>
-      <meta charset='utf-8'>
-      <title>${esc(title)}</title>
-      <!--[if gte mso 9]>
-      <xml>
-        <w:WordDocument>
-          <w:View>Print</w:View>
-          <w:Zoom>100</w:Zoom>
-          <w:DoNotOptimizeForBrowser/>
-        </w:WordDocument>
-      </xml>
-      <![endif]-->
-      <style>
-        @page Section1 {
-          size: 595.3pt 841.9pt; /* A4: 210mm x 297mm */
-          margin: 56.7pt 56.7pt 56.7pt 70.9pt; /* Top 20mm, Right 20mm, Bottom 20mm, Left 25mm */
-          mso-header-margin: 35.4pt;
-          mso-footer-margin: 35.4pt;
-          mso-paper-source: 0;
-        }
-        div.Section1 {
-          page: Section1;
-        }
-        body {
-          font-family: 'Times New Roman', Times, serif;
-          font-size: 13pt;
-          line-height: 1.35;
-          color: #000000;
-        }
-        h1, h2, h3, h4 {
-          font-family: 'Times New Roman', Times, serif;
-          margin: 6pt 0;
-        }
-        p {
-          margin: 4pt 0;
-          text-align: justify;
-        }
-        table {
-          border-collapse: collapse;
-          width: 100%;
-          margin: 8pt 0;
-        }
-        table.border-table th, table.border-table td {
-          border: 1px solid #000000;
-          padding: 6pt 8pt;
-          font-size: 12pt;
-          vertical-align: middle;
-        }
-        table.border-table th {
-          background-color: #f2f2f2;
-          font-weight: bold;
-          text-align: center;
-        }
-        table.header-table td, table.footer-table td {
-          border: none;
-          padding: 2pt 4pt;
-          vertical-align: top;
-        }
-        .text-center { text-align: center; }
-        .text-right { text-align: right; }
-        .text-justify { text-align: justify; }
-        .font-bold { font-weight: bold; }
-        .font-italic { font-style: italic; }
-        .uppercase { text-transform: uppercase; }
-      </style>
-    </head>
-    <body>
-      <div class="Section1">
-        ${contentHtml}
-      </div>
-    </body>
-    </html>
-  `;
-
-  const blob = new Blob(["\ufeff", fullHtml], {
-    type: "application/msword;charset=utf-8"
+function prepareForDocx(contentHtml: string) {
+  const doc = new DOMParser().parseFromString(`<div>${contentHtml}</div>`, "text/html");
+  const prepend = (element: Element, css: string) => element.setAttribute("style", `${css}; ${element.getAttribute("style") ?? ""}`);
+  doc.querySelectorAll("table").forEach((table) => prepend(table, "border-collapse: collapse; width: 100%"));
+  doc.querySelectorAll("table.border-table th, table.border-table td").forEach((cell) => prepend(cell, "border: 1px solid #000000; padding: 6pt 8pt; font-size: 12pt; vertical-align: middle"));
+  doc.querySelectorAll("table.border-table th").forEach((cell) => prepend(cell, "background-color: #f2f2f2; font-weight: bold; text-align: center"));
+  doc.querySelectorAll("table.header-table, table.footer-table").forEach((table) => prepend(table, "border: none"));
+  doc.querySelectorAll("table.header-table td, table.footer-table td").forEach((cell) => prepend(cell, "border: none; padding: 2pt 4pt; vertical-align: top"));
+  const alignOf = (element: Element) => /text-align:\s*(left|right|center|justify)/i.exec(element.getAttribute("style") ?? "")?.[1];
+  doc.querySelectorAll("p, h1, h2, h3, h4").forEach((paragraph) => {
+    if (alignOf(paragraph)) return;
+    let ancestor = paragraph.parentElement;
+    while (ancestor && !alignOf(ancestor)) ancestor = ancestor.parentElement;
+    prepend(paragraph, `text-align: ${(ancestor && alignOf(ancestor)) || "justify"}`);
   });
+  return doc.body.firstElementChild?.innerHTML ?? contentHtml;
+}
 
-  const finalName = filename.endsWith(".doc") || filename.endsWith(".docx")
-    ? filename
-    : `${filename}.doc`;
+/**
+ * Xuất văn bản ra tệp Word thật (.docx, Office Open XML): khổ A4, lề trên/phải/dưới 20 mm, lề trái 25 mm,
+ * Times New Roman 13pt. Bộ chuyển đổi chỉ được tải khi người dùng bấm xuất.
+ */
+export async function exportHtmlToWord({ filename, title, contentHtml }: ExportWordOptions) {
+  const { default: htmlToDocx } = await import("@turbodocx/html-to-docx");
+  const html = `<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)}</title></head><body>${prepareForDocx(contentHtml)}</body></html>`;
+  // Đơn vị: khổ giấy và lề tính bằng twip (1/20 pt), cỡ chữ tính bằng nửa điểm.
+  const result = await htmlToDocx(html, null, {
+    orientation: "portrait",
+    pageSize: { width: 11906, height: 16838 },
+    margins: { top: 1134, right: 1134, bottom: 1134, left: 1418, header: 708, footer: 708 },
+    title,
+    creator: "DocManS - Học viện Quân y",
+    font: "Times New Roman",
+    fontSize: 26,
+    complexScriptFontSize: 26,
+    lang: "vi-VN",
+    table: { row: { cantSplit: true } }
+  });
+  const blob = result instanceof Blob ? result : new Blob([result as ArrayBuffer], { type: DOCX_MIME });
 
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = finalName;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${filename.replace(/\.docx?$/, "")}.docx`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
   URL.revokeObjectURL(url);
 }
 
@@ -256,7 +214,7 @@ export function exportCouncilDecisionWord(proposal: {
     </table>
   `;
 
-  exportHtmlToWord({
+  return exportHtmlToWord({
     filename: `Quyet_dinh_thanh_lap_Hoi_dong_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
     title: `Quyết định thành lập Hội đồng - ${esc(code)}`,
     contentHtml
@@ -276,15 +234,19 @@ export function exportProposalApprovalDecisionWord(proposal: {
   endDate?: string | null;
   /** Giám đốc đã ký quyết định phê duyệt; chưa có thì để trống chỗ ký. */
   signerName?: string | null;
+  /** Quyết định của lãnh đạo; lấy số và ngày của quyết định phê duyệt. */
+  decisions?: Array<{ decision: string; decidedAt?: string | null; decisionNumber?: string | null }> | null;
 }) {
-  const dateObj = new Date();
+  const approved = proposal.decisions?.find((item) => item.decision === "approved");
+  // Ngày ký quyết định phê duyệt; chưa phê duyệt (bản xem trước) thì lấy ngày hôm nay.
+  const dateObj = approved?.decidedAt ? new Date(approved.decidedAt) : new Date();
   const day = dateObj.getDate().toString().padStart(2, "0");
   const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
   const year = dateObj.getFullYear();
 
   const code = proposal.code || BLANK;
-  // Số quyết định do văn thư cấp khi ban hành; hệ thống chưa lưu nên để trống.
-  const decisionNumber = BLANK;
+  // Số quyết định do văn thư cấp; chưa có thì để trống để điền tay.
+  const decisionNumber = approved?.decisionNumber || BLANK;
   const amount = Number(proposal.budgetMetadata?.approvedAmount || proposal.budgetMetadata?.amount || 0);
   const formattedAmount = new Intl.NumberFormat("vi-VN").format(amount);
 
@@ -362,7 +324,7 @@ export function exportProposalApprovalDecisionWord(proposal: {
     </table>
   `;
 
-  exportHtmlToWord({
+  return exportHtmlToWord({
     filename: `Quyet_dinh_phe_duyet_de_tai_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
     title: `Quyết định phê duyệt đề tài - ${esc(code)}`,
     contentHtml
@@ -487,7 +449,7 @@ export function exportCouncilMinutesWord(proposal: {
     </table>
   `;
 
-  exportHtmlToWord({
+  return exportHtmlToWord({
     filename: `Bien_ban_hop_Hoi_dong_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
     title: `Biên bản họp Hội đồng - ${esc(code)}`,
     contentHtml
@@ -559,7 +521,7 @@ export function exportEvaluationSummaryWord(proposal: {
     </table>
   `;
 
-  exportHtmlToWord({
+  return exportHtmlToWord({
     filename: `Tong_hop_danh_gia_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
     title: `Báo cáo tổng hợp đánh giá - ${esc(code)}`,
     contentHtml
@@ -645,7 +607,7 @@ export function exportIndividualReviewWord(
     </table>
   `;
 
-  exportHtmlToWord({
+  return exportHtmlToWord({
     filename: `Phieu_danh_gia_${review.reviewerDisplayName.replace(/[^a-zA-Z0-9]/g, "_")}_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
     title: `Phiếu đánh giá - ${esc(review.reviewerDisplayName)} - ${esc(code)}`,
     contentHtml
@@ -822,7 +784,7 @@ export function exportAcceptanceMinutesWord(
     </table>
   `;
 
-  exportHtmlToWord({
+  return exportHtmlToWord({
     filename: `Bien_ban_nghiem_thu_${councilTypeLabel}_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
     title: `Biên bản nghiệm thu ${councilTypeLabel} - ${esc(code)}`,
     contentHtml
@@ -912,7 +874,7 @@ export function exportIrbCertificateWord(
     </table>
   `;
 
-  exportHtmlToWord({
+  return exportHtmlToWord({
     filename: `Giay_chung_nhan_IRB_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
     title: `Giấy chứng nhận IRB - ${esc(code)}`,
     contentHtml

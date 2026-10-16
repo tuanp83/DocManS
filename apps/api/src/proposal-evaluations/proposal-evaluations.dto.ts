@@ -40,6 +40,8 @@ export class ProposalDecisionDto {
   note?: string;
   approvedBudget?: number;
   budgetNote?: string;
+  /** Số quyết định phê duyệt (không bắt buộc; văn thư có thể cấp sau). */
+  decisionNumber?: string;
 }
 
 /** Revocation requires a nonblank reason, bounded at 2000 characters. */
@@ -153,6 +155,9 @@ export const proposalDecisionPipe: PipeTransform<unknown, ProposalDecisionDto> =
     }
     if (input.budgetNote !== undefined && input.budgetNote !== null) {
       assertOptionalText(input.budgetNote, "budgetNote", 500);
+    }
+    if (input.decisionNumber !== undefined && input.decisionNumber !== null) {
+      assertOptionalText(input.decisionNumber, "decisionNumber", 100);
     }
     return input as ProposalDecisionDto;
   }

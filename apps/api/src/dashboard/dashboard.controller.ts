@@ -45,8 +45,8 @@ export class DashboardController {
   }
 
   @Get("export-proposals")
-  async exportProposals(@Req() request: RequestWithCurrentUser, @Res() res: Response) {
-    const buffer = await this.exportService.exportProposalsToExcel(request.currentUser);
+  async exportProposals(@Req() request: RequestWithCurrentUser, @Query() query: Record<string, unknown>, @Res() res: Response) {
+    const buffer = await this.exportService.exportProposalsToExcel(request.currentUser, query);
     res.setHeader("Content-Disposition", "attachment; filename=Danh_sach_de_tai.xlsx");
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.send(buffer);

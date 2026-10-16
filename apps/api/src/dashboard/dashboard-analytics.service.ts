@@ -129,7 +129,7 @@ function proposalOverdue(proposal: DashboardProposalRecord, now: Date) {
   return !!proposal.endDate && proposal.endDate < now && !CLOSED_STATUSES.includes(proposal.status);
 }
 
-function matchesProposal(proposal: DashboardProposalRecord, filters: DashboardFilters, now: Date) {
+export function matchesProposal(proposal: DashboardProposalRecord, filters: DashboardFilters, now: Date) {
   if (filters.unitId !== undefined && proposal.hostOrganizationUnitId !== filters.unitId) return false;
   if (filters.level !== undefined && (proposal.proposalTypeCode ?? null) !== filters.level) return false;
   if (filters.field !== undefined && (proposal.researchFieldCode ?? null) !== filters.field) return false;

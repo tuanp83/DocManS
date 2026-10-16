@@ -144,10 +144,10 @@ export function OfficialCouncilDecisionModal({ isOpen, onClose, proposal }: Offi
               className="button secondary"
               onClick={() => exportCouncilDecisionWord(proposal)}
               style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
-              title="Tải văn bản Quyết định dưới dạng file Microsoft Word (.doc)"
+              title="Tải văn bản Quyết định dưới dạng file Microsoft Word (.docx)"
             >
               <FileDown size={15} />
-              Lưu file Word (.doc)
+              Lưu file Word (.docx)
             </button>
             <button
               type="button"

@@ -199,7 +199,7 @@ export function EvaluationSummarySection({
                   }
                 });
               }}
-              title="Tải Báo cáo tổng hợp đánh giá đề tài dưới dạng file Word (.doc)"
+              title="Tải Báo cáo tổng hợp đánh giá đề tài dưới dạng file Word (.docx)"
             >
               <FileDown size={16} aria-hidden="true" />
               Lưu Báo cáo tổng hợp (Word)

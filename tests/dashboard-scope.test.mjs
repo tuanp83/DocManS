@@ -144,8 +144,19 @@ describe("Dashboard and Excel export follow the proposal list visibility filter"
     assert.equal(first.action, "export-proposals");
     assert.equal(first.result, "success");
     assert.equal(first.actorId, "staff-a");
-    assert.deepEqual(first.afterFacts, { format: "xlsx", rowCount: 3 });
+    assert.deepEqual(first.afterFacts, { format: "xlsx", rowCount: 3, filters: {} });
     assert.equal(second.actorId, "outsider");
-    assert.deepEqual(second.afterFacts, { format: "xlsx", rowCount: 0 });
+    assert.deepEqual(second.afterFacts, { format: "xlsx", rowCount: 0, filters: {} });
+  });
+
+  it("export follows the dashboard filters on top of visibility, and records them in the audit", async () => {
+    const { exporter, prisma } = services();
+    assert.deepEqual(await exportedTitles(await exporter.exportProposalsToExcel(staffA, { unitId: "unit-a", year: "2024" })), ["Đề tài p1", "Đề tài p2", "Đề tài p3"]);
+    // Bộ lọc không mở rộng được phạm vi xem: đơn vị B vẫn không lộ ra với cán bộ đơn vị A.
+    assert.deepEqual(await exportedTitles(await exporter.exportProposalsToExcel(staffA, { unitId: "unit-b" })), []);
+    assert.deepEqual(await exportedTitles(await exporter.exportProposalsToExcel(staffA, { year: "2025" })), []);
+    assert.deepEqual(prisma.auditLogs.at(-1).afterFacts, { format: "xlsx", rowCount: 0, filters: { year: 2025 } });
+    // Chỉ nhận bộ lọc của Dashboard.
+    await assert.rejects(() => exporter.exportProposalsToExcel(staffA, { status: "approved" }), /không được hỗ trợ/);
   });
 });

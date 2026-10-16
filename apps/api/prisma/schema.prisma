@@ -891,6 +891,8 @@ model ProposalDecision {
   fromStatus  String           @map("from_status")
   toStatus    String           @map("to_status")
   createdAt   DateTime         @default(now()) @map("created_at")
+  /// Số quyết định phê duyệt do văn thư cấp (chỉ có ở quyết định phê duyệt); duy nhất toàn hệ thống.
+  decisionNumber String? @unique @map("decision_number")
 
   approvedProjects ApprovedProject[] @relation("ProjectSourceDecision")
 

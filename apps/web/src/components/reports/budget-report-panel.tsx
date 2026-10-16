@@ -35,6 +35,7 @@ import {
   getProposalMilitaryScopeLabel,
   type MilitaryScopeCode
 } from "@/lib/proposal-classification";
+import { downloadXlsxReport } from "@/lib/xlsx-export";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -234,79 +235,54 @@ function BudgetReportDetailPanel() {
       }));
   }, [filteredProposals, metrics.totalBudget]);
 
-  // Chức năng xuất Excel (CSV UTF-8 BOM)
-  function exportToCsv() {
-    const headers = [
-      "STT",
-      "Mã đề tài",
-      "Tên đề tài nghiên cứu",
-      "Cấp đề tài",
-      "Phân loại Quân sự / Dân sự",
-      "Chủ nhiệm đề tài",
-      "Đơn vị chủ trì",
-      "Thời gian bắt đầu",
-      "Thời gian kết thúc",
-      "Trạng thái",
-      "Kinh phí dự toán (VND)",
-      "Bằng chữ",
-      "Ghi chú nguồn kinh phí"
-    ];
-
-    const rows = filteredProposals.map((p, idx) => {
-      const amount = Number(p.budgetMetadata?.amount ?? 0);
-      return [
-        idx + 1,
-        `"${(p.code || p.id).replace(/"/g, '""')}"`,
-        `"${p.title.replace(/"/g, '""')}"`,
-        `"${getProposalLevelLabel(p.proposalTypeCode).replace(/"/g, '""')}"`,
-        `"${getProposalMilitaryScopeLabel(getProposalMilitaryScope(p)).replace(/"/g, '""')}"`,
-        `"${(p.ownerDisplayName || "—").replace(/"/g, '""')}"`,
-        `"${(p.hostOrganizationUnitName || p.hostOrganizationUnitId).replace(/"/g, '""')}"`,
-        formatDate(p.startDate),
-        formatDate(p.endDate),
-        `"${(STATUS_LABELS[p.status] ?? p.status).replace(/"/g, '""')}"`,
-        amount,
-        `"${numberToVietnameseWords(amount).replace(/"/g, '""')}"`,
-        `"${(p.budgetMetadata?.note || "—").replace(/"/g, '""')}"`
-      ].join(",");
+  // Xuất tệp Excel (.xlsx) theo đúng danh sách đang lọc.
+  async function exportToExcel() {
+    await downloadXlsxReport({
+      fileName: `Bao_cao_kinh_phi_de_tai_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      sheetName: "Kinh phí đề tài",
+      titleLines: [
+        "HỌC VIỆN QUÂN Y - PHÒNG KHOA HỌC QUÂN SỰ",
+        "BÁO CÁO TỔNG HỢP TÌNH HÌNH KINH PHÍ ĐỀ TÀI NGHIÊN CỨU KHOA HỌC",
+        `Ngày xuất báo cáo: ${new Date().toLocaleDateString("vi-VN")}`,
+        `Người lập: ${account?.name || "Cán bộ quản lý"}`
+      ],
+      headers: [
+        "STT",
+        "Mã đề tài",
+        "Tên đề tài nghiên cứu",
+        "Cấp đề tài",
+        "Phân loại Quân sự / Dân sự",
+        "Chủ nhiệm đề tài",
+        "Đơn vị chủ trì",
+        "Thời gian bắt đầu",
+        "Thời gian kết thúc",
+        "Trạng thái",
+        "Kinh phí dự toán (VND)",
+        "Bằng chữ",
+        "Ghi chú nguồn kinh phí"
+      ],
+      widths: [6, 16, 48, 18, 16, 24, 26, 14, 14, 18, 18, 36, 30],
+      moneyColumns: [10],
+      rows: filteredProposals.map((p, idx) => {
+        const amount = Number(p.budgetMetadata?.amount ?? 0);
+        return [
+          idx + 1,
+          p.code || p.id,
+          p.title,
+          getProposalLevelLabel(p.proposalTypeCode),
+          getProposalMilitaryScopeLabel(getProposalMilitaryScope(p)),
+          p.ownerDisplayName || "—",
+          p.hostOrganizationUnitName || p.hostOrganizationUnitId,
+          formatDate(p.startDate),
+          formatDate(p.endDate),
+          STATUS_LABELS[p.status] ?? p.status,
+          amount,
+          numberToVietnameseWords(amount),
+          p.budgetMetadata?.note || "—"
+        ];
+      }),
+      summary: ["", "TỔNG CỘNG", `${filteredProposals.length} đề tài`, "", "", "", "", "", "", "", metrics.totalBudget, metrics.totalBudgetWords, ""]
     });
-
-    // Thêm dòng tổng cộng
-    const summaryRow = [
-      "",
-      "TỔNG CỘNG",
-      `"${filteredProposals.length} đề tài"`,
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      metrics.totalBudget,
-      `"${metrics.totalBudgetWords.replace(/"/g, '""')}"`,
-      ""
-    ].join(",");
-
-    const csvContent = "\uFEFF" + [
-      "HỌC VIỆN QUÂN Y - PHÒNG KHOA HỌC QUÂN SỰ",
-      "BÁO CÁO TỔNG HỢP TÌNH HÌNH KINH PHÍ ĐỀ TÀI NGHIÊN CỨU KHOA HỌC",
-      `Ngày xuất báo cáo: ${new Date().toLocaleDateString("vi-VN")}`,
-      `Người lập: ${account?.name || "Cán bộ quản lý"}`,
-      "",
-      headers.join(","),
-      ...rows,
-      summaryRow
-    ].join("\r\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Bao_cao_kinh_phi_de_tai_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   }
 
   // Chức năng In báo cáo
@@ -331,7 +307,7 @@ function BudgetReportDetailPanel() {
             <RefreshCw size={15} aria-hidden="true" />
             Làm mới
           </button>
-          <button type="button" className="button secondary" onClick={exportToCsv} disabled={filteredProposals.length === 0} title="Xuất dữ liệu Excel (CSV)">
+          <button type="button" className="button secondary" onClick={() => void exportToExcel()} disabled={filteredProposals.length === 0} title="Xuất tệp Excel (.xlsx)">
             <FileSpreadsheet size={15} aria-hidden="true" />
             Xuất Excel
           </button>

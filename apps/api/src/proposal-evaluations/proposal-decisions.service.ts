@@ -266,6 +266,8 @@ export class ProposalDecisionsService {
     const note = this.readNote(input.note, { required: decision === PROPOSAL_DECISIONS.rejected });
     const hasBudget = decision === PROPOSAL_DECISIONS.approved && input.approvedBudget !== undefined && input.approvedBudget !== null && input.approvedBudget !== "";
     const decidedBudget = hasBudget ? readApprovedBudget(input.approvedBudget) : null;
+    // Chỉ quyết định phê duyệt mới có số; để trống thì văn bản in chỗ trống cho văn thư.
+    const decisionNumber = decision === PROPOSAL_DECISIONS.approved && typeof input.decisionNumber === "string" && input.decisionNumber.trim() ? input.decisionNumber.trim() : null;
     const toStatus = DECISION_TARGET_STATUS[decision];
     const decidedAt = new Date();
 
@@ -275,6 +277,10 @@ export class ProposalDecisionsService {
       const packageSnapshot = await this.assertDecidablePackage(tx as PrismaService, proposal, packageRevision);
       // Gói phê duyệt phải đã qua Trưởng ban QLKH và Trưởng phòng KHQS (trừ gói trình trước khi có luồng này).
       await assertReadyForLeadership(tx, actor, { kind: APPROVAL_KINDS.decisionPackage, subjectType: "proposal", subjectId: proposalId });
+
+      if (decisionNumber && (await tx.proposalDecision.findFirst({ where: { decisionNumber }, select: { id: true } }))) {
+        throw new BadRequestException({ code: "DECISION_NUMBER_TAKEN", field: "decisionNumber", message: `Số quyết định "${decisionNumber}" đã dùng cho một quyết định khác.` });
+      }
 
       // Conditional on the status we validated, so two authorities deciding at once cannot both win.
       await updateProposalStatusGuarded(tx, proposalId, proposal.status, toStatus);
@@ -304,6 +310,7 @@ export class ProposalDecisionsService {
           decidedAt,
           fromStatus: proposal.status,
           toStatus,
+          decisionNumber,
           packageRevision,
           contextVersion: (input.contextVersion ?? null),
           packageSnapshot: packageSnapshot
@@ -333,7 +340,7 @@ export class ProposalDecisionsService {
           targetEntity: "proposal-decision",
           targetEntityId: record.id,
           username: actor.username,
-          reason: JSON.stringify({ proposalId, decision, fromStatus: proposal.status, toStatus, packageRevision, hasNote: Boolean(note) })
+          reason: JSON.stringify({ proposalId, decision, fromStatus: proposal.status, toStatus, packageRevision, decisionNumber, hasNote: Boolean(note) })
         }
       });
 
@@ -910,6 +917,7 @@ export class ProposalDecisionsService {
       decidedById: decision.decidedById,
       decidedByDisplayName: decision.decidedBy?.displayName ?? "",
       decidedAt: decision.decidedAt.toISOString(),
+      decisionNumber: decision.decisionNumber ?? "",
       fromStatus: decision.fromStatus,
       toStatus: decision.toStatus
     };

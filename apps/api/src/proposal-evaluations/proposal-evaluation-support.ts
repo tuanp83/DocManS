@@ -96,6 +96,7 @@ export type ProposalDecisionRecord = {
   decidedAt: Date;
   fromStatus: string;
   toStatus: string;
+  decisionNumber?: string | null;
   packageRevision?: number | null;
   contextVersion?: unknown;
   packageSnapshot?: unknown;

@@ -856,7 +856,7 @@ function ReviewsWorkspaceContent() {
                   className="button secondary"
                   onClick={() => exportCouncilMinutesWord(selectedProposal)}
                   style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
-                  title="Tải file Word (.doc) Biên bản họp Hội đồng chuẩn Bộ Quốc phòng"
+                  title="Tải file Word (.docx) Biên bản họp Hội đồng chuẩn Bộ Quốc phòng"
                 >
                   <FileDown size={14} /> Lưu Biên bản (Word)
                 </button>
@@ -865,7 +865,7 @@ function ReviewsWorkspaceContent() {
                   className="button secondary"
                   onClick={() => exportCouncilDecisionWord(selectedProposal)}
                   style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
-                  title="Tải file Word (.doc) Quyết định thành lập Hội đồng"
+                  title="Tải file Word (.docx) Quyết định thành lập Hội đồng"
                 >
                   <FileDown size={14} /> Lưu Quyết định HĐ (Word)
                 </button>

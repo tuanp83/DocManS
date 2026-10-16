@@ -160,6 +160,8 @@ export type ProposalDecisionRecord = {
   decidedById: string;
   decidedByDisplayName: string;
   decidedAt: string;
+  /** Số quyết định phê duyệt; rỗng khi chưa có. */
+  decisionNumber?: string;
   fromStatus: string;
   toStatus: string;
 };
@@ -391,7 +393,7 @@ export async function loadProposalDecisionPackage(proposalId: string) {
 export async function decideProposal(
   proposalId: string,
   decision: "approve" | "reject",
-  payload: { note?: string; approvedBudget?: number; budgetNote?: string; packageRevision: number }
+  payload: { note?: string; approvedBudget?: number; budgetNote?: string; decisionNumber?: string; packageRevision: number }
 ) {
   const body = payload;
   return requestJson<{ decision: ProposalDecisionRecord; proposalStatus: string; proposalStatusLabel: string }>(

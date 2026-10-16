@@ -3,7 +3,9 @@ import ExcelJS from "exceljs";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
-import { DashboardService } from "./dashboard.service.js";
+import { approvedBudget, DashboardService } from "./dashboard.service.js";
+import { matchesProposal } from "./dashboard-analytics.service.js";
+import { COMMON_FILTERS, parseDashboardQuery } from "./dashboard-query.js";
 import { isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
 
 
@@ -14,9 +16,12 @@ export class DashboardExportService {
     private readonly auditLog: AuditLogService
   ) {}
 
-  async exportProposalsToExcel(actor: SafeUserContext | undefined): Promise<Buffer> {
+  /** `rawQuery`: cùng bộ lọc đang chọn trên Dashboard (năm, đơn vị, cấp, lĩnh vực, tính chất). */
+  async exportProposalsToExcel(actor: SafeUserContext | undefined, rawQuery?: unknown): Promise<Buffer> {
+    const filters = parseDashboardQuery(rawQuery, COMMON_FILTERS);
+    const now = new Date();
     // Same visibility filter as the proposal list and dashboard totals; fails closed without an actor.
-    const proposals = await this.dashboard.findReadableProposals(actor);
+    const proposals = (await this.dashboard.findReadableProposals(actor, now)).filter((proposal) => matchesProposal(proposal, filters, now));
     const hideBudget = isResearchOversightAuthority(actor);
 
     const workbook = new ExcelJS.Workbook();
@@ -45,10 +50,7 @@ export class DashboardExportService {
     };
 
     proposals.forEach((p, index) => {
-      let budget = 0;
-      if (p.budgetMetadata && typeof (p.budgetMetadata as any).amount === "number") {
-        budget = (p.budgetMetadata as any).amount;
-      }
+      const budget = approvedBudget(p);
 
       sheet.addRow({
         stt: index + 1,
@@ -73,7 +75,7 @@ export class DashboardExportService {
       actorId: actor!.id,
       username: actor!.username,
       targetEntity: "research-proposal-export",
-      afterFacts: { format: "xlsx", rowCount: proposals.length }
+      afterFacts: { format: "xlsx", rowCount: proposals.length, filters }
     });
     return buffer as unknown as Buffer;
   }
