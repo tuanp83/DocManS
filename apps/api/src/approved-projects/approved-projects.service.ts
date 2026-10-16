@@ -17,6 +17,8 @@ import { CLOSED_ACCEPTANCE_ROUND_STATUSES, projectContextVersion, projectViewerA
 import { toAcceptanceResponse, toFinanceSummary, toLiquidationResponse, toProductResponse, toSuperiorResponse } from "./project-closure-model.js";
 import { baselineFromMilestones, calendarDayIndex, HEALTH_APPLICABLE_STATUSES, HEALTH_LEVELS, localDayIndex, resolveEffectiveHealth, validateDeclaredWeights, type HealthLevel } from "./project-progress.js";
 import { computeProgressForProject, summarizeProjectProgress } from "./project-progress-summary.js";
+import { assertAdjustmentValues, assertExtensionValues, MILESTONE_CHANGE_KEYS, optionalText, parseAdjustmentValues, projectDay, requiredText, storedContextVersion, type AdjustmentValues } from "./project-request-values.js";
+import { readScopeSnapshot } from "./project-snapshots.js";
 
 const PREPARING = PROJECT_STATUSES.preparing;
 const EXECUTING = PROJECT_STATUSES.executing;
@@ -51,6 +53,9 @@ const PROJECT_INCLUDE = {
 
 /** Đề tài tải kèm đầy đủ quan hệ theo PROJECT_INCLUDE (kiểu do Prisma sinh từ chính câu truy vấn). */
 export type LoadedProject = Prisma.ApprovedProjectGetPayload<{ include: typeof PROJECT_INCLUDE }>;
+
+/** Đề nghị điều chỉnh / gia hạn kèm các phiên bản và minh chứng. */
+type ProjectRequestWithRevisions = Prisma.ProjectRequestGetPayload<{ include: { revisions: true; evidence: true } }>;
 
 export type NotifyFn = (event: WorkflowEvent) => void;
 
@@ -262,7 +267,7 @@ export class ApprovedProjectsService {
       acceptances: (project.acceptances ?? []).map((row) => toAcceptanceResponse(row)),
       finance: capability.allowedActions?.includes("project.finance.read") ? toFinanceSummary(project.finance) : null,
       liquidation: project.liquidation ? toLiquidationResponse(project.liquidation) : null,
-      level: (project.scopeSnapshot as AnyRecord | null)?.proposalTypeCode ?? null,
+      level: readScopeSnapshot(project.scopeSnapshot).proposalTypeCode ?? null,
       products: (project.products ?? []).map((row) => toProductResponse(row)),
       superiorAcceptance: project.superiorAcceptance ? toSuperiorResponse(project.superiorAcceptance, now) : null,
       viewerAuthorization: capability
@@ -383,7 +388,7 @@ export class ApprovedProjectsService {
       // thức gần nhất trước thời điểm quyết định (bỏ qua bản ghi "kiểm tra đầy đủ").
       const submissions = decision ? await tx.proposalSubmissionEvent.findMany({ where: { proposalId, toStatus: { in: ["submitted", "resubmitted"] }, submittedAt: { lte: decision.decidedAt } }, orderBy: { submittedAt: "desc" } }) : [];
       const submission = submissions.find((event: AnyRecord) => {
-        const eventSnapshot = event.snapshot as AnyRecord | null;
+        const eventSnapshot = event.snapshot;
         return !!eventSnapshot && !eventSnapshot.kind && eventSnapshot.id === proposalId;
       }) ?? null;
       if (!submission || submission.proposalId !== proposalId || !["submitted", "resubmitted"].includes(submission.toStatus) || !decision) throw new BadRequestException({ code: "SOURCE_EVIDENCE_MISSING", message: "Không tìm thấy phiên bản nộp gắn với quyết định phê duyệt." });
@@ -412,7 +417,7 @@ export class ApprovedProjectsService {
       return { id: project.id, proposalId, status: project.status };
     }, { isolationLevel: "Serializable", timeout: 15000 }).catch(async (error) => {
       const denied = ["P2034", "P2002"].includes(error?.code) ? new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Đề tài đã được tạo hoặc ngữ cảnh đã thay đổi. Vui lòng tải lại." }) : error;
-      const evidence = denied as AnyRecord;
+      const evidence = denied;
       await this.auditLog.record({ action: "create-approved-project", result: "failure", actorId: actor.id, targetEntity: "research-proposal", targetEntityId: proposalId, username: actor.username, reason: evidence?.response?.code ?? evidence?.code ?? "ACTION_NOT_GRANTED" }).catch(() => undefined);
       throw denied;
     });
@@ -486,7 +491,7 @@ export class ApprovedProjectsService {
     const eligible = users.filter((user) => user.organizationScopes?.some((scope) => scope.organizationUnitId === loaded.project.hostOrganizationUnitId && scope.organizationUnit?.status === "active") && !(loaded.project.members ?? []).some((member) => member.userId === user.id && isRelationshipActiveAt(member, new Date())));
     const reviewAccess = new ProposalReviewAccessService(this.prisma);
     const checks = await Promise.all(eligible.map((user) => reviewAccess.resolveConflictForProposal(user.id, loaded.project.proposalId)));
-    return eligible.filter((_: AnyRecord, index: number) => !checks[index].unresolved && !checks[index].isAssignedReviewer && !checks[index].hasPersistedReview).map((user) => ({ id: user.id, username: user.username, displayName: user.displayName, unit: user.unit }));
+    return eligible.filter((_, index) => !checks[index].unresolved && !checks[index].isAssignedReviewer && !checks[index].hasPersistedReview).map((user) => ({ id: user.id, username: user.username, displayName: user.displayName, unit: user.unit }));
   }
 
   async assignOfficer(actor: SafeUserContext, projectId: string, input: AnyRecord) {
@@ -673,45 +678,13 @@ export class ApprovedProjectsService {
     });
   }
 
-  private assertAdjustmentValues(values: AnyRecord) {
-    if (!values || typeof values !== "object" || Array.isArray(values)) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
-    const forbidden = ["endDate", "end_date", "requestedEndDate", "requested_end_date", "duration", "durationDays"];
-    if (forbidden.some((key) => Object.prototype.hasOwnProperty.call(values, key))) throw new BadRequestException({ code: "EXTENSION_REQUIRED", message: "Tăng thời hạn hoặc ngày kết thúc phải dùng quy trình gia hạn." });
-    const allowed = ["milestoneChanges", "scope", "plan", "membershipChanges"];
-    if (Object.keys(values).some((key) => !allowed.includes(key))) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED", message: "Điều chỉnh chỉ được thay đổi mốc quan trọng, phạm vi/kế hoạch hoặc thành viên được quản trị." });
-    if (!Object.keys(values).length || [values.scope, values.plan].some((value) => value !== undefined && (!value || typeof value !== "object" || Array.isArray(value)))) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
-    // Phạm vi/kế hoạch rỗng không thay đổi gì: không cho một bản sửa trống thay thế nội dung đề nghị trước đó.
-    if ([values.scope, values.plan].some((value) => value !== undefined && !Object.keys(value).length)) throw new BadRequestException({ code: "ADJUSTMENT_EMPTY", message: "Đề nghị điều chỉnh chưa có nội dung thay đổi." });
-    if (values.plan && (Object.keys(values.plan).some((key) => !["methodology", "activities"].includes(key)) || (values.plan.methodology !== undefined && (typeof values.plan.methodology !== "string" || values.plan.methodology.length > 10000)) || (values.plan.activities !== undefined && (!Array.isArray(values.plan.activities) || values.plan.activities.length > 100 || values.plan.activities.some((item: unknown) => typeof item !== "string" || !item.trim() || item.length > 1000))))) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
-    if (values.scope && Object.keys(values.scope).some((key) => !["title", "objectives", "summary", "researchFieldCode", "proposalTypeCode"].includes(key))) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
-    if (values.milestoneChanges !== undefined && (!Array.isArray(values.milestoneChanges) || !values.milestoneChanges.length)) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
-    if (values.membershipChanges !== undefined && (!Array.isArray(values.membershipChanges) || !values.membershipChanges.length)) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
-    for (const change of values.milestoneChanges ?? []) {
-      if (!change || typeof change !== "object" || Array.isArray(change) || typeof change.id !== "string" || Object.keys(change).some((key) => !MILESTONE_CHANGE_KEYS.includes(key))) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
-      if (change.dueDate !== undefined) projectDay(change.dueDate);
-      if (change.weightPercent !== undefined && change.weightPercent !== null && (!Number.isInteger(change.weightPercent) || change.weightPercent < 0 || change.weightPercent > 100)) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED", message: "Trọng số mốc phải là số nguyên từ 0 đến 100." });
-      if (change.title !== undefined) requiredText(change.title, "title");
-    }
-    for (const change of values.membershipChanges ?? []) {
-      if (!change || typeof change !== "object" || Array.isArray(change) || (change.action === "add" ? Object.keys(change).some((key) => !["action", "userId", "name", "participationRole"].includes(key)) || typeof change.userId !== "string" || !["TOPIC_MEMBER", "TOPIC_SECRETARY"].includes(change.participationRole) : change.action === "end" ? Object.keys(change).some((key) => !["action", "memberId"].includes(key)) || typeof change.memberId !== "string" : true)) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
-    }
-  }
-
   /** Trọng số sau điều chỉnh phải hợp lệ (để trống tất cả, hoặc đủ mọi mốc với tổng 100) — kiểm tra sớm cho PI. */
-  private assertAdjustmentWeights(project: LoadedProject, values: AnyRecord) {
-    const changes = (values.milestoneChanges ?? []).filter((change: AnyRecord) => change?.weightPercent !== undefined);
+  private assertAdjustmentWeights(project: LoadedProject, values: AdjustmentValues) {
+    const changes = (values.milestoneChanges ?? []).filter((change) => change?.weightPercent !== undefined);
     if (!changes.length) return;
-    const next = (project.milestones ?? []).map((item) => { const change = changes.find((entry: AnyRecord) => entry.id === item.id); return change ? change.weightPercent : item.weightPercent; });
+    const next = (project.milestones ?? []).map((item) => { const change = changes.find((entry) => entry.id === item.id); return change ? change.weightPercent : item.weightPercent; });
     const result = validateDeclaredWeights(next);
     if (!result.ok) throw new BadRequestException({ code: "WEIGHTS_INVALID", message: result.message });
-  }
-
-  private assertExtensionValues(project: LoadedProject, values: AnyRecord) {
-    if (!values || typeof values !== "object" || Array.isArray(values) || Object.keys(values).some((key) => key !== "requestedEndDate") || !project.endDate) throw new BadRequestException({ code: "EXTENSION_DATE_INVALID" });
-    const raw = values.requestedEndDate ?? values.requested_end_date ?? values.endDate ?? values.end_date;
-    const requested = projectDay(raw);
-    if (Number.isNaN(requested.valueOf()) || (project.endDate && requested.getTime() <= new Date(project.endDate).getTime())) throw new BadRequestException({ code: "EXTENSION_DATE_INVALID", message: "Ngày kết thúc gia hạn phải sau ngày kết thúc hiện tại." });
-    return requested;
   }
 
   private async createRequest(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, input: AnyRecord) {
@@ -719,10 +692,9 @@ export class ApprovedProjectsService {
       this.assertProjectPi(currentActor, project);
       if (project.requests.some((request) => !["approved", "rejected"].includes(request.status))) throw new ConflictException({ code: "REQUEST_ALREADY_OPEN", message: "Đề tài đã có yêu cầu thay đổi chưa kết thúc." });
       const currentValues = requestType === EXTENSION ? { endDate: project.endDate } : { scope: project.scopeSnapshot, plan: project.planSnapshot, milestones: project.milestones, members: (project.members ?? []).map((member) => ({ id: member.id, userId: member.userId, name: member.name, role: member.role, participationRole: member.participationRole, status: member.status })) };
-      const proposedValues = input.proposedValues as AnyRecord;
+      const proposedValues = input.proposedValues;
       if (!proposedValues || typeof proposedValues !== "object" || Array.isArray(proposedValues)) throw new BadRequestException({ message: "proposedValues không hợp lệ." });
-      if (requestType === ADJUSTMENT) { this.assertAdjustmentValues(proposedValues); this.assertAdjustmentWeights(project, proposedValues); }
-      else this.assertExtensionValues(project, proposedValues);
+      this.assertProposedValues(project, requestType, proposedValues);
       const now = await readTransactionClockV1(tx);
       const request = await tx.projectRequest.create({ data: { projectId: project.id, requestType, status: "draft", revision: 1, requesterId: currentActor.id, currentValues, proposedValues, reason: input.reason, submittedContextVersion: projectContextVersion(project), appraisal: null } });
       const revision = await tx.projectRequestRevision.create({ data: { requestId: request.id, revision: 1, status: "draft", currentValues, proposedValues, reason: input.reason, createdById: currentActor.id, createdAt: now } });
@@ -736,7 +708,7 @@ export class ApprovedProjectsService {
   async createAdjustment(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) { return this.createRequest(actor, projectId, ADJUSTMENT, input); }
   async createExtension(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) { return this.createRequest(actor, projectId, EXTENSION, input); }
 
-  private async findRequest(tx: any, project: LoadedProject, requestId: string) {
+  private async findRequest(tx: any, project: LoadedProject, requestId: string): Promise<ProjectRequestWithRevisions> {
     const request = await tx.projectRequest.findUnique({ where: { id: requestId }, include: { revisions: { orderBy: { revision: "desc" } }, evidence: true } });
     if (!request || request.projectId !== project.id) throw new NotFoundException({ message: "Không tìm thấy yêu cầu của đề tài." });
     return request;
@@ -747,8 +719,8 @@ export class ApprovedProjectsService {
       this.assertProjectPi(currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
       if (request.requestType !== requestType || request.requesterId !== currentActor.id || !["draft", "supplement_requested"].includes(request.status)) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Yêu cầu không còn là bản nháp của PI." });
-      const proposedValues = input.proposedValues as AnyRecord;
-      if (requestType === ADJUSTMENT) { this.assertAdjustmentValues(proposedValues); this.assertAdjustmentWeights(project, proposedValues); } else this.assertExtensionValues(project, proposedValues);
+      const proposedValues = input.proposedValues;
+      this.assertProposedValues(project, requestType, proposedValues);
       const currentValues = request.currentValues;
       const nextRevision = request.revision + 1;
       const now = await readTransactionClockV1(tx);
@@ -764,10 +736,9 @@ export class ApprovedProjectsService {
       this.assertProjectPi(currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
       if (request.requestType !== requestType || request.requesterId !== currentActor.id || request.status !== "draft") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ bản nháp của PI mới được nộp." });
-      const draftContext = request.submittedContextVersion as AnyRecord | null;
+      const draftContext = storedContextVersion(request.submittedContextVersion);
       if (!draftContext || draftContext.aggregateVersion !== project.aggregateVersion || draftContext.relationshipVersion !== project.relationshipVersion) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Đề tài đã thay đổi từ khi tạo bản nháp. Vui lòng tạo yêu cầu mới." });
-      const values = request.proposedValues as AnyRecord;
-      if (requestType === ADJUSTMENT) { this.assertAdjustmentValues(values); this.assertAdjustmentWeights(project, values); } else this.assertExtensionValues(project, values);
+      this.assertProposedValues(project, requestType, request.proposedValues);
       const now = await readTransactionClockV1(tx);
       const nextStatus = "submitted";
       const revision = await tx.projectRequestRevision.update({ where: { requestId_revision: { requestId: request.id, revision: request.revision } }, data: { status: "submitted", submittedAt: now, contextVersion: projectContextVersion(project) } });
@@ -797,7 +768,7 @@ export class ApprovedProjectsService {
       await this.assertOfficer(tx, currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
       if (request.requestType !== EXTENSION || request.status !== "submitted") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
-      this.assertExtensionValues(project, request.proposedValues);
+      assertExtensionValues(project, request.proposedValues);
       const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: "under_staff_validation" } });
       await this.recordRequestAction(tx, currentActor, project, request, "validate", "under_staff_validation", { reason: input.reason ?? null });
       return updated;
@@ -835,8 +806,8 @@ export class ApprovedProjectsService {
       await this.assertOfficer(tx, currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
       if (request.requestType !== ADJUSTMENT || request.status !== "under_staff_review") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
-      const submitted = request.revisions.find((revision: AnyRecord) => revision.revision === request.revision);
-      this.adjustmentUpdate(project, (submitted?.proposedValues ?? request.proposedValues) as AnyRecord);
+      const submitted = request.revisions.find((revision) => revision.revision === request.revision);
+      this.adjustmentUpdate(project, parseAdjustmentValues(submitted?.proposedValues ?? request.proposedValues));
       const now = await readTransactionClockV1(tx);
       const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: "ready_for_head_decision", preparedById: currentActor.id, preparedAt: now, appraisal: { reviewNote: input.note ?? "Đã thẩm định đề nghị điều chỉnh" } } });
       await this.recordRequestAction(tx, currentActor, project, request, "prepare", "ready_for_head_decision", { note: input.note ?? null });
@@ -851,7 +822,7 @@ export class ApprovedProjectsService {
       await this.assertOfficer(tx, currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
       if (request.requestType !== EXTENSION || request.status !== "under_staff_validation") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
-      this.assertExtensionValues(project, request.proposedValues);
+      assertExtensionValues(project, request.proposedValues);
       const now = await readTransactionClockV1(tx);
       const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: "ready_for_head_decision", preparedById: currentActor.id, preparedAt: now, appraisal: { validationNote: input.note ?? "Đã kiểm tra hành chính" } } });
       await this.recordRequestAction(tx, currentActor, project, request, "prepare", "ready_for_head_decision", { note: input.note ?? null });
@@ -875,18 +846,19 @@ export class ApprovedProjectsService {
       await assertReadyForLeadership(tx, currentActor, routingKey);
       if (request.requesterId === currentActor.id || this.activeMember(project, currentActor.id)) throw new ForbiddenException({ code: "CONFLICT_DENIED" });
       if (decision === "reject" && !input.reason) throw new BadRequestException({ message: "Cần lý do từ chối." });
-      const submitted = request.revisions.find((revision: AnyRecord) => revision.revision === request.revision);
+      const submitted = request.revisions.find((revision) => revision.revision === request.revision);
       if (!submitted || submitted.status !== "submitted") throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
-      const expected = request.submittedContextVersion as AnyRecord;
+      const expected = storedContextVersion(request.submittedContextVersion);
       if (!expected || expected.aggregateVersion !== project.aggregateVersion || expected.relationshipVersion !== project.relationshipVersion) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
-      const nextValues = submitted.proposedValues as AnyRecord;
-      const next = requestType === ADJUSTMENT ? this.adjustmentUpdate(project, nextValues) : { endDate: this.assertExtensionValues(project, nextValues) };
+      const nextValues = submitted.proposedValues;
+      const adjustment = requestType === ADJUSTMENT ? parseAdjustmentValues(nextValues) : null;
+      const next = adjustment ? this.adjustmentUpdate(project, adjustment) : { endDate: assertExtensionValues(project, nextValues) };
       const now = await readTransactionClockV1(tx);
       if (decision === "approve") {
-        if (requestType === ADJUSTMENT) await this.applyAdjustmentChanges(tx, currentActor, project, nextValues, now);
-        await tx.approvedProject.update({ where: { id: project.id }, data: { ...next, aggregateVersion: { increment: 1 }, ...(requestType === ADJUSTMENT && nextValues.membershipChanges ? { relationshipVersion: { increment: 1 } } : {}), authorizationContextUpdatedAt: now } });
+        if (adjustment) await this.applyAdjustmentChanges(tx, currentActor, project, adjustment, now);
+        await tx.approvedProject.update({ where: { id: project.id }, data: { ...next, aggregateVersion: { increment: 1 }, ...(adjustment?.membershipChanges ? { relationshipVersion: { increment: 1 } } : {}), authorizationContextUpdatedAt: now } });
         // Kế hoạch đã duyệt thay đổi (gia hạn, hoặc điều chỉnh hạn/trọng số mốc): tạo phiên bản kế hoạch gốc mới.
-        const replans = requestType === EXTENSION || (nextValues.milestoneChanges ?? []).some((change: AnyRecord) => change.dueDate !== undefined || change.weightPercent !== undefined);
+        const replans = requestType === EXTENSION || (adjustment?.milestoneChanges ?? []).some((change) => change.dueDate !== undefined || change.weightPercent !== undefined);
         if (replans) await this.createBaseline(tx, project.id, currentActor.id, requestType, request.id, now);
       }
       const status = decision === "approve" ? "approved" : "rejected";
@@ -899,24 +871,30 @@ export class ApprovedProjectsService {
     });
   }
 
-  private adjustmentUpdate(project: AnyRecord, values: AnyRecord) {
-    this.assertAdjustmentValues(values);
-    const update: AnyRecord = {};
+  /** Kiểm tra nội dung đề nghị theo loại (điều chỉnh: thêm kiểm tra trọng số theo mốc hiện có). */
+  private assertProposedValues(project: LoadedProject, requestType: typeof ADJUSTMENT | typeof EXTENSION, values: unknown) {
+    if (requestType === ADJUSTMENT) { assertAdjustmentValues(values); this.assertAdjustmentWeights(project, values); }
+    else assertExtensionValues(project, values);
+  }
+
+  /** Thay đổi phạm vi / kế hoạch ghép vào ảnh chụp đã duyệt (scopeSnapshot, planSnapshot). */
+  private adjustmentUpdate(project: LoadedProject, values: AdjustmentValues) {
+    const update: { scopeSnapshot?: Prisma.InputJsonObject; title?: string; planSnapshot?: Prisma.InputJsonObject } = {};
     if (values.scope) {
-      update.scopeSnapshot = { ...project.scopeSnapshot, ...values.scope };
+      update.scopeSnapshot = { ...jsonObject(project.scopeSnapshot), ...values.scope } as Prisma.InputJsonObject;
       if (values.scope.title !== undefined) update.title = requiredText(values.scope.title, "title");
     }
-    if (values.plan) update.planSnapshot = { ...(project.planSnapshot ?? {}), ...values.plan };
+    if (values.plan) update.planSnapshot = { ...jsonObject(project.planSnapshot), ...values.plan };
     return update;
   }
 
-  private async applyAdjustmentChanges(tx: Prisma.TransactionClient, actor: SafeUserContext, project: LoadedProject, values: AnyRecord, now: Date) {
+  private async applyAdjustmentChanges(tx: Prisma.TransactionClient, actor: SafeUserContext, project: LoadedProject, values: AdjustmentValues, now: Date) {
     for (const change of values.milestoneChanges ?? []) {
       if (!change || typeof change !== "object" || Array.isArray(change) || !change.id || Object.keys(change).some((key) => !MILESTONE_CHANGE_KEYS.includes(key))) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
       const weightOnly = Object.keys(change).every((key) => key === "id" || key === "weightPercent");
       const milestone = project.milestones.find((item) => item.id === change.id && (item.isImportant || weightOnly));
       if (!milestone) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED", message: "Mốc quan trọng không thuộc đề tài." });
-      const data: AnyRecord = {};
+      const data: { title?: string; description?: string | null; responsibleMemberId?: string; dueDate?: Date; plannedStartDate?: null; weightPercent?: number | null } = {};
       if (change.title !== undefined) data.title = requiredText(change.title, "title");
       if (change.description !== undefined) data.description = optionalText(change.description);
       if (change.responsibleMemberId !== undefined) {
@@ -934,7 +912,7 @@ export class ApprovedProjectsService {
       if (!Object.keys(data).length) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
       await tx.projectMilestone.update({ where: { id: milestone.id }, data });
     }
-    if ((values.milestoneChanges ?? []).some((change: AnyRecord) => change.weightPercent !== undefined)) {
+    if ((values.milestoneChanges ?? []).some((change) => change.weightPercent !== undefined)) {
       const after = await tx.projectMilestone.findMany({ where: { projectId: project.id } });
       const weights = validateDeclaredWeights(after.map((item) => item.weightPercent));
       if (!weights.ok) throw new BadRequestException({ code: "WEIGHTS_INVALID", message: weights.message });
@@ -981,27 +959,12 @@ export class ApprovedProjectsService {
   }
 }
 
-const MILESTONE_CHANGE_KEYS = ["id", "title", "description", "dueDate", "responsibleMemberId", "weightPercent"];
-
 function assertProjectContext(expected: unknown, project: LoadedProject) {
   const current = projectContextVersion(project);
   if (!expected || typeof expected !== "object" || Object.entries(current).some(([key, value]) => (expected as AnyRecord)[key] !== value)) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
 }
 
-function requiredText(value: unknown, field: string) {
-  if (typeof value !== "string" || !value.trim() || value.length > 1000) throw new BadRequestException({ message: `${field} không hợp lệ.` });
-  return value.trim();
-}
-
-function optionalText(value: unknown) {
-  if (value === null) return null;
-  if (typeof value !== "string" || value.length > 5000) throw new BadRequestException({ message: "Nội dung không hợp lệ." });
-  return value.trim() || null;
-}
-
-function projectDay(value: unknown) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new BadRequestException({ message: "Ngày không hợp lệ." });
-  const date = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== value) throw new BadRequestException({ message: "Ngày không hợp lệ." });
-  return date;
+/** Cột JSON dạng object (ảnh chụp phạm vi / kế hoạch); giá trị khác coi như rỗng. */
+function jsonObject(value: Prisma.JsonValue | null | undefined): Prisma.JsonObject {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
