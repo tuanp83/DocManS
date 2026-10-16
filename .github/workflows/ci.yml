@@ -82,6 +82,9 @@ jobs:
       - name: Test (build api + node --test)
         run: npm test
 
+      - name: Test giao diện (Vitest + React Testing Library)
+        run: npm run test:web
+
   docker:
     name: Build image production
     runs-on: ubuntu-latest
