@@ -47,7 +47,10 @@ const PROJECT_INCLUDE = {
   liquidation: { include: { preparedBy: { select: { displayName: true } }, approvedBy: { select: { displayName: true } } } },
   products: { include: { reviews: { include: { formedBy: { select: { displayName: true } }, recordedBy: { select: { displayName: true } } }, orderBy: { round: "desc" } } }, orderBy: { position: "asc" } },
   superiorAcceptance: { include: { sentBy: { select: { displayName: true } }, resultRecordedBy: { select: { displayName: true } } } }
-};
+} satisfies Prisma.ApprovedProjectInclude;
+
+/** Đề tài tải kèm đầy đủ quan hệ theo PROJECT_INCLUDE (kiểu do Prisma sinh từ chính câu truy vấn). */
+export type LoadedProject = Prisma.ApprovedProjectGetPayload<{ include: typeof PROJECT_INCLUDE }>;
 
 export type NotifyFn = (event: WorkflowEvent) => void;
 
@@ -70,18 +73,18 @@ export class ApprovedProjectsService {
    * Mọi thao tác ghi trên đề tài: khoá dòng đề tài, đọc lại người dùng, đối chiếu contextVersion, chạy trong
    * giao dịch Serializable. Sự kiện thông báo được gom qua `notify` và chỉ phát sau khi giao dịch commit.
    */
-  async mutate<T>(actor: SafeUserContext, projectId: string, expected: unknown, work: (tx: any, currentActor: SafeUserContext, project: AnyRecord, notify: NotifyFn) => Promise<T>): Promise<T> {
+  async mutate<T>(actor: SafeUserContext, projectId: string, expected: unknown, work: (tx: any, currentActor: SafeUserContext, project: LoadedProject, notify: NotifyFn) => Promise<T>): Promise<T> {
     const events: WorkflowEvent[] = [];
     // Xung đột tuần tự hoá (P2034) có thể đến từ dòng dùng chung (bộ đếm số văn bản) chứ không phải đề tài này:
     // thử lại tối đa 3 lần; nếu đề tài thật sự đã đổi, assertProjectContext ở lần thử lại trả 409.
     for (let attempt = 0; ; attempt += 1) {
       try {
-        const result: T = await this.prisma.$transaction(async (tx: any) => {
+        const result: T = await this.prisma.$transaction(async (tx) => {
           events.length = 0;
           await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.id} FOR SHARE`;
           const currentActor = await this.readCurrentActor(tx, actor.id);
           await tx.$queryRaw`SELECT id FROM approved_projects WHERE id = ${projectId} FOR UPDATE`;
-          const project = await tx.approvedProject.findUnique({ where: { id: projectId }, include: PROJECT_INCLUDE });
+          const project: LoadedProject | null = await tx.approvedProject.findUnique({ where: { id: projectId }, include: PROJECT_INCLUDE });
           if (!project) throw new NotFoundException({ message: "Không tìm thấy đề tài đã được duyệt." });
           assertProjectContext(expected, project);
           return work(tx, currentActor, project, (event) => { events.push(event); });
@@ -121,7 +124,7 @@ export class ApprovedProjectsService {
       displayName: user.displayName,
       systemRole: user.systemRole as SafeUserContext["systemRole"],
       unit: user.unit,
-      organizationScopes: (user.organizationScopes ?? []).filter((scope: any) => scope.organizationUnit?.status === "active").map((scope: any) => ({ id: scope.organizationUnit.id, code: scope.organizationUnit.code, name: scope.organizationUnit.name }))
+      organizationScopes: (user.organizationScopes ?? []).filter((scope) => scope.organizationUnit?.status === "active").map((scope) => ({ id: scope.organizationUnit.id, code: scope.organizationUnit.code, name: scope.organizationUnit.name }))
     };
   }
 
@@ -131,7 +134,7 @@ export class ApprovedProjectsService {
 
   async currentOfficer(tx: Prisma.TransactionClient, projectId: string, asOf = new Date()): Promise<ProjectOfficerFact | null> {
     const rows = await tx.projectManagementOfficer.findMany({ where: { projectId, status: "ACTIVE" }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }] });
-    const active = rows.filter((row: any) => isRelationshipActiveAt(row, asOf));
+    const active = rows.filter((row) => isRelationshipActiveAt(row, asOf));
     if (active.length > 1) throw new ConflictException({ code: "CONTEXT_AMBIGUOUS", message: "Phân công chuyên viên của đề tài không rõ ràng." });
     return active[0] ?? null;
   }
@@ -151,14 +154,14 @@ export class ApprovedProjectsService {
     if (conflict.isAssignedReviewer || conflict.hasPersistedReview) throw new ForbiddenException({ code: "CONFLICT_DENIED" });
   }
 
-  async loadAuthorized(tx: any, actor: SafeUserContext, projectId: string, preloaded?: AnyRecord) {
-    const project = preloaded ?? await tx.approvedProject.findUnique({ where: { id: projectId }, include: PROJECT_INCLUDE });
+  async loadAuthorized(tx: any, actor: SafeUserContext, projectId: string, preloaded?: LoadedProject) {
+    const project: LoadedProject | null = preloaded ?? await tx.approvedProject.findUnique({ where: { id: projectId }, include: PROJECT_INCLUDE });
     if (!project) throw new NotFoundException({ message: "Không tìm thấy đề tài đã được duyệt." });
     const officer = await this.currentOfficer(tx, projectId);
-    const actorMember = (project.members ?? []).find((member: any) => member.userId === actor.id && isRelationshipActiveAt(member, new Date()));
-    const projectPi = (project.members ?? []).find((member: any) => member.participationRole === "TOPIC_PI" && isRelationshipActiveAt(member, new Date()));
+    const actorMember = (project.members ?? []).find((member) => member.userId === actor.id && isRelationshipActiveAt(member, new Date()));
+    const projectPi = (project.members ?? []).find((member) => member.participationRole === "TOPIC_PI" && isRelationshipActiveAt(member, new Date()));
     const participant = !!actorMember && actorMember.participationRole !== "TOPIC_PI";
-    const responsibleMember = !!actorMember && project.milestones.some((milestone: AnyRecord) => milestone.responsibleMemberId === actorMember.id && milestone.status !== "completed");
+    const responsibleMember = !!actorMember && project.milestones.some((milestone) => milestone.responsibleMemberId === actorMember.id && milestone.status !== "completed");
     const facts = closureFacts(project);
     // Tờ trình đang mở của đề tài: Ban giám đốc chỉ thấy nút ký khi tờ trình đã qua Trưởng ban và Trưởng phòng.
     const routing = (await pendingApprovalStages(tx, "project", [projectId])).get(projectId) ?? {};
@@ -204,19 +207,19 @@ export class ApprovedProjectsService {
     return this.listProjects(actor, options);
   }
 
-  toProjectResponse(project: AnyRecord, capability: AnyRecord, officer: AnyRecord | null, actor?: SafeUserContext) {
+  toProjectResponse(project: LoadedProject, capability: AnyRecord, officer: AnyRecord | null, actor?: SafeUserContext) {
     const now = new Date();
-    const member = (project.members ?? []).find((item: AnyRecord) => item.userId === actor?.id && isRelationshipActiveAt(item, now));
+    const member = (project.members ?? []).find((item) => item.userId === actor?.id && isRelationshipActiveAt(item, now));
     const isPi = member?.participationRole === "TOPIC_PI";
     const isOfficer = !!actor && isProjectStaff(actor) && officer?.officerUserId === actor.id;
     // "isHead" của nhánh chính = người quyết định gia hạn; ở nhánh này là lãnh đạo.
     const isHead = !!actor && canDecideProjectExtension(actor);
     const detailedCases = isPi || isOfficer || isHead;
-    const deadlines = [project.endDate, ...(project.checkpoints ?? []).filter((item: any) => item.status !== "completed").map((item: any) => item.dueDate), ...(project.milestones ?? []).filter((item: any) => item.status !== "completed").map((item: any) => item.dueDate)].filter((value): value is Date => value instanceof Date);
+    const deadlines = [project.endDate, ...(project.checkpoints ?? []).filter((item) => item.status !== "completed").map((item) => item.dueDate), ...(project.milestones ?? []).filter((item) => item.status !== "completed").map((item) => item.dueDate)].filter((value): value is Date => value instanceof Date);
     const nearest = deadlines.sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
     // So sánh theo ngày lịch (giờ Việt Nam): mốc đến hạn hôm nay chưa bị coi là quá hạn.
     const daysLeft = nearest ? calendarDayIndex(nearest) - localDayIndex(now) : null;
-    const overdue = daysLeft !== null && daysLeft < 0 && [PREPARING, EXECUTING, PROJECT_STATUSES.paused].includes(project.status);
+    const overdue = daysLeft !== null && daysLeft < 0 && [PREPARING, EXECUTING, PROJECT_STATUSES.paused].some((status) => status === project.status);
     const approaching = daysLeft !== null && !overdue && daysLeft <= 14;
     return {
       id: project.id,
@@ -231,36 +234,36 @@ export class ApprovedProjectsService {
       endDate: project.endDate?.toISOString?.() ?? null,
       scope: project.scopeSnapshot,
       plan: project.planSnapshot,
-      members: (project.members ?? []).map((member: any) => ({ ...member, effectiveFrom: member.effectiveFrom?.toISOString?.() ?? null, effectiveUntil: member.effectiveUntil?.toISOString?.() ?? null })),
-      officer: officer ? { id: officer.id, officerUserId: officer.officerUserId, officerName: (project.managementOfficers ?? []).find((row: AnyRecord) => row.officerUserId === officer.officerUserId)?.officer?.displayName ?? null, status: officer.status, effectiveFrom: officer.effectiveFrom?.toISOString?.() ?? null, effectiveUntil: officer.effectiveUntil?.toISOString?.() ?? null } : null,
+      members: (project.members ?? []).map((member) => ({ ...member, effectiveFrom: member.effectiveFrom?.toISOString?.() ?? null, effectiveUntil: member.effectiveUntil?.toISOString?.() ?? null })),
+      officer: officer ? { id: officer.id, officerUserId: officer.officerUserId, officerName: (project.managementOfficers ?? []).find((row) => row.officerUserId === officer.officerUserId)?.officer?.displayName ?? null, status: officer.status, effectiveFrom: officer.effectiveFrom?.toISOString?.() ?? null, effectiveUntil: officer.effectiveUntil?.toISOString?.() ?? null } : null,
       milestones: project.milestones ?? [],
       checkpoints: project.checkpoints ?? [],
-      reports: (project.reports ?? []).map((report: AnyRecord) => detailedCases ? ({
+      reports: (project.reports ?? []).map((report) => detailedCases ? ({
         id: report.id, projectId: report.projectId, checkpointId: report.checkpointId, revision: report.revision, status: report.status,
         reportingPeriodStart: report.reportingPeriodStart?.toISOString?.() ?? null, reportingPeriodEnd: report.reportingPeriodEnd?.toISOString?.() ?? null, deadline: report.deadline?.toISOString?.() ?? null,
         progressResults: report.progressResults, issuesRecommendations: report.issuesRecommendations, milestoneContext: report.milestoneContext, author: report.author,
         reviewedBy: report.reviewedBy, reviewReason: actor && (isProjectStaff(actor) || canDecideProjectExtension(actor)) ? report.reviewReason : undefined,
         responseDeadline: report.responseDeadline?.toISOString?.() ?? null, submittedAt: report.submittedAt?.toISOString?.() ?? null,
-        evidence: (report.evidence ?? []).map((item: AnyRecord) => ({ id: item.id, fileRecordId: item.fileRecordId, file: item.fileRecord ? { id: item.fileRecord.id, originalFileName: item.fileRecord.originalFileName, mimeType: item.fileRecord.mimeType, sizeBytes: item.fileRecord.sizeBytes, status: item.fileRecord.status } : null }))
+        evidence: (report.evidence ?? []).map((item) => ({ id: item.id, fileRecordId: item.fileRecordId, file: item.fileRecord ? { id: item.fileRecord.id, originalFileName: item.fileRecord.originalFileName, mimeType: item.fileRecord.mimeType, sizeBytes: item.fileRecord.sizeBytes, status: item.fileRecord.status } : null }))
       }) : ({ id: report.id, checkpointId: report.checkpointId, status: report.status, revision: report.revision, deadline: report.deadline?.toISOString?.() ?? null, submittedAt: report.submittedAt?.toISOString?.() ?? null })),
-      requests: (project.requests ?? []).map((request: AnyRecord) => detailedCases && (!isHead || request.requestType === EXTENSION) ? ({
+      requests: (project.requests ?? []).map((request) => detailedCases && (!isHead || request.requestType === EXTENSION) ? ({
         id: request.id, projectId: request.projectId, requestType: request.requestType, status: request.status, revision: request.revision, requester: request.requester,
         currentValues: request.currentValues, proposedValues: request.proposedValues, reason: request.reason, decisionNote: request.decisionNote, responseDeadline: request.responseDeadline?.toISOString?.() ?? null, decidedAt: request.decidedAt?.toISOString?.() ?? null,
         appraisal: actor && ((isProjectStaff(actor) && request.requestType === ADJUSTMENT) || (canDecideProjectExtension(actor) && request.requestType === EXTENSION)) ? request.appraisal : undefined,
-        preparedAt: request.preparedAt?.toISOString?.() ?? null, preparedBy: request.preparedBy, revisions: request.revisions, evidence: (request.evidence ?? []).map((item: AnyRecord) => ({ id: item.id, requestRevisionId: item.requestRevisionId, fileRecordId: item.fileRecordId, file: item.fileRecord ? { id: item.fileRecord.id, originalFileName: item.fileRecord.originalFileName, mimeType: item.fileRecord.mimeType, sizeBytes: item.fileRecord.sizeBytes, status: item.fileRecord.status } : null }))
+        preparedAt: request.preparedAt?.toISOString?.() ?? null, preparedBy: request.preparedBy, revisions: request.revisions, evidence: (request.evidence ?? []).map((item) => ({ id: item.id, requestRevisionId: item.requestRevisionId, fileRecordId: item.fileRecordId, file: item.fileRecord ? { id: item.fileRecord.id, originalFileName: item.fileRecord.originalFileName, mimeType: item.fileRecord.mimeType, sizeBytes: item.fileRecord.sizeBytes, status: item.fileRecord.status } : null }))
       }) : ({ id: request.id, requestType: request.requestType, status: request.status, createdAt: request.createdAt?.toISOString?.() ?? null, decidedAt: request.decidedAt?.toISOString?.() ?? null })),
-      history: (project.history ?? []).map((item: AnyRecord) => ({ id: item.id, action: item.action, fromStatus: item.fromStatus, toStatus: item.toStatus, reason: detailedCases ? item.reason : undefined, createdAt: item.createdAt?.toISOString?.() ?? null, beforeFacts: isOfficer || isHead ? item.beforeFacts : undefined, afterFacts: isOfficer || isHead ? item.afterFacts : undefined })),
+      history: (project.history ?? []).map((item) => ({ id: item.id, action: item.action, fromStatus: item.fromStatus, toStatus: item.toStatus, reason: detailedCases ? item.reason : undefined, createdAt: item.createdAt?.toISOString?.() ?? null, beforeFacts: isOfficer || isHead ? item.beforeFacts : undefined, afterFacts: isOfficer || isHead ? item.afterFacts : undefined })),
       overdue,
       approaching,
       nearestDeadline: nearest?.toISOString?.() ?? null,
       progressSummary: this.progressSummary(project, now),
       closedAt: project.closedAt?.toISOString?.() ?? null,
       closureNote: project.closureNote ?? null,
-      acceptances: (project.acceptances ?? []).map((row: AnyRecord) => toAcceptanceResponse(row)),
+      acceptances: (project.acceptances ?? []).map((row) => toAcceptanceResponse(row)),
       finance: capability.allowedActions?.includes("project.finance.read") ? toFinanceSummary(project.finance) : null,
       liquidation: project.liquidation ? toLiquidationResponse(project.liquidation) : null,
       level: (project.scopeSnapshot as AnyRecord | null)?.proposalTypeCode ?? null,
-      products: (project.products ?? []).map((row: AnyRecord) => toProductResponse(row)),
+      products: (project.products ?? []).map((row) => toProductResponse(row)),
       superiorAcceptance: project.superiorAcceptance ? toSuperiorResponse(project.superiorAcceptance, now) : null,
       viewerAuthorization: capability
     };
@@ -268,11 +271,11 @@ export class ApprovedProjectsService {
 
   // ---- Tiến độ (docs/design/quan-ly-tien-do-nhiem-vu.md) -------------------------------------------------
 
-  private computeProgress(project: AnyRecord, now = new Date()) {
+  private computeProgress(project: LoadedProject, now = new Date()) {
     return computeProgressForProject(project, now);
   }
 
-  private progressSummary(project: AnyRecord, now = new Date()) {
+  private progressSummary(project: LoadedProject, now = new Date()) {
     return summarizeProjectProgress(project, now);
   }
 
@@ -294,7 +297,7 @@ export class ApprovedProjectsService {
     const updates = await this.prisma.projectMilestoneProgressUpdate.findMany({ where: { projectId }, include: { author: { select: { displayName: true } }, milestone: { select: { title: true } } }, orderBy: { createdAt: "desc" }, take: 20 });
     // Cùng quy tắc che như lịch sử đề tài (toProjectResponse): lý do đánh giá và ghi chú chỉ cho chủ nhiệm,
     // chuyên viên phụ trách và lãnh đạo; người cập nhật luôn thấy ghi chú của chính mình.
-    const viewerMember = (project.members ?? []).find((item: AnyRecord) => item.userId === actor.id && isRelationshipActiveAt(item, now));
+    const viewerMember = (project.members ?? []).find((item) => item.userId === actor.id && isRelationshipActiveAt(item, now));
     const detailed = viewerMember?.participationRole === "TOPIC_PI" || (isProjectStaff(actor) && loaded.officer?.officerUserId === actor.id) || canDecideProjectExtension(actor);
     return {
       projectId,
@@ -303,9 +306,9 @@ export class ApprovedProjectsService {
       effectiveLevel: effective.level,
       levelSource: effective.source,
       needsReassessment: effective.needsReassessment,
-      baselines: (project.baselines ?? []).map((row: AnyRecord) => ({ id: row.id, version: row.version, source: row.source, sourceRequestId: row.sourceRequestId, startDate: row.startDate?.toISOString?.() ?? null, endDate: row.endDate?.toISOString?.() ?? null, milestoneCount: Array.isArray(row.milestones) ? row.milestones.length : 0, createdAt: row.createdAt?.toISOString?.() ?? null })),
-      assessments: (project.healthAssessments ?? []).map((row: AnyRecord) => ({ id: row.id, level: row.level, computedLevel: row.computedLevel, reason: detailed ? row.reason : null, assessedBy: row.assessedBy?.displayName ?? null, createdAt: row.createdAt?.toISOString?.() ?? null })),
-      updates: updates.map((row: AnyRecord) => ({ id: row.id, milestoneId: row.milestoneId, milestoneTitle: row.milestone?.title ?? null, previousPercent: row.previousPercent, progressPercent: row.progressPercent, note: detailed || row.authorId === actor.id ? row.note : null, author: row.author?.displayName ?? null, createdAt: row.createdAt?.toISOString?.() ?? null })),
+      baselines: (project.baselines ?? []).map((row) => ({ id: row.id, version: row.version, source: row.source, sourceRequestId: row.sourceRequestId, startDate: row.startDate?.toISOString?.() ?? null, endDate: row.endDate?.toISOString?.() ?? null, milestoneCount: Array.isArray(row.milestones) ? row.milestones.length : 0, createdAt: row.createdAt?.toISOString?.() ?? null })),
+      assessments: (project.healthAssessments ?? []).map((row) => ({ id: row.id, level: row.level, computedLevel: row.computedLevel, reason: detailed ? row.reason : null, assessedBy: row.assessedBy?.displayName ?? null, createdAt: row.createdAt?.toISOString?.() ?? null })),
+      updates: updates.map((row) => ({ id: row.id, milestoneId: row.milestoneId, milestoneTitle: row.milestone?.title ?? null, previousPercent: row.previousPercent, progressPercent: row.progressPercent, note: detailed || row.authorId === actor.id ? row.note : null, author: row.author?.displayName ?? null, createdAt: row.createdAt?.toISOString?.() ?? null })),
       updatableMilestoneIds: this.updatableMilestoneIds(project, loaded.capability, actor),
       viewerAuthorization: loaded.capability
     };
@@ -315,7 +318,7 @@ export class ApprovedProjectsService {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       if (project.status !== EXECUTING) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ cập nhật tiến độ khi đề tài đang thực hiện." });
       const loaded = await this.loadAuthorized(tx, currentActor, project.id);
-      const milestone = (project.milestones ?? []).find((item: AnyRecord) => item.id === input.milestoneId);
+      const milestone = (project.milestones ?? []).find((item) => item.id === input.milestoneId);
       if (!milestone) throw new NotFoundException({ message: "Không tìm thấy mốc của đề tài." });
       if (milestone.status === "completed") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Mốc đã hoàn thành; tiến độ được chốt theo báo cáo đã chấp nhận." });
       if (!this.updatableMilestoneIds(project, loaded.capability, currentActor).includes(milestone.id)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chỉ chủ nhiệm hoặc thành viên phụ trách mốc được cập nhật tiến độ mốc này." });
@@ -387,7 +390,7 @@ export class ApprovedProjectsService {
       const snapshot = submission.snapshot as AnyRecord | null;
       if (!snapshot || snapshot.id !== proposalId || !snapshot.ownerId || !Array.isArray(snapshot.members)) throw new BadRequestException({ code: "SOURCE_EVIDENCE_MISSING" });
 
-      const sourceMembers = [{ id: randomUUID(), projectId: "", userId: snapshot.ownerId, sourceMemberId: null, name: proposal.owner?.displayName ?? "Chủ nhiệm đề tài", role: "TOPIC_PI", participationRole: "TOPIC_PI", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }, ...snapshot.members.filter((member: AnyRecord) => member.userId !== snapshot.ownerId).map((member: AnyRecord) => ({ id: randomUUID(), projectId: "", userId: member.userId || null, sourceMemberId: member.id ?? null, name: member.name, role: member.role, participationRole: member.participationRole ?? member.role ?? "TOPIC_MEMBER", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }))];
+      const sourceMembers = [{ id: randomUUID(), projectId: "", userId: snapshot.ownerId, sourceMemberId: null, name: proposal.owner?.displayName ?? "Chủ nhiệm đề tài", role: "TOPIC_PI", participationRole: "TOPIC_PI", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }, ...snapshot.members.filter((member) => member.userId !== snapshot.ownerId).map((member) => ({ id: randomUUID(), projectId: "", userId: member.userId || null, sourceMemberId: member.id ?? null, name: member.name, role: member.role, participationRole: member.participationRole ?? member.role ?? "TOPIC_MEMBER", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }))];
       const project = await tx.approvedProject.create({ data: {
         proposalId,
         sourceSubmissionEventId: submission.id,
@@ -401,13 +404,13 @@ export class ApprovedProjectsService {
         endDate: snapshot.endDate ? new Date(snapshot.endDate) : null,
         createdById: currentActor.id
       } });
-      if (sourceMembers.length) await tx.approvedProjectMember.createMany({ data: sourceMembers.map((member: AnyRecord) => ({ ...member, projectId: project.id })) });
+      if (sourceMembers.length) await tx.approvedProjectMember.createMany({ data: sourceMembers.map((member) => ({ ...member, projectId: project.id })) });
       // Dữ liệu giải ngân / nghiệm thu cũ lưu trên đề xuất được chuyển sang đề tài (hàm SQL dùng chung với migration).
       if (typeof tx.$executeRaw === "function") await tx.$executeRaw`SELECT import_legacy_project_closure(${project.id})`;
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.created", fromStatus: null, toStatus: PREPARING, reason: "Tạo từ phiên bản đề xuất đã được phê duyệt", beforeFacts: null, afterFacts: { proposalId, sourceSubmissionEventId: submission.id, sourceDecisionId: decision.id } } });
       await new AuditLogService(tx).record({ action: "create-approved-project", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, reason: JSON.stringify({ proposalId, sourceSubmissionEventId: submission.id, sourceDecisionId: decision.id }) });
       return { id: project.id, proposalId, status: project.status };
-    }, { isolationLevel: "Serializable", timeout: 15000 }).catch(async (error: AnyRecord) => {
+    }, { isolationLevel: "Serializable", timeout: 15000 }).catch(async (error) => {
       const denied = ["P2034", "P2002"].includes(error?.code) ? new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Đề tài đã được tạo hoặc ngữ cảnh đã thay đổi. Vui lòng tải lại." }) : error;
       const evidence = denied as AnyRecord;
       await this.auditLog.record({ action: "create-approved-project", result: "failure", actorId: actor.id, targetEntity: "research-proposal", targetEntityId: proposalId, username: actor.username, reason: evidence?.response?.code ?? evidence?.code ?? "ACTION_NOT_GRANTED" }).catch(() => undefined);
@@ -420,7 +423,7 @@ export class ApprovedProjectsService {
       if (project.status !== PREPARING) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Đề tài không còn ở trạng thái chuẩn bị triển khai." });
       await this.assertOfficer(tx, currentActor, project);
       if (!(project.milestones ?? []).length) throw new BadRequestException({ code: "SETUP_INCOMPLETE", message: "Cần thiết lập ít nhất một mốc trước khi bắt đầu thực hiện." });
-      const weights = validateDeclaredWeights(project.milestones.map((item: AnyRecord) => item.weightPercent));
+      const weights = validateDeclaredWeights(project.milestones.map((item) => item.weightPercent));
       if (!weights.ok) throw new BadRequestException({ code: "WEIGHTS_INVALID", message: weights.message });
       const now = await readTransactionClockV1(tx);
       const updated = await tx.approvedProject.update({ where: { id: project.id }, data: { status: EXECUTING, confirmedAt: now, confirmedById: currentActor.id, aggregateVersion: { increment: 1 }, relationshipVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
@@ -447,13 +450,13 @@ export class ApprovedProjectsService {
       if (project.milestones.length || project.checkpoints.length) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Thiết lập mốc đã được ghi nhận." });
       // Mốc chỉ hoàn thành qua báo cáo được chấp nhận, nên mỗi mốc phải có ít nhất một kỳ báo cáo gắn với nó.
       if (!input.milestones.length) throw new BadRequestException({ code: "SETUP_INCOMPLETE", message: "Cần ít nhất một mốc." });
-      const covered = new Set(input.checkpoints.map((item: AnyRecord) => item?.milestonePosition));
+      const covered = new Set(input.checkpoints.map((item) => item?.milestonePosition));
       if (input.milestones.some((_: unknown, position: number) => !covered.has(position))) throw new BadRequestException({ code: "SETUP_INCOMPLETE", message: "Mỗi mốc cần ít nhất một kỳ báo cáo gắn với mốc đó." });
-      const weights = validateDeclaredWeights(input.milestones.map((item: AnyRecord) => item?.weightPercent ?? null));
+      const weights = validateDeclaredWeights(input.milestones.map((item) => item?.weightPercent ?? null));
       if (!weights.ok) throw new BadRequestException({ code: "WEIGHTS_INVALID", message: weights.message });
       const milestones = [];
       for (const [position, item] of input.milestones.entries()) {
-        const responsibleMember = item?.responsibleMemberId ? project.members.find((member: AnyRecord) => member.id === item.responsibleMemberId && isRelationshipActiveAt(member, new Date())) : null;
+        const responsibleMember = item?.responsibleMemberId ? project.members.find((member) => member.id === item.responsibleMemberId && isRelationshipActiveAt(member, new Date())) : null;
         if (item?.responsibleMemberId && !responsibleMember) throw new BadRequestException({ message: "Thành viên phụ trách mốc không hợp lệ." });
         const dueDate = projectDay(item?.dueDate);
         if (project.endDate && dueDate > project.endDate) throw new BadRequestException({ code: "EXTENSION_REQUIRED" });
@@ -480,10 +483,10 @@ export class ApprovedProjectsService {
     this.assertScope(actor, loaded.project);
     this.assertOfficerAssigner(actor, loaded.project);
     const users = await this.prisma.user.findMany({ where: { status: "active", systemRole: "RESEARCH_MANAGEMENT_STAFF" }, include: { organizationScopes: { include: { organizationUnit: true } } }, orderBy: { displayName: "asc" } });
-    const eligible = users.filter((user: any) => user.organizationScopes?.some((scope: any) => scope.organizationUnitId === loaded.project.hostOrganizationUnitId && scope.organizationUnit?.status === "active") && !(loaded.project.members ?? []).some((member: any) => member.userId === user.id && isRelationshipActiveAt(member, new Date())));
+    const eligible = users.filter((user) => user.organizationScopes?.some((scope) => scope.organizationUnitId === loaded.project.hostOrganizationUnitId && scope.organizationUnit?.status === "active") && !(loaded.project.members ?? []).some((member) => member.userId === user.id && isRelationshipActiveAt(member, new Date())));
     const reviewAccess = new ProposalReviewAccessService(this.prisma);
-    const checks = await Promise.all(eligible.map((user: AnyRecord) => reviewAccess.resolveConflictForProposal(user.id, loaded.project.proposalId)));
-    return eligible.filter((_: AnyRecord, index: number) => !checks[index].unresolved && !checks[index].isAssignedReviewer && !checks[index].hasPersistedReview).map((user: AnyRecord) => ({ id: user.id, username: user.username, displayName: user.displayName, unit: user.unit }));
+    const checks = await Promise.all(eligible.map((user) => reviewAccess.resolveConflictForProposal(user.id, loaded.project.proposalId)));
+    return eligible.filter((_: AnyRecord, index: number) => !checks[index].unresolved && !checks[index].isAssignedReviewer && !checks[index].hasPersistedReview).map((user) => ({ id: user.id, username: user.username, displayName: user.displayName, unit: user.unit }));
   }
 
   async assignOfficer(actor: SafeUserContext, projectId: string, input: AnyRecord) {
@@ -492,7 +495,7 @@ export class ApprovedProjectsService {
       await this.assertNoEvaluationConflict(tx, currentActor.id, project.proposalId);
       const candidate = await tx.user.findUnique({ where: { id: input.officerUserId }, include: { organizationScopes: { include: { organizationUnit: true } } } });
       if (!candidate || candidate.status !== "active" || candidate.systemRole !== "RESEARCH_MANAGEMENT_STAFF" || !candidate.organizationScopes?.some((scope: any) => scope.organizationUnitId === project.hostOrganizationUnitId && scope.organizationUnit.status === "active")) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chuyên viên được chọn không hoạt động hoặc ngoài phạm vi đề tài." });
-      if ((project.members ?? []).some((member: any) => member.userId === candidate.id && isRelationshipActiveAt(member, new Date()))) throw new ForbiddenException({ code: "CONFLICT_DENIED", message: "Thành viên đề tài không được đồng thời là chuyên viên quản lý." });
+      if ((project.members ?? []).some((member) => member.userId === candidate.id && isRelationshipActiveAt(member, new Date()))) throw new ForbiddenException({ code: "CONFLICT_DENIED", message: "Thành viên đề tài không được đồng thời là chuyên viên quản lý." });
       await this.assertNoEvaluationConflict(tx, candidate.id, project.proposalId);
       const now = await readTransactionClockV1(tx);
       const current = await this.currentOfficer(tx, project.id, now);
@@ -547,7 +550,7 @@ export class ApprovedProjectsService {
     if (!fileIds?.length) return [];
     const files = await tx.fileRecord.findMany({ where: { id: { in: fileIds }, status: "active", deletedAt: null } });
     if (files.length !== fileIds.length) throw new BadRequestException({ code: "EVIDENCE_UNUSABLE", message: "Tệp minh chứng không tồn tại, đã xóa hoặc chưa hoàn tất." });
-    if (files.some((file: AnyRecord) => file.relatedEntityType !== "approved_project" || file.relatedEntityId !== projectId)) throw new BadRequestException({ code: "EVIDENCE_WRONG_RECORD", message: "Tệp minh chứng không thuộc đúng đề tài." });
+    if (files.some((file) => file.relatedEntityType !== "approved_project" || file.relatedEntityId !== projectId)) throw new BadRequestException({ code: "EVIDENCE_WRONG_RECORD", message: "Tệp minh chứng không thuộc đúng đề tài." });
     return files;
   }
 
@@ -607,9 +610,9 @@ export class ApprovedProjectsService {
       const files = await this.assertUsableEvidence(tx, project.id, fileIds, report.id);
       const now = await readTransactionClockV1(tx);
       const updated = await tx.projectReportRevision.update({ where: { id: report.id }, data: { status: REPORT_SUBMITTED, submittedAt: now, submittedContextVersion: projectContextVersion(project) } });
-      if (files.length) await tx.projectReportEvidence.createMany({ data: files.map((file: AnyRecord) => ({ reportRevisionId: report.id, fileRecordId: file.id })) });
-      await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.report.submit", toStatus: REPORT_SUBMITTED, reason: "PI nộp báo cáo", afterFacts: { reportId: report.id, revision: report.revision, evidenceFileIds: files.map((file: AnyRecord) => file.id) } } });
-      await new AuditLogService(tx).record({ action: "submit-project-report", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username, afterFacts: { status: REPORT_SUBMITTED, revision: report.revision, evidenceFileIds: files.map((file: AnyRecord) => file.id) } });
+      if (files.length) await tx.projectReportEvidence.createMany({ data: files.map((file) => ({ reportRevisionId: report.id, fileRecordId: file.id })) });
+      await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.report.submit", toStatus: REPORT_SUBMITTED, reason: "PI nộp báo cáo", afterFacts: { reportId: report.id, revision: report.revision, evidenceFileIds: files.map((file) => file.id) } } });
+      await new AuditLogService(tx).record({ action: "submit-project-report", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username, afterFacts: { status: REPORT_SUBMITTED, revision: report.revision, evidenceFileIds: files.map((file) => file.id) } });
       const officer = await this.currentOfficer(tx, project.id);
       notify({ type: NOTIFICATION_TYPES.projectReportSubmitted, userIds: officer ? [officer.officerUserId] : [], excludeUserIds: [currentActor.id], title: `Báo cáo tiến độ mới: ${project.title}`, message: `Chủ nhiệm đề tài ${label(project)} vừa nộp báo cáo tiến độ (phiên bản ${report.revision}).`, link: projectLink(project.id), metadata: { projectId: project.id, reportId: report.id } });
       return updated;
@@ -714,8 +717,8 @@ export class ApprovedProjectsService {
   private async createRequest(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, input: AnyRecord) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       this.assertProjectPi(currentActor, project);
-      if (project.requests.some((request: AnyRecord) => !["approved", "rejected"].includes(request.status))) throw new ConflictException({ code: "REQUEST_ALREADY_OPEN", message: "Đề tài đã có yêu cầu thay đổi chưa kết thúc." });
-      const currentValues = requestType === EXTENSION ? { endDate: project.endDate } : { scope: project.scopeSnapshot, plan: project.planSnapshot, milestones: project.milestones, members: (project.members ?? []).map((member: AnyRecord) => ({ id: member.id, userId: member.userId, name: member.name, role: member.role, participationRole: member.participationRole, status: member.status })) };
+      if (project.requests.some((request) => !["approved", "rejected"].includes(request.status))) throw new ConflictException({ code: "REQUEST_ALREADY_OPEN", message: "Đề tài đã có yêu cầu thay đổi chưa kết thúc." });
+      const currentValues = requestType === EXTENSION ? { endDate: project.endDate } : { scope: project.scopeSnapshot, plan: project.planSnapshot, milestones: project.milestones, members: (project.members ?? []).map((member) => ({ id: member.id, userId: member.userId, name: member.name, role: member.role, participationRole: member.participationRole, status: member.status })) };
       const proposedValues = input.proposedValues as AnyRecord;
       if (!proposedValues || typeof proposedValues !== "object" || Array.isArray(proposedValues)) throw new BadRequestException({ message: "proposedValues không hợp lệ." });
       if (requestType === ADJUSTMENT) { this.assertAdjustmentValues(proposedValues); this.assertAdjustmentWeights(project, proposedValues); }
@@ -769,7 +772,7 @@ export class ApprovedProjectsService {
       const nextStatus = "submitted";
       const revision = await tx.projectRequestRevision.update({ where: { requestId_revision: { requestId: request.id, revision: request.revision } }, data: { status: "submitted", submittedAt: now, contextVersion: projectContextVersion(project) } });
       const files = await this.assertUsableEvidence(tx, project.id, input.evidenceFileIds, request.id);
-      if (files.length) await tx.projectRequestEvidence.createMany({ data: files.map((file: AnyRecord) => ({ requestId: request.id, requestRevisionId: revision.id, fileRecordId: file.id })) });
+      if (files.length) await tx.projectRequestEvidence.createMany({ data: files.map((file) => ({ requestId: request.id, requestRevisionId: revision.id, fileRecordId: file.id })) });
       const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: nextStatus, submittedContextVersion: projectContextVersion(project) } });
       await tx.projectRequestHistory.create({ data: { requestId: request.id, actorId: currentActor.id, action: `project.${requestType}.submit`, fromStatus: "draft", toStatus: nextStatus, reason: request.reason, afterFacts: { revision: request.revision, contextVersion: projectContextVersion(project) } } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: `project.${requestType}.submit`, fromStatus: "draft", toStatus: nextStatus, requestId: request.id, afterFacts: { revision: request.revision } } });
@@ -933,7 +936,7 @@ export class ApprovedProjectsService {
     }
     if ((values.milestoneChanges ?? []).some((change: AnyRecord) => change.weightPercent !== undefined)) {
       const after = await tx.projectMilestone.findMany({ where: { projectId: project.id } });
-      const weights = validateDeclaredWeights(after.map((item: AnyRecord) => item.weightPercent));
+      const weights = validateDeclaredWeights(after.map((item) => item.weightPercent));
       if (!weights.ok) throw new BadRequestException({ code: "WEIGHTS_INVALID", message: weights.message });
     }
     for (const change of values.membershipChanges ?? []) {
@@ -946,7 +949,7 @@ export class ApprovedProjectsService {
       } else if (change.action === "add" && Object.keys(change).every((key) => ["action", "userId", "name", "participationRole"].includes(key))) {
         if (!["TOPIC_MEMBER", "TOPIC_SECRETARY"].includes(change.participationRole)) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
         const user = await tx.user.findUnique({ where: { id: change.userId }, include: { organizationScopes: true } });
-        if (!user || user.status !== "active" || !user.organizationScopes.some((scope: AnyRecord) => scope.organizationUnitId === project.hostOrganizationUnitId)) throw new BadRequestException({ code: "MEMBER_INELIGIBLE" });
+        if (!user || user.status !== "active" || !user.organizationScopes.some((scope) => scope.organizationUnitId === project.hostOrganizationUnitId)) throw new BadRequestException({ code: "MEMBER_INELIGIBLE" });
         if (project.members.some((item: AnyRecord) => item.userId === user.id && isRelationshipActiveAt(item, now)) || (await this.currentOfficer(tx, project.id, now))?.officerUserId === user.id) throw new ForbiddenException({ code: "CONFLICT_DENIED" });
         await this.assertNoEvaluationConflict(tx, user.id, project.proposalId);
         await tx.approvedProjectMember.create({ data: { projectId: project.id, userId: user.id, name: requiredText(change.name, "name"), role: change.participationRole, participationRole: change.participationRole, status: "ACTIVE", effectiveFrom: now, createdById: actor.id } });
