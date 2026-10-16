@@ -17,8 +17,10 @@ import { CLOSED_ACCEPTANCE_ROUND_STATUSES, projectContextVersion, projectViewerA
 import { toAcceptanceResponse, toFinanceSummary, toLiquidationResponse, toProductResponse, toSuperiorResponse } from "./project-closure-model.js";
 import { baselineFromMilestones, calendarDayIndex, HEALTH_APPLICABLE_STATUSES, HEALTH_LEVELS, localDayIndex, resolveEffectiveHealth, validateDeclaredWeights, type HealthLevel } from "./project-progress.js";
 import { computeProgressForProject, summarizeProjectProgress } from "./project-progress-summary.js";
+import type { AssignProjectOfficerDto, HealthAssessmentDto, MilestoneProgressDto, ProjectDecisionDto, ProjectMutationDto, ProjectReportDto, ProjectReportReviewDto, ProjectReportSubmissionDto, ProjectRequestDto, RevokeProjectOfficerDto } from "./approved-projects.dto.js";
 import { assertAdjustmentValues, assertExtensionValues, MILESTONE_CHANGE_KEYS, optionalText, parseAdjustmentValues, projectDay, requiredText, storedContextVersion, type AdjustmentValues } from "./project-request-values.js";
 import { readScopeSnapshot } from "./project-snapshots.js";
+import { readProposalSnapshot } from "../proposals-shared/proposal-snapshot.js";
 
 const PREPARING = PROJECT_STATUSES.preparing;
 const EXECUTING = PROJECT_STATUSES.executing;
@@ -30,7 +32,14 @@ const REPORT_ACCEPTED = "accepted";
 const ADJUSTMENT = "adjustment";
 const EXTENSION = "extension";
 
-type AnyRecord = Record<string, any>;
+/** Chuyên viên phụ trách đang hiệu lực (bản ghi phân công). */
+type CurrentOfficer = ProjectOfficerFact & { id: string };
+
+/** Quyền thao tác của người xem trên đề tài (ViewerAuthorizationV1). */
+type ProjectCapability = ReturnType<typeof projectViewerAuthorizationV1>;
+
+/** Dữ kiện ghi vào lịch sử khi xử lý đề nghị: lý do/ghi chú, trạng thái trước/sau và các trường bổ sung. */
+type RequestActionFacts = { reason?: string | null; note?: string | null; before?: unknown; after?: unknown; [key: string]: unknown };
 
 const PROJECT_INCLUDE = {
   proposal: { select: { id: true, ownerId: true, title: true, status: true, startDate: true, endDate: true, budgetMetadata: true, owner: { select: { displayName: true, username: true } } } },
@@ -99,13 +108,13 @@ export class ApprovedProjectsService {
         if (events.length && this.notifications) await this.notifications.dispatch([...events]).catch(() => undefined);
         return result;
       } catch (error) {
-        if ((error as AnyRecord)?.code === "P2034" && attempt < 3) {
+        if (errorCode(error) === "P2034" && attempt < 3) {
           await new Promise((resolve) => setTimeout(resolve, 10 + Math.floor(Math.random() * 40) * (attempt + 1)));
           continue;
         }
-        const denied = (error as AnyRecord)?.code === "P2034" ? new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" }) : error;
-        const evidence = denied as AnyRecord;
-        await this.auditLog.record({ action: "project-mutation-denied", result: "failure", actorId: actor.id, targetEntity: "approved-project", targetEntityId: projectId, username: actor.username, reason: evidence?.response?.code ?? evidence?.code ?? "ACTION_NOT_GRANTED" }).catch(() => undefined);
+        const denied = errorCode(error) === "P2034" ? new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" }) : error;
+        const evidence = denied as { code?: unknown; response?: { code?: unknown } } | null | undefined;
+        await this.auditLog.record({ action: "project-mutation-denied", result: "failure", actorId: actor.id, targetEntity: "approved-project", targetEntityId: projectId, username: actor.username, reason: String(evidence?.response?.code ?? evidence?.code ?? "ACTION_NOT_GRANTED") }).catch(() => undefined);
         throw denied;
       }
     }
@@ -135,11 +144,11 @@ export class ApprovedProjectsService {
     };
   }
 
-  assertScope(actor: SafeUserContext, project: AnyRecord) {
+  assertScope(actor: SafeUserContext, project: { hostOrganizationUnitId: string }) {
     if (!isInProjectScope(actor, project.hostOrganizationUnitId)) throw new ForbiddenException({ code: "ORG_SCOPE_DENIED", message: "Không có phạm vi tổ chức phù hợp cho đề tài." });
   }
 
-  async currentOfficer(tx: Prisma.TransactionClient, projectId: string, asOf = new Date()): Promise<ProjectOfficerFact | null> {
+  async currentOfficer(tx: Prisma.TransactionClient, projectId: string, asOf = new Date()): Promise<CurrentOfficer | null> {
     const rows = await tx.projectManagementOfficer.findMany({ where: { projectId, status: "ACTIVE" }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }] });
     const active = rows.filter((row) => isRelationshipActiveAt(row, asOf));
     if (active.length > 1) throw new ConflictException({ code: "CONTEXT_AMBIGUOUS", message: "Phân công chuyên viên của đề tài không rõ ràng." });
@@ -214,7 +223,7 @@ export class ApprovedProjectsService {
     return this.listProjects(actor, options);
   }
 
-  toProjectResponse(project: LoadedProject, capability: AnyRecord, officer: AnyRecord | null, actor?: SafeUserContext) {
+  toProjectResponse(project: LoadedProject, capability: ProjectCapability, officer: CurrentOfficer | null, actor?: SafeUserContext) {
     const now = new Date();
     const member = (project.members ?? []).find((item) => item.userId === actor?.id && isRelationshipActiveAt(item, now));
     const isPi = member?.participationRole === "TOPIC_PI";
@@ -287,7 +296,7 @@ export class ApprovedProjectsService {
   }
 
   /** Mốc mà người xem được cập nhật tiến độ: chủ nhiệm mọi mốc đang mở, thành viên mốc mình phụ trách. */
-  private updatableMilestoneIds(project: LoadedProject, capability: AnyRecord, actor: SafeUserContext) {
+  private updatableMilestoneIds(project: LoadedProject, capability: ProjectCapability, actor: SafeUserContext) {
     if (!capability.allowedActions?.includes("project.progress.update")) return [];
     const now = new Date();
     const member = (project.members ?? []).find((item) => item.userId === actor.id && isRelationshipActiveAt(item, now));
@@ -321,7 +330,7 @@ export class ApprovedProjectsService {
     };
   }
 
-  async updateMilestoneProgress(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async updateMilestoneProgress(actor: SafeUserContext, projectId: string, input: MilestoneProgressDto & { milestoneId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       if (project.status !== EXECUTING) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ cập nhật tiến độ khi đề tài đang thực hiện." });
       const loaded = await this.loadAuthorized(tx, currentActor, project.id);
@@ -342,7 +351,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async assessHealth(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async assessHealth(actor: SafeUserContext, projectId: string, input: HealthAssessmentDto) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       await this.assertOfficer(tx, currentActor, project);
       if (!HEALTH_APPLICABLE_STATUSES.includes(project.status)) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ đánh giá sức khoẻ khi đề tài đang thực hiện hoặc tạm dừng." });
@@ -366,7 +375,7 @@ export class ApprovedProjectsService {
     return tx.projectPlanBaseline.create({ data: { projectId, version: (latest?.version ?? 0) + 1, source, sourceRequestId, startDate: project?.startDate ?? null, endDate: project?.endDate ?? null, milestones: baselineFromMilestones(milestones), createdById: actorId, createdAt: now } });
   }
 
-  async createFromApprovedProposal(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
+  async createFromApprovedProposal(actor: SafeUserContext, proposalId: string, input: ProjectMutationDto = {}) {
     return this.prisma.$transaction(async (tx: any) => {
       await tx.$queryRaw`SELECT id FROM research_proposals WHERE id = ${proposalId} FOR UPDATE`;
       const currentActor = await this.readCurrentActor(tx, actor.id);
@@ -388,13 +397,13 @@ export class ApprovedProjectsService {
       const decision = await tx.proposalDecision.findFirst({ where: { proposalId, decision: "approved" }, orderBy: { decidedAt: "desc" } });
       // Quyết định ở nhánh này không ghi kèm mã lần nộp: phiên bản được duyệt là lần nộp/nộp lại chính
       // thức gần nhất trước thời điểm quyết định (bỏ qua bản ghi "kiểm tra đầy đủ").
-      const submissions = decision ? await tx.proposalSubmissionEvent.findMany({ where: { proposalId, toStatus: { in: ["submitted", "resubmitted"] }, submittedAt: { lte: decision.decidedAt } }, orderBy: { submittedAt: "desc" } }) : [];
-      const submission = submissions.find((event: AnyRecord) => {
-        const eventSnapshot = event.snapshot;
+      const submissions: Array<{ id: string; proposalId: string; toStatus: string; snapshot: Prisma.JsonValue }> = decision ? await tx.proposalSubmissionEvent.findMany({ where: { proposalId, toStatus: { in: ["submitted", "resubmitted"] }, submittedAt: { lte: decision.decidedAt } }, orderBy: { submittedAt: "desc" } }) : [];
+      const submission = submissions.find((event) => {
+        const eventSnapshot = readProposalSnapshot(event.snapshot);
         return !!eventSnapshot && !eventSnapshot.kind && eventSnapshot.id === proposalId;
       }) ?? null;
       if (!submission || submission.proposalId !== proposalId || !["submitted", "resubmitted"].includes(submission.toStatus) || !decision) throw new BadRequestException({ code: "SOURCE_EVIDENCE_MISSING", message: "Không tìm thấy phiên bản nộp gắn với quyết định phê duyệt." });
-      const snapshot = submission.snapshot as AnyRecord | null;
+      const snapshot = readProposalSnapshot(submission.snapshot);
       if (!snapshot || snapshot.id !== proposalId || !snapshot.ownerId || !Array.isArray(snapshot.members)) throw new BadRequestException({ code: "SOURCE_EVIDENCE_MISSING" });
 
       const sourceMembers = [{ id: randomUUID(), projectId: "", userId: snapshot.ownerId, sourceMemberId: null, name: proposal.owner?.displayName ?? "Chủ nhiệm đề tài", role: "TOPIC_PI", participationRole: "TOPIC_PI", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }, ...snapshot.members.filter((member) => member.userId !== snapshot.ownerId).map((member) => ({ id: randomUUID(), projectId: "", userId: member.userId || null, sourceMemberId: member.id ?? null, name: member.name, role: member.role, participationRole: member.participationRole ?? member.role ?? "TOPIC_MEMBER", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }))];
@@ -420,12 +429,13 @@ export class ApprovedProjectsService {
     }, { isolationLevel: "Serializable", timeout: 15000 }).catch(async (error) => {
       const denied = ["P2034", "P2002"].includes(error?.code) ? new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Đề tài đã được tạo hoặc ngữ cảnh đã thay đổi. Vui lòng tải lại." }) : error;
       const evidence = denied;
-      await this.auditLog.record({ action: "create-approved-project", result: "failure", actorId: actor.id, targetEntity: "research-proposal", targetEntityId: proposalId, username: actor.username, reason: evidence?.response?.code ?? evidence?.code ?? "ACTION_NOT_GRANTED" }).catch(() => undefined);
+      await this.auditLog.record({ action: "create-approved-project", result: "failure", actorId: actor.id, targetEntity: "research-proposal", targetEntityId: proposalId, username: actor.username, reason: String(evidence?.response?.code ?? evidence?.code ?? "ACTION_NOT_GRANTED") }).catch(() => undefined);
       throw denied;
     });
   }
 
-  async confirmSetup(actor: SafeUserContext, projectId: string, input: Record<string, unknown> = {}) {
+  // projectMutationPipe chỉ giữ contextVersion nên `reason` qua API luôn trống (lịch sử ghi lý do mặc định).
+  async confirmSetup(actor: SafeUserContext, projectId: string, input: ProjectMutationDto & { reason?: string } = {}) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       if (project.status !== PREPARING) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Đề tài không còn ở trạng thái chuẩn bị triển khai." });
       await this.assertOfficer(tx, currentActor, project);
@@ -496,7 +506,7 @@ export class ApprovedProjectsService {
     return eligible.filter((_, index) => !checks[index].unresolved && !checks[index].isAssignedReviewer && !checks[index].hasPersistedReview).map((user) => ({ id: user.id, username: user.username, displayName: user.displayName, unit: user.unit }));
   }
 
-  async assignOfficer(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async assignOfficer(actor: SafeUserContext, projectId: string, input: AssignProjectOfficerDto) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       this.assertOfficerAssigner(currentActor, project);
       await this.assertNoEvaluationConflict(tx, currentActor.id, project.proposalId);
@@ -506,7 +516,7 @@ export class ApprovedProjectsService {
       await this.assertNoEvaluationConflict(tx, candidate.id, project.proposalId);
       const now = await readTransactionClockV1(tx);
       const current = await this.currentOfficer(tx, project.id, now);
-      if (current) await tx.projectManagementOfficer.update({ where: { id: (current as AnyRecord).id }, data: { status: "ENDED", effectiveUntil: now } });
+      if (current) await tx.projectManagementOfficer.update({ where: { id: current.id }, data: { status: "ENDED", effectiveUntil: now } });
       const assignment = await tx.projectManagementOfficer.create({ data: { projectId: project.id, officerUserId: candidate.id, assignedById: currentActor.id, status: "ACTIVE", effectiveFrom: now, reason: input.reason ?? null, assignmentContextVersion: projectContextVersion(project) } });
       await tx.approvedProject.update({ where: { id: project.id }, data: { relationshipVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.officer.assign", reason: input.reason ?? null, beforeFacts: current ? { officerUserId: current.officerUserId } : { officerUserId: null }, afterFacts: { officerUserId: candidate.id } } });
@@ -515,14 +525,14 @@ export class ApprovedProjectsService {
     });
   }
 
-  async revokeOfficer(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async revokeOfficer(actor: SafeUserContext, projectId: string, input: RevokeProjectOfficerDto) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       this.assertOfficerAssigner(currentActor, project);
       await this.assertNoEvaluationConflict(tx, currentActor.id, project.proposalId);
       const current = await this.currentOfficer(tx, project.id);
       if (!current) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Đề tài chưa có chuyên viên đang phụ trách." });
       const now = await readTransactionClockV1(tx);
-      await tx.projectManagementOfficer.update({ where: { id: (current as AnyRecord).id }, data: { status: "REVOKED", effectiveUntil: now, reason: input.reason } });
+      await tx.projectManagementOfficer.update({ where: { id: current.id }, data: { status: "REVOKED", effectiveUntil: now, reason: input.reason } });
       await tx.approvedProject.update({ where: { id: project.id }, data: { relationshipVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.officer.revoke", reason: input.reason, beforeFacts: { officerUserId: current.officerUserId }, afterFacts: { officerUserId: null } } });
       await new AuditLogService(tx).record({ action: "revoke-project-management-officer", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, reason: input.reason, beforeFacts: { officerUserId: current.officerUserId }, afterFacts: { officerUserId: null } });
@@ -548,7 +558,7 @@ export class ApprovedProjectsService {
     return report;
   }
 
-  private assertReportPeriod(project: LoadedProject, checkpointId: string | null, start: Date | null, end: Date | null, currentId?: string) {
+  private assertReportPeriod(project: LoadedProject, checkpointId: string | null, start: Date | null | undefined, end: Date | null | undefined, currentId?: string) {
     if (!(start instanceof Date) || !(end instanceof Date) || end < start || (project.startDate && start < project.startDate) || (project.endDate && end > project.endDate)) throw new BadRequestException({ code: "REPORT_PERIOD_INVALID", message: "Kỳ báo cáo phải nằm trong thời gian đề tài." });
     if (project.reports.some((item) => item.id !== currentId && item.checkpointId === checkpointId && ![REPORT_SUPPLEMENT].includes(item.status) && item.reportingPeriodStart && item.reportingPeriodEnd && start <= item.reportingPeriodEnd && end >= item.reportingPeriodStart)) throw new ConflictException({ code: "REPORT_PERIOD_OVERLAP", message: "Kỳ báo cáo trùng với phiên bản đang xử lý." });
   }
@@ -561,11 +571,11 @@ export class ApprovedProjectsService {
     return files;
   }
 
-  async createReportDraft(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async createReportDraft(actor: SafeUserContext, projectId: string, input: ProjectReportDto) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       this.assertProjectPi(currentActor, project);
       if (input.deadline) throw new BadRequestException({ code: "CONTROLLED_FIELD_DENIED" });
-      let checkpoint: AnyRecord | null = null;
+      let checkpoint: { id: string; projectId: string; status: string; dueDate: Date } | null = null;
       if (input.checkpointId) {
         checkpoint = await tx.projectCheckpoint.findUnique({ where: { id: input.checkpointId } });
         if (!checkpoint || checkpoint.projectId !== project.id || checkpoint.status !== "open") throw new BadRequestException({ message: "Mốc báo cáo không còn mở trong đề tài." });
@@ -584,7 +594,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async updateReportDraft(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async updateReportDraft(actor: SafeUserContext, projectId: string, input: ProjectReportDto & { reportId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       this.assertProjectPi(currentActor, project);
       const report = await this.findReport(tx, project, input.reportId);
@@ -606,7 +616,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async submitReport(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async submitReport(actor: SafeUserContext, projectId: string, input: ProjectReportSubmissionDto & { reportId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       this.assertProjectPi(currentActor, project);
       const report = await this.findReport(tx, project, input.reportId);
@@ -626,7 +636,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async reviewReport(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async reviewReport(actor: SafeUserContext, projectId: string, input: ProjectDecisionDto & { reportId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       await this.assertOfficer(tx, currentActor, project);
       const report = await this.findReport(tx, project, input.reportId);
@@ -639,7 +649,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async requestReportSupplement(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async requestReportSupplement(actor: SafeUserContext, projectId: string, input: ProjectReportReviewDto & { reportId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       await this.assertOfficer(tx, currentActor, project);
       const report = await this.findReport(tx, project, input.reportId);
@@ -655,7 +665,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async acceptReport(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async acceptReport(actor: SafeUserContext, projectId: string, input: ProjectDecisionDto & { reportId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       await this.assertOfficer(tx, currentActor, project);
       const report = await this.findReport(tx, project, input.reportId);
@@ -689,7 +699,7 @@ export class ApprovedProjectsService {
     if (!result.ok) throw new BadRequestException({ code: "WEIGHTS_INVALID", message: result.message });
   }
 
-  private async createRequest(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, input: AnyRecord) {
+  private async createRequest(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, input: ProjectRequestDto) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       this.assertProjectPi(currentActor, project);
       if (project.requests.some((request) => !["approved", "rejected"].includes(request.status))) throw new ConflictException({ code: "REQUEST_ALREADY_OPEN", message: "Đề tài đã có yêu cầu thay đổi chưa kết thúc." });
@@ -707,8 +717,8 @@ export class ApprovedProjectsService {
     });
   }
 
-  async createAdjustment(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) { return this.createRequest(actor, projectId, ADJUSTMENT, input); }
-  async createExtension(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) { return this.createRequest(actor, projectId, EXTENSION, input); }
+  async createAdjustment(actor: SafeUserContext, projectId: string, input: ProjectRequestDto) { return this.createRequest(actor, projectId, ADJUSTMENT, input); }
+  async createExtension(actor: SafeUserContext, projectId: string, input: ProjectRequestDto) { return this.createRequest(actor, projectId, EXTENSION, input); }
 
   private async findRequest(tx: any, project: LoadedProject, requestId: string): Promise<ProjectRequestWithRevisions> {
     const request = await tx.projectRequest.findUnique({ where: { id: requestId }, include: { revisions: { orderBy: { revision: "desc" } }, evidence: true } });
@@ -716,7 +726,7 @@ export class ApprovedProjectsService {
     return request;
   }
 
-  async editRequestDraft(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, input: AnyRecord) {
+  async editRequestDraft(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, input: ProjectRequestDto & { requestId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       this.assertProjectPi(currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
@@ -733,7 +743,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async submitRequest(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, input: AnyRecord) {
+  async submitRequest(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, input: ProjectReportSubmissionDto & { requestId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       this.assertProjectPi(currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
@@ -754,7 +764,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async reviewAdjustment(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async reviewAdjustment(actor: SafeUserContext, projectId: string, input: ProjectDecisionDto & { requestId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       await this.assertOfficer(tx, currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
@@ -765,7 +775,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async validateExtension(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async validateExtension(actor: SafeUserContext, projectId: string, input: ProjectDecisionDto & { requestId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       await this.assertOfficer(tx, currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
@@ -777,7 +787,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async requestSupplement(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, input: AnyRecord) {
+  async requestSupplement(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, input: ProjectDecisionDto & { requestId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const request = await this.findRequest(tx, project, input.requestId);
       if (request.requestType !== requestType) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
@@ -803,7 +813,7 @@ export class ApprovedProjectsService {
   }
 
   /** Chuyên viên phụ trách thẩm định xong đề nghị điều chỉnh và trình (qua Trưởng ban, Trưởng phòng) lên Ban giám đốc. */
-  async prepareAdjustment(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async prepareAdjustment(actor: SafeUserContext, projectId: string, input: ProjectDecisionDto & { requestId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       await this.assertOfficer(tx, currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
@@ -819,7 +829,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async prepareExtension(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async prepareExtension(actor: SafeUserContext, projectId: string, input: ProjectDecisionDto & { requestId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       await this.assertOfficer(tx, currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
@@ -835,7 +845,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async decideRequest(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, decision: "approve" | "reject", input: AnyRecord) {
+  async decideRequest(actor: SafeUserContext, projectId: string, requestType: typeof ADJUSTMENT | typeof EXTENSION, decision: "approve" | "reject", input: ProjectDecisionDto & { requestId: string }) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const request = await this.findRequest(tx, project, input.requestId);
       // Điều chỉnh và gia hạn đều do Ban giám đốc (Giám đốc hoặc Phó GĐ phụ trách Khoa học) quyết định, sau khi chuyên
@@ -953,20 +963,25 @@ export class ApprovedProjectsService {
     return (project.members ?? []).some((member) => member.userId === actorId && isRelationshipActiveAt(member, new Date()));
   }
 
-  private async recordRequestAction(tx: any, actor: SafeUserContext, project: LoadedProject, request: AnyRecord, action: string, toStatus: string, facts: AnyRecord) {
+  private async recordRequestAction(tx: any, actor: SafeUserContext, project: LoadedProject, request: { id: string; requestType: string; status: string }, action: string, toStatus: string, facts: RequestActionFacts) {
     const name = `project.${request.requestType}.${action}`;
     await tx.projectRequestHistory.create({ data: { requestId: request.id, actorId: actor.id, action: name, fromStatus: request.status, toStatus, reason: facts.reason ?? facts.note ?? null, beforeFacts: { status: request.status }, afterFacts: facts } });
     await tx.projectHistory.create({ data: { projectId: project.id, actorId: actor.id, action: name, requestId: request.id, fromStatus: request.status, toStatus, reason: facts.reason ?? facts.note ?? null, beforeFacts: facts.before ?? null, afterFacts: facts.after ?? facts } });
-    await new AuditLogService(tx).record({ action: name, result: "success", actorId: actor.id, targetEntity: "project-request", targetEntityId: request.id, username: actor.username, reason: facts.reason ?? facts.note ?? undefined, beforeFacts: facts.before ?? { status: request.status }, afterFacts: facts.after ?? { status: toStatus } });
+    await new AuditLogService(tx).record({ action: name, result: "success", actorId: actor.id, targetEntity: "project-request", targetEntityId: request.id, username: actor.username, reason: facts.reason ?? facts.note ?? undefined, beforeFacts: (facts.before ?? { status: request.status }) as Record<string, unknown>, afterFacts: (facts.after ?? { status: toStatus }) as Record<string, unknown> });
   }
 }
 
 function assertProjectContext(expected: unknown, project: LoadedProject) {
   const current = projectContextVersion(project);
-  if (!expected || typeof expected !== "object" || Object.entries(current).some(([key, value]) => (expected as AnyRecord)[key] !== value)) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
+  if (!expected || typeof expected !== "object" || Object.entries(current).some(([key, value]) => (expected as Record<string, unknown>)[key] !== value)) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
 }
 
 /** Cột JSON dạng object (ảnh chụp phạm vi / kế hoạch); giá trị khác coi như rỗng. */
 function jsonObject(value: Prisma.JsonValue | null | undefined): Prisma.JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+/** Mã lỗi của lỗi Prisma (P2034, P2002...) hoặc lỗi có trường code; không có thì undefined. */
+function errorCode(error: unknown): unknown {
+  return error && typeof error === "object" && "code" in error ? (error as { code: unknown }).code : undefined;
 }

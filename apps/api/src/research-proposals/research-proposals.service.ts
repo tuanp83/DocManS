@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+import type { ProposalSubmissionSnapshot } from "../proposals-shared/proposal-snapshot.js";
 import { currentSubmissionFromEvents, findCurrentSubmission, hasCompletenessCheckForEvent, readCompletenessState, type SubmissionEventLike } from "../proposals-shared/submission-evidence.js";
 import { isResearchOversightAuthority } from "../proposals-shared/proposal-access.js";
 import { canReadProjectFinanceDetail } from "../approved-projects/project-roles.js";
@@ -557,7 +559,7 @@ export class ResearchProposalsService {
           fromStatus: proposal.status,
           toStatus: "submitted",
           submittedAt,
-          snapshot: await this.submissionSnapshot(proposal),
+          snapshot: (await this.submissionSnapshot(proposal)) as Prisma.InputJsonObject,
           note: "PI nộp hồ sơ chính thức"
         }
       });
@@ -644,7 +646,7 @@ export class ResearchProposalsService {
           fromStatus: proposal.status,
           toStatus: "supplement_requested",
           submittedAt: requestedAt,
-          snapshot: await this.submissionSnapshot(proposal),
+          snapshot: (await this.submissionSnapshot(proposal)) as Prisma.InputJsonObject,
           note: "Staff yêu cầu bổ sung hồ sơ"
         }
       });
@@ -721,7 +723,7 @@ export class ResearchProposalsService {
           fromStatus: proposal.status,
           toStatus: "resubmitted",
           submittedAt,
-          snapshot: await this.submissionSnapshot(proposal),
+          snapshot: (await this.submissionSnapshot(proposal)) as Prisma.InputJsonObject,
           note: "Nộp lại hồ sơ sau yêu cầu bổ sung"
         }
       });
@@ -930,7 +932,7 @@ export class ResearchProposalsService {
     if (ids.length && !ids.includes(unitId)) throw new BadRequestException({ message: "Đơn vị chủ trì không thuộc phạm vi đợt tiếp nhận." });
   }
 
-  private async submissionSnapshot(proposal: ResearchProposalRecord) {
+  private async submissionSnapshot(proposal: ResearchProposalRecord): Promise<ProposalSubmissionSnapshot> {
     const { ownerId, id, title, researchFieldCode, proposalTypeCode, objectives, summary, startDate, endDate, budgetMetadata, hostOrganizationUnitId } = proposal;
     return JSON.parse(JSON.stringify({ id, ownerId, title, researchFieldCode, proposalTypeCode, objectives, summary, startDate, endDate, budgetMetadata, hostOrganizationUnitId,
       members: (await this.findMembers(proposal.id)).filter((m) => isRelationshipActiveAt(m, new Date())).map((m) => this.toMemberResponse(m)),
