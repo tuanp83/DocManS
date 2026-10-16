@@ -1,10 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ApprovedProjectsService } from "../dist/apps/api/approved-projects/approved-projects.service.js";
+import { assertAdjustmentValues, assertExtensionValues } from "../dist/apps/api/approved-projects/project-request-values.js";
 
 // Hành vi kiểm tra nội dung đề nghị điều chỉnh / gia hạn đề tài (cột JSON proposedValues).
 // Viết trước khi đặt kiểu cho JSON để bảo đảm việc đổi kiểu không làm đổi luật kiểm tra.
-const service = Object.create(ApprovedProjectsService.prototype);
 
 /** Kết quả: "ok", ngày trả về (YYYY-MM-DD), mã lỗi, hoặc thông điệp lỗi khi không có mã. */
 function outcome(run) {
@@ -17,7 +16,7 @@ function outcome(run) {
   }
 }
 
-const adjustment = (values) => outcome(() => service.assertAdjustmentValues(values));
+const adjustment = (values) => outcome(() => assertAdjustmentValues(values));
 
 describe("kiểm tra đề nghị điều chỉnh (proposedValues)", () => {
   const cases = [
@@ -68,7 +67,7 @@ describe("kiểm tra đề nghị điều chỉnh (proposedValues)", () => {
 
 describe("kiểm tra đề nghị gia hạn (requestedEndDate)", () => {
   const project = { endDate: new Date("2026-12-31T00:00:00.000Z") };
-  const extension = (values, target = project) => outcome(() => service.assertExtensionValues(target, values));
+  const extension = (values, target = project) => outcome(() => assertExtensionValues(target, values));
   const cases = [
     ["ngày sau ngày kết thúc", { requestedEndDate: "2027-03-31" }, "2027-03-31"],
     ["trùng ngày kết thúc", { requestedEndDate: "2026-12-31" }, "EXTENSION_DATE_INVALID"],
