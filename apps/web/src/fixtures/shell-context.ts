@@ -27,16 +27,6 @@ import type { SystemRole } from "@rtms/permissions";
 
 export type UserRole = SystemRole;
 
-export type AccountProfile = {
-  id: string;
-  username: string;
-  name: string;
-  role: UserRole;
-  roleLabel: string;
-  unit: string;
-  initials: string;
-};
-
 export type NavigationItem = {
   href: string;
   label: string;
@@ -50,72 +40,6 @@ export type RouteDefinition = {
   summaryTitle: string;
   summaryBody: string;
 };
-
-export const accountProfiles: AccountProfile[] = [
-  {
-    id: "leadership-nguyen-van-minh",
-    username: "nvm_bgh",
-    name: "GS. TS. Trần Viết Tiến",
-    role: "LEADERSHIP_APPROVAL_AUTHORITY",
-    roleLabel: "Giám Đốc",
-    unit: "Ban Giám Đốc",
-    initials: "T"
-  },
-  {
-    id: "staff-nmphuong",
-    username: "nmphuong",
-    name: "PGS. TS. Nguyễn Minh Phương",
-    role: "RESEARCH_MANAGEMENT_STAFF",
-    roleLabel: "Trưởng Phòng KHQS",
-    unit: "Trưởng Phòng KHQS",
-    initials: "P"
-  },
-  {
-    id: "staff-dmtrung",
-    username: "dmtrung",
-    name: "TS. Đỗ Minh Trung",
-    role: "RESEARCH_MANAGEMENT_STAFF",
-    roleLabel: "Trưởng Ban QLKH, Phòng KHQS",
-    unit: "Trưởng Ban QLKH, Phòng KHQS",
-    initials: "T"
-  },
-  {
-    id: "staff-hdtien1",
-    username: "hdtien1",
-    name: "ThS. Hoàng Đình Tiến",
-    role: "RESEARCH_MANAGEMENT_STAFF",
-    roleLabel: "Chuyên viên QLKH, Phòng KHQS",
-    unit: "Chuyên viên QLKH, Phòng KHQS",
-    initials: "T"
-  },
-  {
-    id: "pi-pham-anh-tuan",
-    username: "patuan",
-    name: "TS. Phạm Anh Tuấn",
-    role: "RESEARCHER_INTERNAL_USER",
-    roleLabel: "Chủ nhiệm đề tài",
-    unit: "Khoa Toán - Tin học",
-    initials: "T"
-  },
-  {
-    id: "admin-nguyen-quoc-bao",
-    username: "nqbao_admin",
-    name: "TS. Đỗ Tiến Thành",
-    role: "SYSTEM_ADMIN",
-    roleLabel: "Quản trị hệ thống",
-    unit: "Khoa Toán - Tin học",
-    initials: "T"
-  },
-  {
-    id: "admin-pham-anh-tuan",
-    username: "admin2",
-    name: "TS. Phạm Anh Tuấn",
-    role: "SYSTEM_ADMIN",
-    roleLabel: "Quản trị hệ thống",
-    unit: "Khoa Toán - Tin học",
-    initials: "T"
-  }
-];
 
 export const routeDefinitions: Record<string, RouteDefinition> = {
   "/dashboard": {
@@ -209,13 +133,7 @@ export const routeDefinitions: Record<string, RouteDefinition> = {
     summaryTitle: "Kênh nhắc việc",
     summaryBody: "Thông báo trong hệ thống được sắp xếp theo mức độ ưu tiên và thời điểm phát sinh để dễ dàng theo dõi."
   },
-  "/my-reviews": {
-    eyebrow: "Nhận xét",
-    title: "Đánh giá của tôi",
-    description: "Quản lý tiến độ chấm điểm, nhận xét và kiến nghị đối với các hồ sơ đã được giao.",
-    summaryTitle: "Hồ sơ nhận xét",
-    summaryBody: "Mỗi mục bao gồm hạn chấm, kết quả tạm thời và tình trạng nộp nhận xét theo phân công."
-  },
+
   "/users": {
     eyebrow: "Quản trị",
     title: "Người dùng",
@@ -394,10 +312,6 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/notifications", label: "Thông báo", icon: Bell }
   ]
 };
-
-export function getAccountById(accountId?: string | null) {
-  return accountProfiles.find((account) => account.id === accountId) ?? null;
-}
 
 export function getNavigationItems(role: UserRole) {
   return navigationByRole[role];

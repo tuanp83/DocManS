@@ -27,7 +27,7 @@ describe("ST-2.3A files route registration source checks", () => {
     assert.match(controllerSource, /@Get\(":id\/download"\)/);
     assert.match(controllerSource, /downloadFile\(@Req\(\)[\s\S]*@Param\("id"\) id: string/);
     assert.equal(/@Query\(/.test(downloadMethodSource), false);
-    assert.match(apiClientSource, /fetch\(`\$\{getApiBaseUrl\(\)\}\/files`/);
+    assert.match(apiClientSource, /apiRequest<\{ file\?: ProposalAttachment \}>\("\/files", \{ method: "POST", body: formData \}/);
     assert.match(apiClientSource, /`\$\{getApiBaseUrl\(\)\}\/files\/\$\{attachmentId\}\/download`/);
   });
 
@@ -57,7 +57,8 @@ describe("ST-2.3A files route registration source checks", () => {
 
     assert.match(controllerSource, /@Patch\(":id"\)/);
     assert.match(controllerSource, /@Delete\(":id"\)/);
-    assert.match(apiClientSource, /fetch\(`\$\{getApiBaseUrl\(\)\}\/files\/\$\{attachmentId\}`/);
+    assert.match(apiClientSource, /apiRequest<\{ file\?: ProposalAttachment \}>\(`\/files\/\$\{attachmentId\}`, \{ method: "PATCH"/);
+    assert.match(apiClientSource, /apiRequest<\{ file\?: ProposalAttachment \}>\(`\/files\/\$\{attachmentId\}`, \{ method: "DELETE"/);
     assert.equal(/objectKey|bucketName|storagePath|minioKey/.test(apiClientSource), false);
   });
 

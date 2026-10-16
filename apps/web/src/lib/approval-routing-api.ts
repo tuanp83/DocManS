@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/session";
+import { apiRequest } from "@/lib/api-client";
 
 /** Tờ trình qua Phòng KHQS: chuyên viên → Trưởng ban QLKH → Trưởng phòng KHQS → Ban giám đốc. */
 export type ApprovalSubmission = {
@@ -25,17 +25,7 @@ export type ApprovalSubmission = {
 
 export type PendingSubmission = { id: string; kind: string; subjectId: string; subjectRef: string; stage: string; signer: string; stageLabel: string };
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${getApiBaseUrl()}${path}`, { ...init, credentials: "include", headers: { "Content-Type": "application/json", ...init?.headers } });
-  } catch {
-    throw Object.assign(new Error("Không kết nối được tới máy chủ."), { status: 0 });
-  }
-  const body = (await response.json().catch(() => ({}))) as { message?: string };
-  if (!response.ok) throw Object.assign(new Error(body.message ?? "Không xử lý được tờ trình."), { status: response.status });
-  return body as T;
-}
+const requestJson = <T>(path: string, init?: RequestInit) => apiRequest<T>(path, init, "Không xử lý được tờ trình.");
 
 export function loadApprovalInbox() {
   return requestJson<{ role: "board_head" | "head" | "leadership" | "staff"; submissions: ApprovalSubmission[] }>("/approval-submissions/inbox");

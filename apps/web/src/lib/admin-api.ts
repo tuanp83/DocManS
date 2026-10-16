@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/session";
+import { apiRequest } from "@/lib/api-client";
 
 export type AdminUser = {
   id: string;
@@ -66,39 +66,8 @@ export type NotificationTemplate = {
   status: string;
 };
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers
-    }
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(readApiErrorMessage(body) ?? "Không thể xử lý yêu cầu. Vui lòng kiểm tra quyền truy cập hoặc thử lại.");
-  }
-
-  return (await response.json()) as T;
-}
-
-function readApiErrorMessage(body: unknown) {
-  if (!body || typeof body !== "object") {
-    return null;
-  }
-
-  const message = (body as { message?: unknown }).message;
-  if (typeof message === "string") {
-    return message;
-  }
-  if (Array.isArray(message) && message.every((item) => typeof item === "string")) {
-    return message.join(" ");
-  }
-
-  return null;
-}
+const requestJson = <T>(path: string, init?: RequestInit) =>
+  apiRequest<T>(path, init, "Không thể xử lý yêu cầu. Vui lòng kiểm tra quyền truy cập hoặc thử lại.");
 
 export type UserFilterInput = {
   keyword?: string;

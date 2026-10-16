@@ -298,7 +298,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
       setUploadFiles((current) => ({ ...current, [requirementCode]: null }));
       setUploadDescriptions((current) => ({ ...current, [requirementCode]: "" }));
       setFileInputKeys((current) => ({ ...current, [requirementCode]: (current[requirementCode] ?? 0) + 1 }));
-      setMessage("Đã tải tệp và cập nhật readiness.");
+      setMessage("Đã tải tệp và cập nhật kiểm tra tính đầy đủ.");
       await refresh();
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Không thể tải tệp.");

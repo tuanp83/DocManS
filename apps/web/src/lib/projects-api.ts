@@ -1,3 +1,4 @@
+import { apiRequest } from "@/lib/api-client";
 import { getApiBaseUrl } from "@/lib/session";
 import { isViewerAuthorizationV1, type PermissionActionV1, type ViewerAuthorizationV1 } from "@rtms/permissions";
 
@@ -141,12 +142,7 @@ export function projectCapability(project: ProjectRecord) {
 export function canProject(project: ProjectRecord, action: PermissionActionV1) { return !!projectCapability(project)?.allowedActions.includes(action); }
 export function projectDenial(project: ProjectRecord, action: PermissionActionV1) { return projectCapability(project)?.blockedActions.find((item) => item.action === action)?.reason ?? "Quyền thao tác chưa được xác minh. Vui lòng tải lại."; }
 
-async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, { ...init, credentials: "include", headers: { "Content-Type": "application/json", ...init?.headers } });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof body.message === "string" ? body.message : "Không thể xử lý thao tác đề tài.");
-  return body as T;
-}
+const json = <T>(path: string, init?: RequestInit) => apiRequest<T>(path, init, "Không thể xử lý thao tác đề tài.");
 
 export async function listProjects(filters?: { overdue?: boolean; approaching?: boolean; health?: HealthLevel; mine?: boolean }) {
   const query = new URLSearchParams();
@@ -173,10 +169,9 @@ export async function uploadProjectFile(project: ProjectRecord, file: File, purp
   form.set("relatedEntityId", project.id);
   form.set("filePurpose", purpose);
   form.set("contextVersion", JSON.stringify(capability.contextVersion));
-  const response = await fetch(`${getApiBaseUrl()}/files`, { method: "POST", credentials: "include", body: form });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || !body.file?.id) throw new Error(typeof body.message === "string" ? body.message : "Không thể tải minh chứng.");
-  return body.file as { id: string; fileName: string };
+  const body = await apiRequest<{ file?: { id: string; fileName: string } }>("/files", { method: "POST", body: form }, "Không thể tải minh chứng.");
+  if (!body.file?.id) throw new Error("Không thể tải minh chứng.");
+  return body.file;
 }
 
 export async function getProjectFinance(id: string) { return json<ProjectFinanceResponse>(`/projects/${id}/finance`); }

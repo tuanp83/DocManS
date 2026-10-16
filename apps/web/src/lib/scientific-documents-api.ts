@@ -1,3 +1,4 @@
+import { apiRequest } from "@/lib/api-client";
 import { getApiBaseUrl } from "./session";
 
 export type ScientificDocumentCategory =
@@ -48,33 +49,16 @@ export async function listScientificDocuments(params?: {
   }
 
   const queryString = query.toString();
-  const url = `${getApiBaseUrl()}/scientific-documents${queryString ? `?${queryString}` : ""}`;
-
-  const response = await fetch(url, {
-    credentials: "include"
-  });
-
-  if (!response.ok) {
-    throw new Error("Không thể tải danh sách văn bản và biểu mẫu.");
-  }
-
-  const data = await response.json();
+  const data = await apiRequest<{ documents?: ScientificDocument[] }>(
+    `/scientific-documents${queryString ? `?${queryString}` : ""}`,
+    undefined,
+    "Không thể tải danh sách văn bản và biểu mẫu."
+  );
   return data.documents ?? [];
 }
 
 export async function createScientificDocument(formData: FormData): Promise<ScientificDocument> {
-  const response = await fetch(`${getApiBaseUrl()}/scientific-documents`, {
-    method: "POST",
-    credentials: "include",
-    body: formData
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(errorData?.message || "Không thể tải lên văn bản / biểu mẫu.");
-  }
-
-  const data = await response.json();
+  const data = await apiRequest<{ document: ScientificDocument }>("/scientific-documents", { method: "POST", body: formData }, "Không thể tải lên văn bản / biểu mẫu.");
   return data.document;
 }
 
@@ -82,31 +66,12 @@ export async function updateScientificDocument(
   id: string,
   formData: FormData
 ): Promise<ScientificDocument> {
-  const response = await fetch(`${getApiBaseUrl()}/scientific-documents/${id}`, {
-    method: "PATCH",
-    credentials: "include",
-    body: formData
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(errorData?.message || "Không thể cập nhật văn bản / biểu mẫu.");
-  }
-
-  const data = await response.json();
+  const data = await apiRequest<{ document: ScientificDocument }>(`/scientific-documents/${id}`, { method: "PATCH", body: formData }, "Không thể cập nhật văn bản / biểu mẫu.");
   return data.document;
 }
 
 export async function deleteScientificDocument(id: string): Promise<void> {
-  const response = await fetch(`${getApiBaseUrl()}/scientific-documents/${id}`, {
-    method: "DELETE",
-    credentials: "include"
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    throw new Error(errorData?.message || "Không thể xóa văn bản / biểu mẫu.");
-  }
+  await apiRequest(`/scientific-documents/${id}`, { method: "DELETE" }, "Không thể xóa văn bản / biểu mẫu.");
 }
 
 export function getScientificDocumentDownloadUrl(id: string): string {

@@ -2,13 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { useSession } from "@/components/auth/session-provider";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { NavLink } from "@/components/layout/nav-link";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { QuickSearch } from "@/components/layout/quick-search";
 import { getHomeRoute, getNavigationItems } from "@/lib/navigation";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -50,10 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span>Học viện Quân y</span>
             </div>
           </Link>
-          <div className="quick-search">
-            <Search size={18} aria-hidden="true" />
-            <input aria-label="Tìm kiếm nhanh" placeholder="Tìm mã hồ sơ, đề tài, chủ nhiệm..." />
-          </div>
+          <QuickSearch navigationItems={navigationItems} />
           <div className="topbar-actions">
             <NotificationBell />
             <details className="user-menu">

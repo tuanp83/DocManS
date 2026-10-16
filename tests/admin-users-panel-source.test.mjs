@@ -43,9 +43,10 @@ describe("admin users create form source behavior", () => {
   });
 
   it("preserves backend validation messages for admin forms", () => {
-    assert.match(adminApiSource, /const body = await response\.json\(\)\.catch\(\(\) => null\)/);
-    assert.match(adminApiSource, /readApiErrorMessage\(body\)/);
-    assert.match(adminApiSource, /message\.join\(" "\)/);
+    const apiClientSource = readFileSync("apps/web/src/lib/api-client.ts", "utf8");
+    assert.match(adminApiSource, /apiRequest<T>\(path, init, /);
+    assert.match(apiClientSource, /await response\.json\(\)\.catch\(\(\) => \(\{\}\)\)/);
+    assert.match(apiClientSource, /message\.join\(" "\)/);
   });
 
   it("does not submit immutable catalog code during edit", () => {

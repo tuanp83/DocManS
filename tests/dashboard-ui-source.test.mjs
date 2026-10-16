@@ -20,7 +20,8 @@ test("API client chỉ gọi 4 API thống kê và chỉ gửi khoá bộ lọc 
   const paths = [...api.matchAll(/getJson<.*?>\(`([a-z-]+)\$\{/g)].map((match) => match[1]).sort();
   assert.deepEqual(paths, ["distribution", "distribution", "drill-down", "products", "trends"]);
   assert.match(api, /DASHBOARD_FILTER_KEYS = \["year", "unitId", "level", "field", "scope"\] as const/);
-  assert.match(api, /credentials: "include"/);
+  assert.match(api, /apiRequest<T>\(`\/dashboard\/\$\{path\}`/);
+  assert.match(read("apps/web/src/lib/api-client.ts"), /credentials: "include"/);
   // Bỏ giá trị rỗng để API không nhận khoá thừa.
   assert.match(api, /if \(value === undefined \|\| value === null \|\| value === ""\) continue;/);
 });

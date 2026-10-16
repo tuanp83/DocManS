@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { CatalogItem } from "@/lib/admin-api";
 import { loadProposalCatalogs } from "@/lib/research-proposals-api";
 import { ProposalMembersEditor } from "@/components/research-proposals/proposal-members-editor";
@@ -68,7 +68,9 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
   const [state, setState] = useState<LoadState>("loading");
   const [proposals, setProposals] = useState<ResearchProposal[]>([]);
   const [intakes, setIntakes] = useState<ProposalIntakePeriod[]>([]);
-  const [keyword, setKeyword] = useState("");
+  // Từ khóa từ ô tìm nhanh trên thanh đầu trang (?q=).
+  const searchKeyword = useSearchParams().get("q") ?? "";
+  const [keyword, setKeyword] = useState(searchKeyword);
   const [statusFilter, setStatusFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
   const [militaryFilter, setMilitaryFilter] = useState("");
@@ -96,6 +98,8 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
       setState("error");
     }
   }
+
+  useEffect(() => setKeyword(searchKeyword), [searchKeyword]);
 
   useEffect(() => {
     void loadProposalCatalogs().then(setCatalogs).catch(() => setMessage("Không tải được danh mục. Vui lòng tải lại."));

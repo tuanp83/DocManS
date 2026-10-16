@@ -1,5 +1,5 @@
 import type { ViewerAuthorizationV1 } from "@rtms/permissions";
-import { getApiBaseUrl } from "@/lib/session";
+import { apiRequest } from "@/lib/api-client";
 
 /**
  * EP-03 (ST-3.2 .. ST-3.5) client. Kept apart from `research-proposals-api.ts` because these
@@ -264,39 +264,7 @@ export function isNotEntitled(error: unknown) {
   return status === 401 || status === 403;
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${getApiBaseUrl()}${path}`, {
-      ...init,
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...init?.headers
-      }
-    });
-  } catch {
-    const error = new Error("Không kết nối được tới máy chủ. Kiểm tra kết nối và thử lại.") as EvaluationApiError;
-    error.status = 0;
-    throw error;
-  }
-
-  const body = (await response.json().catch(() => ({}))) as {
-    message?: string;
-    fieldErrors?: Record<string, string>;
-    pendingReviewers?: Array<{ reviewerDisplayName: string }>;
-  };
-
-  if (!response.ok) {
-    const error = new Error(body.message ?? "Không thể xử lý yêu cầu đánh giá.") as EvaluationApiError;
-    error.status = response.status;
-    error.fieldErrors = body.fieldErrors;
-    error.pendingReviewers = body.pendingReviewers;
-    throw error;
-  }
-
-  return body as T;
-}
+const requestJson = <T>(path: string, init?: RequestInit) => apiRequest<T>(path, init, "Không thể xử lý yêu cầu đánh giá.");
 
 // ST-3.2 --------------------------------------------------------------------------------------
 

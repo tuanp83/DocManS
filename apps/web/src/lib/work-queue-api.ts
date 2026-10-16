@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/session";
+import { apiRequest } from "@/lib/api-client";
 
 export type WorkItemKind =
   | "report_due" | "report_supplement" | "request_supplement" | "milestone_progress" | "report_review" | "adjustment_review"
@@ -23,9 +23,6 @@ export const WORK_ITEM_GROUPS: Record<WorkItemKind, string> = {
   setup_configure: "Thiết lập", setup_confirm: "Thiết lập", officer_assign: "Phân công", health_assess: "Đánh giá", proposal_review: "Phản biện"
 };
 
-export async function loadWorkQueue(): Promise<WorkQueue> {
-  const response = await fetch(`${getApiBaseUrl()}/work-queue`, { credentials: "include", headers: { "Content-Type": "application/json" } });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof body.message === "string" ? body.message : "Không tải được danh sách việc.");
-  return body as WorkQueue;
+export function loadWorkQueue() {
+  return apiRequest<WorkQueue>("/work-queue", undefined, "Không tải được danh sách việc.");
 }

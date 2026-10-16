@@ -460,14 +460,28 @@
 }
 
 /* Print Rules */
+/* Chỉ áp dụng khi đang mở bản xem trước lý lịch; nếu không, in ở trang khác (quyết định, báo cáo) ra trang trắng.
+   Phần không chứa lý lịch bị gỡ khỏi bố cục (không chỉ ẩn) để không đẩy lý lịch xuống trang sau. */
 @media print {
-  body * {
+  body:has(.cv-preview-container) * {
     visibility: hidden;
   }
-  .cv-preview-container, .cv-preview-container * {
+  body:has(.cv-preview-container) *:not(:has(.cv-preview-container)):not(.cv-preview-container, .cv-preview-container *) {
+    display: none !important;
+  }
+  body:has(.cv-preview-container) :has(.cv-preview-container) {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+  body:has(.cv-preview-container) .cv-preview-container,
+  body:has(.cv-preview-container) .cv-preview-container * {
     visibility: visible;
   }
-  .cv-action-bar, .app-topbar, .app-sidebar, nav, header {
+  .cv-action-bar {
     display: none !important;
   }
   .cv-preview-container {

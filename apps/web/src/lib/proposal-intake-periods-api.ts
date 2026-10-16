@@ -1,3 +1,4 @@
+import { apiRequest } from "@/lib/api-client";
 import { getApiBaseUrl } from "@/lib/session";
 
 export type RequiredPackageItem = {
@@ -40,23 +41,7 @@ export type IntakePeriodInput = {
   requiredPackage: RequiredPackageItem[];
 };
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-      ...init?.headers
-    }
-  });
-
-  const body = (await response.json().catch(() => ({}))) as { message?: string };
-  if (!response.ok) {
-    throw new Error(body.message ?? "Không thể xử lý yêu cầu đợt tiếp nhận.");
-  }
-
-  return body as T;
-}
+const requestJson = <T>(path: string, init?: RequestInit) => apiRequest<T>(path, init, "Không thể xử lý yêu cầu đợt tiếp nhận.");
 
 export async function loadProposalIntakePeriods(status?: string) {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";

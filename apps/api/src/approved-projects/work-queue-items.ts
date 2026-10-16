@@ -126,7 +126,7 @@ export function reviewWorkItems(assignments: AnyRecord[], today = new Date()): W
       kind: "proposal_review" as const,
       title: "Chấm phiếu phản biện",
       context: { type: "proposal" as const, id: assignment.proposal?.id ?? assignment.proposalId, title: assignment.proposal?.title ?? "Hồ sơ đề xuất" },
-      href: "/my-reviews",
+      href: "/invitation-to-review",
       ...timing(assignment.dueDate, today)
     }));
 }

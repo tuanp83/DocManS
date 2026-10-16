@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/session";
+import { apiRequest } from "@/lib/api-client";
 
 /**
  * Trang điều phối đánh giá: tổng quan hồ sơ theo người xem (Trưởng phòng: mọi hồ sơ trong phạm vi; chuyên viên:
@@ -38,17 +38,7 @@ export type PortfolioList = {
   officers: PortfolioOfficer[];
 };
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${getApiBaseUrl()}${path}`, { ...init, credentials: "include", headers: { "Content-Type": "application/json", ...init?.headers } });
-  } catch {
-    throw Object.assign(new Error("Không kết nối được tới máy chủ. Kiểm tra kết nối và thử lại."), { status: 0 });
-  }
-  const body = (await response.json().catch(() => ({}))) as { message?: string };
-  if (!response.ok) throw Object.assign(new Error(body.message ?? "Không thể xử lý yêu cầu điều phối đánh giá."), { status: response.status });
-  return body as T;
-}
+const requestJson = <T>(path: string, init?: RequestInit) => apiRequest<T>(path, init, "Không thể xử lý yêu cầu điều phối đánh giá.");
 
 export function loadCoordinationOverview() {
   return requestJson<CoordinationOverview>("/evaluation-coordination/overview");

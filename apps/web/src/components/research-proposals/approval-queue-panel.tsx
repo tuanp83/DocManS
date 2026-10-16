@@ -1463,7 +1463,7 @@ function ApprovalCardsList({
                   proposal.status === "ready_for_approval" ? (
                     <Link
                       href={`/proposals/${proposal.id}#decision-section`}
-                      className="button button-primary"
+                      className="button primary"
                       style={{
                         padding: "6px 12px",
                         fontSize: "13px",
@@ -1513,7 +1513,7 @@ function ApprovalCardsList({
                   !hasApprovedBudget || proposal.status === "ready_for_approval" ? (
                     <Link
                       href={`/proposals/${proposal.id}#budget-approval-section`}
-                      className="button button-primary"
+                      className="button primary"
                       style={{
                         padding: "6px 12px",
                         fontSize: "13px",

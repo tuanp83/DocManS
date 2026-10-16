@@ -1,3 +1,4 @@
+import { apiRequest } from "@/lib/api-client";
 import { getApiBaseUrl } from "@/lib/session";
 
 export type StudentProjectStatus = "DRAFT" | "SUBMITTED" | "ACTIVE" | "COMPLETED" | "CANCELLED";
@@ -33,12 +34,7 @@ export const STUDENT_EVENT_LABELS: Record<string, string> = {
   cancel: "Huỷ đề tài", complete: "Ghi nhận hoàn thành", "document.upload": "Tải tài liệu lên", "document.delete": "Xoá tài liệu"
 };
 
-async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, { ...init, credentials: "include", headers: { "Content-Type": "application/json", ...init?.headers } });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof body.message === "string" ? body.message : "Không thể xử lý yêu cầu.");
-  return body as T;
-}
+const json = <T>(path: string, init?: RequestInit) => apiRequest<T>(path, init, "Không thể xử lý yêu cầu.");
 
 const projectPath = (id: string) => `/student-research/${encodeURIComponent(id)}`;
 
@@ -59,10 +55,7 @@ export async function uploadStudentDocument(id: string, documentType: string, fi
   const form = new FormData();
   form.append("documentType", documentType);
   form.append("file", file);
-  const response = await fetch(`${getApiBaseUrl()}${projectPath(id)}/documents`, { method: "POST", credentials: "include", body: form });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(response.status === 413 ? "Tệp vượt quá dung lượng cho phép." : typeof body.message === "string" ? body.message : "Không tải được tệp lên.");
-  return body;
+  return apiRequest<Record<string, unknown>>(`${projectPath(id)}/documents`, { method: "POST", body: form }, "Không tải được tệp lên.");
 }
 export async function deleteStudentDocument(id: string, documentId: string) { return json(`${projectPath(id)}/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" }); }
 export function studentDocumentDownloadUrl(id: string, documentId: string) { return `${getApiBaseUrl()}${projectPath(id)}/documents/${encodeURIComponent(documentId)}/download`; }

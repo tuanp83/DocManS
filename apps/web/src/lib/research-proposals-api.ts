@@ -1,3 +1,4 @@
+import { apiRequest } from "@/lib/api-client";
 import { getApiBaseUrl } from "@/lib/session";
 import type { RequiredPackageItem } from "@/lib/proposal-intake-periods-api";
 import { isViewerAuthorizationV1, type BlockedActionV1, type PermissionActionV1, type ViewerAuthorizationV1 } from "@rtms/permissions";
@@ -290,31 +291,7 @@ export type ApiErrorWithReadiness = Error & {
   missingFiles?: ReadinessItem[];
 };
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers
-    }
-  });
-
-  const body = (await response.json().catch(() => ({}))) as {
-    message?: string;
-    missingFields?: ReadinessItem[];
-    missingFiles?: ReadinessItem[];
-  };
-
-  if (!response.ok) {
-    const error = new Error(body.message ?? "Không thể xử lý yêu cầu hồ sơ.") as ApiErrorWithReadiness;
-    error.missingFields = body.missingFields;
-    error.missingFiles = body.missingFiles;
-    throw error;
-  }
-
-  return body as T;
-}
+const requestJson = <T>(path: string, init?: RequestInit) => apiRequest<T>(path, init, "Không thể xử lý yêu cầu hồ sơ.");
 
 export async function loadResearchProposals(filters?: Record<string, string>) {
   const query = new URLSearchParams();
@@ -388,49 +365,20 @@ export async function uploadProposalAttachment(
   formData.set("description", input.description);
   formData.set("file", input.file);
 
-  const response = await fetch(`${getApiBaseUrl()}/files`, {
-    method: "POST",
-    credentials: "include",
-    body: formData
-  });
-
-  const body = (await response.json().catch(() => ({}))) as { message?: string; file?: ProposalAttachment };
-  if (!response.ok || !body.file) {
-    throw new Error(body.message ?? "Không thể tải tệp.");
-  }
-
+  const body = await apiRequest<{ file?: ProposalAttachment }>("/files", { method: "POST", body: formData }, "Không thể tải tệp.");
+  if (!body.file) throw new Error("Không thể tải tệp.");
   return { attachment: body.file };
 }
 
 export async function updateProposalAttachmentMetadata(attachmentId: string, input: { description: string | null; contextVersion?: ViewerAuthorizationV1["contextVersion"] }) {
-  const response = await fetch(`${getApiBaseUrl()}/files/${attachmentId}`, {
-    method: "PATCH",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
-  });
-
-  const body = (await response.json().catch(() => ({}))) as { message?: string; file?: ProposalAttachment };
-  if (!response.ok || !body.file) {
-    throw new Error(body.message ?? "Không thể cập nhật metadata tệp.");
-  }
-
+  const body = await apiRequest<{ file?: ProposalAttachment }>(`/files/${attachmentId}`, { method: "PATCH", body: JSON.stringify(input) }, "Không thể cập nhật mô tả tệp.");
+  if (!body.file) throw new Error("Không thể cập nhật mô tả tệp.");
   return body;
 }
 
 export async function deleteProposalAttachment(attachmentId: string, contextVersion?: ViewerAuthorizationV1["contextVersion"]) {
-  const response = await fetch(`${getApiBaseUrl()}/files/${attachmentId}`, {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contextVersion }),
-    credentials: "include"
-  });
-
-  const body = (await response.json().catch(() => ({}))) as { message?: string; file?: ProposalAttachment };
-  if (!response.ok || !body.file) {
-    throw new Error(body.message ?? "Không thể xóa metadata tệp.");
-  }
-
+  const body = await apiRequest<{ file?: ProposalAttachment }>(`/files/${attachmentId}`, { method: "DELETE", body: JSON.stringify({ contextVersion }) }, "Không thể xóa tệp.");
+  if (!body.file) throw new Error("Không thể xóa tệp.");
   return body;
 }
 

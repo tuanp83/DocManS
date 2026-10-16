@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { ResearchProposalsPanel } from "@/components/research-proposals/research-proposals-panel";
@@ -11,7 +12,9 @@ export default function ProposalsPage() {
         title="Danh sách hồ sơ đề tài"
         description="Theo dõi hồ sơ theo đợt tiếp nhận, trạng thái, thời gian thực hiện và lịch sử nộp."
       />
-      <ResearchProposalsPanel allowCreate={false} />
+      <Suspense>
+        <ResearchProposalsPanel allowCreate={false} />
+      </Suspense>
     </>
   );
 }

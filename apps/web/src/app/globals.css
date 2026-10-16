@@ -1853,7 +1853,8 @@ summary:focus-visible {
   }
 
   .sidebar,
-  .top-bar,
+  .topbar,
+  .mobile-menu,
   .user-menu,
   .breadcrumb,
   .no-print,
@@ -1888,10 +1889,16 @@ summary:focus-visible {
     display: none !important;
   }
 
+  /* Khổ giấy hẹp hơn ngưỡng màn hình nhỏ (820px) vẫn phải in bảng, không in danh sách thẻ. */
   .table-wrap {
+    display: block !important;
     border: 1px solid #333333 !important;
     box-shadow: none !important;
     overflow: visible !important;
+  }
+
+  .mobile-list {
+    display: none !important;
   }
 
   .data-table {
@@ -1917,9 +1924,20 @@ summary:focus-visible {
     text-decoration: none !important;
   }
 
+  /* Mặc định A4 dọc (quyết định, lý lịch); bảng báo cáo nhiều cột in A4 ngang. */
   @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+
+  @page report {
     size: A4 landscape;
-    margin: 15mm 15mm 15mm 15mm;
+    margin: 15mm;
+  }
+
+  body:has(.budget-report-container),
+  body:has(.progress-report-container) {
+    page: report;
   }
 }
 
@@ -2753,4 +2771,112 @@ button.hbar-row:focus-visible {
   display: block;
   overflow-wrap: anywhere;
   font-size: 13px;
+}
+
+/* ---- Trang ngoài khung chính: đổi mật khẩu, đặt lại mật khẩu, chờ kiểm tra phiên ---------------------- */
+.auth-loading {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  color: var(--text-secondary);
+}
+
+.page-section {
+  width: min(100%, 520px);
+  margin: 24px auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.page-heading {
+  margin-bottom: 18px;
+}
+
+.page-heading h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 24px;
+}
+
+.page-heading p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.page-heading .eyebrow {
+  margin: 0 0 5px;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+/* Biểu tượng đang tải (lucide) quay tròn. */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin { animation: none; }
+}
+
+/* In quyết định từ hộp thoại: chỉ in tờ quyết định, đủ trang. Phần trang phía sau bị gỡ khỏi bố cục
+   (không chỉ ẩn) để không sinh trang trắng. */
+@media print {
+  body:has(.official-decision-backdrop) * {
+    visibility: hidden;
+  }
+
+  body:has(.official-decision-backdrop) *:not(:has(.official-decision-backdrop)):not(.official-decision-backdrop, .official-decision-backdrop *) {
+    display: none !important;
+  }
+
+  body:has(.official-decision-backdrop) :has(.official-decision-backdrop) {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: 0 !important;
+    padding: 0 !important;
+  }
+
+  .official-decision-backdrop .decision-print-content,
+  .official-decision-backdrop .decision-print-content *,
+  .official-decision-backdrop .decision-print-paper,
+  .official-decision-backdrop .decision-print-paper * {
+    visibility: visible;
+  }
+
+  .official-decision-backdrop {
+    position: static !important;
+    display: block !important;
+    padding: 0 !important;
+    background: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .official-decision-card,
+  .official-decision-modal-container,
+  .decision-print-content,
+  .decision-print-paper {
+    display: block !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .decision-print-content,
+  .decision-print-paper {
+    padding: 0 !important;
+  }
 }

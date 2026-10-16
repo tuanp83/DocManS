@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/session";
+import { apiRequest } from "@/lib/api-client";
 
 /** Bộ lọc chung của dashboard; khớp danh sách trắng ở API (apps/api/src/dashboard/dashboard-query.ts). */
 export type DashboardFilters = { year?: string; unitId?: string; level?: string; field?: string; scope?: ScopeKey };
@@ -78,14 +78,7 @@ export function dashboardQuery(params: Record<string, string | number | undefine
   return text ? `?${text}` : "";
 }
 
-async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}/dashboard/${path}`, { credentials: "include", signal });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { message?: unknown } | null;
-    throw new Error(typeof body?.message === "string" ? body.message : "Không tải được số liệu thống kê.");
-  }
-  return (await response.json()) as T;
-}
+const getJson = <T>(path: string, signal?: AbortSignal) => apiRequest<T>(`/dashboard/${path}`, { signal }, "Không tải được số liệu thống kê.");
 
 const common = (filters: DashboardFilters) => ({ year: filters.year, unitId: filters.unitId, level: filters.level, field: filters.field, scope: filters.scope });
 

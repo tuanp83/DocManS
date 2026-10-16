@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/session";
+import { apiRequest } from "@/lib/api-client";
 
 export type UserNotificationItem = {
   id: string;
@@ -17,17 +17,8 @@ export type NotificationListResponse = {
   unreadCount: number;
 };
 
-export async function notificationRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}/notifications${path}`, {
-    ...init,
-    credentials: "include",
-    cache: "no-store",
-    headers: { "Content-Type": "application/json", ...init?.headers }
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof body.message === "string" ? body.message : "Không thể xử lý thông báo.");
-  return body as T;
-}
+export const notificationRequest = <T>(path: string, init?: RequestInit) =>
+  apiRequest<T>(`/notifications${path}`, { ...init, cache: "no-store" }, "Không thể xử lý thông báo.");
 
 export const loadMyNotifications = (unreadOnly = false, limit = 20) =>
   notificationRequest<NotificationListResponse>(`?unreadOnly=${unreadOnly}&limit=${limit}`);

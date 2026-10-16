@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/session";
+import { apiRequest } from "@/lib/api-client";
 import type { ContextVersionTokenV1, ViewerAuthorizationV1 } from "@rtms/permissions";
 
 export type ResearcherCatalogItem = { id: string; code: string; name: string; type: string };
@@ -107,12 +107,8 @@ export type ResearcherProfile = Omit<ResearcherProfileInput, "managementOrganiza
 export type ResearcherProfileSummary = Pick<ResearcherProfile, "id" | "fullName" | "profileType" | "externalAffiliation" | "status" | "managementOrganization" | "account" | "viewerAuthorization">;
 export type ProfileHistory = { id: string; action: string; createdAt: string; reason?: string; beforeFacts?: Record<string, unknown>; afterFacts?: Record<string, unknown> };
 
-export async function profileRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}/researcher-profiles${path}`, { ...init, credentials: "include", cache: "no-store", headers: { "Content-Type": "application/json", ...init?.headers } });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof body.message === "string" ? body.message : "Không thể xử lý hồ sơ nhà khoa học.");
-  return body as T;
-}
+export const profileRequest = <T>(path: string, init?: RequestInit) =>
+  apiRequest<T>(`/researcher-profiles${path}`, { ...init, cache: "no-store" }, "Không thể xử lý hồ sơ nhà khoa học.");
 export const loadResearcherProfiles = (query: Record<string, string>) => profileRequest<{ profiles: ResearcherProfileSummary[]; organizationOptions: ResearcherOrganization[]; filterOptions: ResearcherOrganization[]; total: number; pageSize: number; canCreate: boolean }>(`?${new URLSearchParams(query)}`);
 export const loadResearcherProfileCatalogs = () => profileRequest<{ researchFields: ResearcherCatalogItem[]; academicRanks: ResearcherCatalogItem[]; academicDegrees: ResearcherCatalogItem[]; organizations?: ResearcherOrganization[] }>("/catalogs");
 export const getResearcherProfile = (id: string) => profileRequest<{ profile: ResearcherProfile }>(`/${id}`);
