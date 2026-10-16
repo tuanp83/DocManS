@@ -368,9 +368,8 @@ describe("hội đồng: đã trình / đã phê chuẩn", () => {
     expect(props.onWorkflowChange).toHaveBeenCalledTimes(1);
   });
 
-  // Lỗi đã biết ở bản gốc: sau khi ghi biên bản, lần tải lại ghi đè phần điền sẵn bằng dữ liệu máy chủ
-  // (hàm refresh dùng giá trị summaryDirty cũ). Bỏ `.fails` khi sửa lỗi này.
-  it.fails("ghi biên bản xong thì điền sẵn kết luận cho phần tổng hợp nếu người dùng chưa sửa", async () => {
+  // Bản gốc có lỗi: sau khi ghi biên bản, lần tải lại ghi đè phần điền sẵn bằng dữ liệu máy chủ.
+  it("ghi biên bản xong thì điền sẵn kết luận cho phần tổng hợp nếu người dùng chưa sửa", async () => {
     proposals.recordProposalCouncilMinutes.mockResolvedValue({} as never);
     const user = userEvent.setup();
     setup({ proposal: { id: "p1", code: "DT-1", title: "Đề tài", councilMetadata: { status: "approved", decisionNumber: "1/QĐ", members } } });

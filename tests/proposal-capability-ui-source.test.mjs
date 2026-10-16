@@ -1,9 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 
 const detailPath = new URL("../apps/web/src/components/research-proposals/proposal-detail-workspace.tsx", import.meta.url);
 const apiPath = new URL("../apps/web/src/lib/research-proposals-api.ts", import.meta.url);
+const evaluationDir = new URL("../apps/web/src/components/research-proposals/evaluation/", import.meta.url);
+
+/** Panel đánh giá hồ sơ gồm file chính và các khối con trong thư mục evaluation/. */
+async function readEvaluationSource() {
+  const panel = await readFile(new URL("../apps/web/src/components/research-proposals/proposal-evaluation-panel.tsx", import.meta.url), "utf8");
+  const parts = await Promise.all((await readdir(evaluationDir)).sort().map((name) => readFile(new URL(name, evaluationDir), "utf8")));
+  return [panel, ...parts].join("\n");
+}
 const listPath = new URL("../apps/web/src/components/research-proposals/research-proposals-panel.tsx", import.meta.url);
 
 describe("Story 1.8 proposal capability UI source behavior", () => {
@@ -36,7 +44,7 @@ describe("Story 1.8 proposal capability UI source behavior", () => {
       assert.match(source, /blockedReason/);
       assert.match(source, /disabled/);
     }
-    const evaluationSource = await readFile(new URL("../apps/web/src/components/research-proposals/proposal-evaluation-panel.tsx", import.meta.url), "utf8");
+    const evaluationSource = await readEvaluationSource();
     // Tổng hợp ba bước, mỗi bước theo đúng capability máy chủ trả về.
     assert.match(evaluationSource, /Trình Trưởng ban rà soát/);
     assert.match(evaluationSource, /Chốt bản tổng hợp/);
@@ -64,7 +72,7 @@ describe("Story 1.8 proposal capability UI source behavior", () => {
 
   it("keeps PI-only and staff-only proposal views capability-driven and uses date-only workflow inputs", async () => {
     const source = await readFile(detailPath, "utf8");
-    const evaluationSource = await readFile(new URL("../apps/web/src/components/research-proposals/proposal-evaluation-panel.tsx", import.meta.url), "utf8");
+    const evaluationSource = await readEvaluationSource();
     assert.match(source, /showSubmitPanel = shouldRenderAction\("proposal\.submit"\)/);
     assert.match(source, /proposal\.viewerParticipation\?\.isOwner/);
     assert.match(source, /showStaffProposalSummary = \(\["proposal\.completeness\.check", "proposal\.supplement\.request", "proposal\.review\.assign", "proposal\.review\.consolidate", "proposal\.review\.finalize", "proposal\.review\.submit-package"\] as const\)\.some\(shouldRenderAction\)/);
