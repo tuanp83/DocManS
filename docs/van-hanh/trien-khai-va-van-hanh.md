@@ -29,7 +29,7 @@ ngày, cập nhật phiên bản, sao lưu và xử lý sự cố.
 
 | # | Việc | Cách làm |
 |---|---|---|
-| 1 | **Cấp phạm vi nhiều đơn vị** cho Ban giám đốc, Trưởng phòng, Phó phòng, Trưởng ban, chuyên viên QLKH. Giao diện Quản trị hiện chỉ gán **một** đơn vị; thiếu bước này, các vai trò trên không thấy hồ sơ của khoa, viện khác. | `scripts/unit-scopes.sh grant <tài khoản> all` (bước C5). |
+| 1 | **Kiểm tra phạm vi đơn vị** của lãnh đạo. Ban giám đốc (Giám đốc/Phó Giám đốc, Phó GĐ phụ trách Khoa học, Phó GĐ theo dõi), Trưởng phòng KHQS và Trưởng ban QLKH **tự động có phạm vi toàn Học viện** (cấp khi tạo tài khoản, đổi vai trò, thêm hoặc kích hoạt đơn vị; migration cấp bù cho tài khoản đã có). Phó phòng và chuyên viên QLKH chỉ **xem** hồ sơ nhà khoa học toàn Học viện; hồ sơ, đề tài của họ vẫn theo đơn vị được gán. | Sau triển khai chạy `scripts/unit-scopes.sh list <tài khoản>` kiểm tra một tài khoản mỗi vai trò. Cần phạm vi nhiều đơn vị cho vai trò khác (vd. chuyên viên phụ trách nhiều khoa): `scripts/unit-scopes.sh grant` (bước C5). |
 | 2 | Có **máy chủ SMTP** gửi được thư (kích hoạt tài khoản nhà khoa học, đặt lại mật khẩu, thông báo). | Khai `SMTP_*` (bước B4), thử ở bước C6. |
 | 3 | Có **image MinIO** đã kiểm thử. MinIO đã ngừng phát hành image công khai; file image không nằm trong git. | Chép `minio-RELEASE.2025-09-07T16-13-09Z-amd64.tar.gz` lên máy chủ và nạp (bước B3). |
 | 4 | Có **chứng chỉ TLS** cho tên miền. | CA nội bộ chép vào `nginx/ssl/` hoặc Let's Encrypt (bước B5). |
@@ -41,7 +41,6 @@ ngày, cập nhật phiên bản, sao lưu và xử lý sự cố.
 
 | Rủi ro | Biện pháp tạm thời |
 |---|---|
-| Đổi đơn vị của người dùng trên giao diện **không gỡ** phạm vi đơn vị cũ. | Sau khi đổi đơn vị, gỡ đơn vị cũ: `scripts/unit-scopes.sh revoke <tài khoản> <mã đơn vị cũ>`. |
 | Quản trị **đặt lại mật khẩu** thì thấy mã một lần trên màn hình. | Chỉ giao mã qua kênh đã được phê duyệt; mỗi lần đặt lại có trong Nhật ký hệ thống, định kỳ rà soát. |
 | Văn bản khoa học nháp hoặc hết hiệu lực vẫn mở được nếu biết đường dẫn trực tiếp. | Không tải văn bản mật lên mục Văn bản & Biểu mẫu. |
 | Chưa có CSRF token riêng, chưa có Content-Security-Policy đầy đủ. | Chỉ phục vụ trong mạng nội bộ của Học viện; không dùng chung tên miền gốc với hệ thống khác do người ngoài quản lý. |
@@ -53,6 +52,8 @@ ngày, cập nhật phiên bản, sao lưu và xử lý sự cố.
 - Seed production chỉ **thêm dữ liệu nền còn thiếu**, không ghi đè tên đơn vị, trạng thái đơn vị, danh mục, thời gian phiên đăng nhập và mẫu thông báo mà quản trị đã chỉnh (có kiểm thử trên PostgreSQL thật: `tests/seed-production-db.test.mjs`).
 - nginx **ghi đè** `X-Forwarded-For` bằng địa chỉ kết nối thật, nên người dùng trong mạng nội bộ không tự đặt được IP để vượt giới hạn đăng nhập hay làm sai IP trong nhật ký; thêm `X-Frame-Options: DENY`, `frame-ancestors 'none'`, ẩn phiên bản nginx.
 - Thêm `scripts/unit-scopes.sh` để xem, cấp, gỡ phạm vi đơn vị (có nhật ký kiểm toán).
+- Vai trò lãnh đạo toàn Học viện tự có mọi đơn vị đang hoạt động; Phó phòng và chuyên viên xem được hồ sơ nhà khoa học mọi đơn vị (chỉ đọc, không sửa ngoài phạm vi).
+- Đổi đơn vị chính của người dùng trên giao diện nay **gỡ phạm vi đơn vị chính cũ** (trước đây giữ lại, người chuyển công tác vẫn xem được dữ liệu đơn vị cũ).
 
 ---
 
@@ -150,18 +151,20 @@ Tạo tài khoản ở **Quản trị → Người dùng** (mỗi tài khoản: 
 
 | Vai trò | Số lượng thường gặp | Đơn vị chính | Phạm vi cần cấp thêm (C5) |
 |---|---|---|---|
-| Giám đốc | 1 | Ban Giám đốc | toàn Học viện |
-| Phó GĐ phụ trách Khoa học | 1 | Ban Giám đốc | toàn Học viện |
-| Các Phó GĐ khác (theo dõi) | theo thực tế | Ban Giám đốc | toàn Học viện |
-| Trưởng phòng KHQS | 1 | Phòng KHQS | toàn Học viện |
-| Phó phòng KHQS | theo thực tế | Phòng KHQS | toàn Học viện |
-| Trưởng ban QLKH | 1 | Phòng KHQS | toàn Học viện |
-| Chuyên viên QLKH | theo thực tế | Phòng KHQS | toàn Học viện (hoặc các đơn vị chuyên viên được giao) |
+| Giám đốc | 1 | Ban Giám đốc | tự động toàn Học viện |
+| Phó GĐ phụ trách Khoa học | 1 | Ban Giám đốc | tự động toàn Học viện |
+| Các Phó GĐ khác (theo dõi) | theo thực tế | Ban Giám đốc | tự động toàn Học viện |
+| Trưởng phòng KHQS | 1 | Phòng KHQS | tự động toàn Học viện |
+| Phó phòng KHQS | theo thực tế | Phòng KHQS | không (chỉ xem hồ sơ nhà khoa học toàn Học viện; đề tài theo phạm vi được gán) |
+| Trưởng ban QLKH | 1 | Phòng KHQS | tự động toàn Học viện |
+| Chuyên viên QLKH | theo thực tế | Phòng KHQS | các đơn vị chuyên viên được giao (xem hồ sơ nhà khoa học toàn Học viện) |
 | Quản trị hệ thống | 1–2 | đơn vị công tác | không |
 
 Nhà nghiên cứu (nội bộ, bên ngoài) **không tạo ở đây**: chuyên viên QLKH tạo **Hồ sơ nhà khoa học**, hệ thống tự tạo tài khoản và gửi thư kích hoạt (cần SMTP). Lãnh đạo và cán bộ QLKH cũng có lý lịch khoa học: tự kê khai ở menu **Lý lịch khoa học**; tên hiển thị tự thêm quân hàm, học hàm, học vị theo lý lịch.
 
 ### C5. Cấp phạm vi nhiều đơn vị
+
+Chỉ cần cho vai trò **không** tự động toàn Học viện (chuyên viên QLKH, Phó phòng phụ trách nhiều đơn vị).
 
 ```bash
 ./scripts/unit-scopes.sh grant <tài khoản> all          # toàn Học viện
@@ -218,7 +221,7 @@ Mỗi request API có mã `X-Request-Id`, dùng để đối chiếu log nginx v
 
 ### D3. Thay đổi nhân sự
 
-- **Chuyển đơn vị**: đổi đơn vị chính trên giao diện, rồi `unit-scopes.sh revoke` các đơn vị cũ không còn phụ trách.
+- **Chuyển đơn vị**: đổi đơn vị chính trên giao diện; hệ thống tự gỡ phạm vi của đơn vị chính cũ. Các đơn vị phụ đã cấp bằng `unit-scopes.sh` được giữ, nếu không còn phụ trách thì `unit-scopes.sh revoke`.
 - **Nghỉ, chuyển công tác**: khoá tài khoản (Quản trị → Người dùng → trạng thái); trước đó Trưởng phòng hoặc Trưởng ban giao lại hồ sơ, đề tài đang phụ trách cho chuyên viên khác.
 - **Đổi vai trò** (vd. bổ nhiệm Trưởng ban): đổi vai trò trên giao diện, có hiệu lực ở thao tác kế tiếp; kiểm tra lại phạm vi.
 

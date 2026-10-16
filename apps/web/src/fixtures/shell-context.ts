@@ -302,6 +302,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/my-tasks", label: "Việc của tôi", icon: ListTodo },
     { href: "/proposals", label: "Theo dõi hồ sơ đề xuất", icon: Files },
+    { href: "/researcher-profiles", label: "Hồ sơ nhà khoa học", icon: UserRoundSearch },
     { href: "/reviews", label: "Đánh giá hồ sơ", icon: FileSearch },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },

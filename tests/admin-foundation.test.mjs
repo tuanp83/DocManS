@@ -91,8 +91,9 @@ function createAdminPrisma() {
       }
     },
     organizationUnit: {
-      async findMany() {
-        return store.units ?? [{ id: "org-root", code: "HVQY", name: "Học viện Quân y", status: "active" }];
+      async findMany(args = {}) {
+        const units = store.units ?? [{ id: "org-root", code: "HVQY", name: "Học viện Quân y", status: "active" }];
+        return args.where?.status ? units.filter((unit) => unit.status === args.where.status) : units;
       },
       async findUnique({ where }) {
         const units = store.units ?? [{ id: "org-root", code: "HVQY", name: "Học viện Quân y", status: "active" }];
@@ -125,7 +126,10 @@ function createAdminPrisma() {
               return false;
             }
           }
-          if (where.systemRole && user.systemRole !== where.systemRole) {
+          if (where.systemRole?.in && !where.systemRole.in.includes(user.systemRole)) {
+            return false;
+          }
+          if (typeof where.systemRole === "string" && user.systemRole !== where.systemRole) {
             return false;
           }
           if (where.unit && user.unit !== where.unit) {
@@ -145,7 +149,7 @@ function createAdminPrisma() {
         return store.users.find((user) => user.id === where.id || user.usernameKey === where.usernameKey) ?? null;
       },
       async create({ data }) {
-        const record = { id: "user-created", createdAt: new Date(), updatedAt: new Date(), ...data };
+        const record = { id: `user-created-${store.users.length}`, createdAt: new Date(), updatedAt: new Date(), ...data };
         store.users.push(record);
         return record;
       },
@@ -175,10 +179,25 @@ function createAdminPrisma() {
         store.organizationScopes.push(data);
         return data;
       },
+      async findFirst({ where }) {
+        return store.organizationScopes.find((scope) => scope.userId === where.userId && (where.isPrimary === undefined || scope.isPrimary === where.isPrimary)) ?? null;
+      },
+      async createMany({ data }) {
+        let count = 0;
+        for (const row of data) {
+          if (store.organizationScopes.some((scope) => scope.userId === row.userId && scope.organizationUnitId === row.organizationUnitId)) continue;
+          store.organizationScopes.push(row);
+          count += 1;
+        }
+        return { count };
+      },
       async deleteMany({ where }) {
         const before = store.organizationScopes.length;
         store.organizationScopes = store.organizationScopes.filter(
-          (scope) => scope.userId !== where.userId || (where.isPrimary !== undefined && scope.isPrimary !== where.isPrimary)
+          (scope) =>
+            scope.userId !== where.userId ||
+            (where.isPrimary !== undefined && scope.isPrimary !== where.isPrimary) ||
+            (where.organizationUnitId?.not !== undefined && scope.organizationUnitId === where.organizationUnitId.not)
         );
         return { count: before - store.organizationScopes.length };
       },
@@ -576,7 +595,7 @@ describe("admin foundation API behavior", () => {
     assert.deepEqual(auditLog.records, []);
   });
 
-  it("Story 1.4: keeps explicit secondary scopes when the primary scope changes", async () => {
+  it("Story 1.4: drops the old primary scope but keeps explicit secondary scopes when the primary scope changes", async () => {
     const prisma = createAdminPrisma();
     const service = new AdminUsersService(prisma, createAuditLog(), createPasswordService());
     prisma.store.units = [
@@ -596,10 +615,52 @@ describe("admin foundation API behavior", () => {
     await service.updateUser(adminUser, "target-user", { organizationUnitId: "org-child" });
 
     assert.deepEqual(prisma.store.organizationScopes, [
-      { userId: "target-user", organizationUnitId: "org-root", isPrimary: false },
       { userId: "target-user", organizationUnitId: "org-explicit", isPrimary: false },
       { userId: "target-user", organizationUnitId: "org-child", isPrimary: true }
     ]);
+  });
+
+  it("Story 1.4: re-saving the same primary unit does not drop its scope", async () => {
+    const prisma = createAdminPrisma();
+    const service = new AdminUsersService(prisma, createAuditLog(), createPasswordService());
+    prisma.store.units = [{ id: "org-root", code: "HVQY", name: "Học viện Quân y", status: "active" }];
+    prisma.store.users.push({
+      id: "target-user", username: "target", usernameKey: "target", displayName: "Target", status: "active",
+      systemRole: "SYSTEM_ADMIN", unit: "Học viện Quân y", passwordHash: "secret"
+    });
+    prisma.store.organizationScopes.push({ userId: "target-user", organizationUnitId: "org-root", isPrimary: true });
+
+    await service.updateUser(adminUser, "target-user", { organizationUnitId: "org-root" });
+
+    assert.deepEqual(prisma.store.organizationScopes, [{ userId: "target-user", organizationUnitId: "org-root", isPrimary: true }]);
+  });
+
+  it("academy-wide roles get every active unit on create, role change, primary change and new units", async () => {
+    const prisma = createAdminPrisma();
+    const service = new AdminUsersService(prisma, createAuditLog(), createPasswordService());
+    prisma.store.units = [
+      { id: "org-a", code: "A", name: "Khoa A", status: "active" },
+      { id: "org-b", code: "B", name: "Khoa B", status: "active" },
+      { id: "org-off", code: "OFF", name: "Đã ngừng", status: "inactive" }
+    ];
+    const unitsOf = (userId) => prisma.store.organizationScopes.filter((scope) => scope.userId === userId).map((scope) => scope.organizationUnitId).sort();
+
+    const head = await service.createUser(adminUser, {
+      username: "head", displayName: "Trưởng phòng", password: "Mat-khau-manh-12", systemRole: "RESEARCH_MANAGEMENT_HEAD", organizationUnitId: "org-a"
+    });
+    assert.deepEqual(unitsOf(head.id), ["org-a", "org-b"], "inactive units are not granted");
+    assert.equal(prisma.store.organizationScopes.filter((scope) => scope.userId === head.id && scope.isPrimary).length, 1);
+
+    const staff = await service.createUser(adminUser, {
+      username: "staff", displayName: "Chuyên viên", password: "Mat-khau-manh-12", systemRole: "RESEARCH_MANAGEMENT_STAFF", organizationUnitId: "org-a"
+    });
+    assert.deepEqual(unitsOf(staff.id), ["org-a"], "management staff stay limited to their own units");
+
+    await service.updateUser(adminUser, staff.id, { systemRole: "RESEARCH_BOARD_HEAD" });
+    assert.deepEqual(unitsOf(staff.id), ["org-a", "org-b"], "changing to an academy-wide role grants every unit");
+
+    await service.updateUser(adminUser, head.id, { organizationUnitId: "org-b" });
+    assert.deepEqual(unitsOf(head.id), ["org-a", "org-b"], "changing the primary unit does not shrink an academy-wide scope");
   });
 
   it("Story 1.6: catalog APIs require admin, validate supported changes, soft-delete, and audit successes", async () => {
@@ -784,7 +845,8 @@ describe("admin foundation API behavior", () => {
         findUnique: async ({ where }) => units.find((unit) => unit.id === where.id) ?? null,
         create: async () => { throw Object.assign(new Error("Unique constraint"), { code: "P2002" }); },
         update: async ({ where, data }) => ({ ...units.find((unit) => unit.id === where.id), ...data })
-      }
+      },
+      user: { findMany: async () => [] }
     };
     const service = new AdminUsersService(prisma, createAuditLog(), createPasswordService());
 

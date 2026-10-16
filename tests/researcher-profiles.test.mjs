@@ -254,7 +254,7 @@ describe("Story 2.1 researcher profile contracts", () => {
   });
 
   it("fails closed outside scope and exposes scoped manager capabilities", () => {
-    assert.deepEqual(projectResearcherProfileAuthorization(outOfScopeStaff, profile()).allowedActions, []);
+    assert.deepEqual(projectResearcherProfileAuthorization(outOfScopeStaff, profile()).allowedActions, ["researcher-profile.read"], "management staff may read other units but not change them");
     const capability = projectResearcherProfileAuthorization(staff, profile());
     assert.deepEqual(capability.allowedActions, [
       "researcher-profile.account.create",

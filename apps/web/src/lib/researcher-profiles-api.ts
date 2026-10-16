@@ -113,7 +113,7 @@ export async function profileRequest<T>(path: string, init?: RequestInit): Promi
   if (!response.ok) throw new Error(typeof body.message === "string" ? body.message : "Không thể xử lý hồ sơ nhà khoa học.");
   return body as T;
 }
-export const loadResearcherProfiles = (query: Record<string, string>) => profileRequest<{ profiles: ResearcherProfileSummary[]; organizationOptions: ResearcherOrganization[]; total: number; pageSize: number; canCreate: boolean }>(`?${new URLSearchParams(query)}`);
+export const loadResearcherProfiles = (query: Record<string, string>) => profileRequest<{ profiles: ResearcherProfileSummary[]; organizationOptions: ResearcherOrganization[]; filterOptions: ResearcherOrganization[]; total: number; pageSize: number; canCreate: boolean }>(`?${new URLSearchParams(query)}`);
 export const loadResearcherProfileCatalogs = () => profileRequest<{ researchFields: ResearcherCatalogItem[]; academicRanks: ResearcherCatalogItem[]; academicDegrees: ResearcherCatalogItem[]; organizations?: ResearcherOrganization[] }>("/catalogs");
 export const getResearcherProfile = (id: string) => profileRequest<{ profile: ResearcherProfile }>(`/${id}`);
 export const createResearcherProfile = (input: ResearcherProfileInput) => profileRequest<{ profile: ResearcherProfile | null; requiresConfirmation: boolean; duplicateCandidates: Array<{ id: string; fullName: string; managementOrganization: ResearcherOrganization }> }>("", { method: "POST", body: JSON.stringify(input) });

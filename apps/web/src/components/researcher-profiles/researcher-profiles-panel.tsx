@@ -84,6 +84,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
   const { refreshCurrentUser } = useSession();
   const [profiles, setProfiles] = useState<ResearcherProfileSummary[]>([]);
   const [organizations, setOrganizations] = useState<ResearcherOrganization[]>([]);
+  const [filterOrganizations, setFilterOrganizations] = useState<ResearcherOrganization[]>([]);
   const [catalogs, setCatalogs] = useState<Awaited<ReturnType<typeof loadResearcherProfileCatalogs>>>({
     researchFields: [],
     academicRanks: [],
@@ -193,6 +194,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
         if (version !== loadVersion.current) return;
         setProfiles(data.profiles);
         setOrganizations(data.organizationOptions);
+        setFilterOrganizations(data.filterOptions);
         setCatalogs(nextCatalogs);
         setTotal(data.total);
         setCanCreate(data.canCreate);
@@ -659,7 +661,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
               <span>Đơn vị quản lý</span>
               <select value={filters.organizationUnitId} onChange={(event) => filter("organizationUnitId", event.target.value)}>
                 <option value="">Tất cả đơn vị được cấp</option>
-                {organizations.map((item) => (
+                {filterOrganizations.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>

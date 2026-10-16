@@ -458,16 +458,21 @@ describe("Epic 2 researcher profiles and account access on real PostgreSQL", () 
     }
   });
 
-  it("managers see, count and mutate only profiles in their current organization scope", async () => {
+  it("managers read profiles academy-wide but mutate only profiles in their current organization scope", async () => {
     const inA = await newProfile(staff, { profileType: "EXTERNAL" });
     const inB = await newProfile(outsider, { profileType: "EXTERNAL", managementOrganizationUnitId: orgB.id });
 
     const list = await profiles.listProfiles(staff, { pageSize: "100" });
-    assert.equal(list.profiles.some((item) => item.managementOrganization.id === orgB.id), false);
-    assert.equal(list.total, await db.researcherProfile.count({ where: { managementOrganizationUnitId: orgA.id } }));
-    await assert.rejects(() => profiles.listProfiles(staff, { organizationUnitId: orgB.id }), ForbiddenException);
-    await assert.rejects(() => profiles.getProfile(staff, inB.id), ForbiddenException);
-    await assert.rejects(() => profiles.getProfile(outsider, inA.id), ForbiddenException);
+    assert.equal(list.profiles.some((item) => item.managementOrganization.id === orgB.id), true, "management staff read every unit");
+    assert.equal(list.total, await db.researcherProfile.count());
+    assert.equal((await profiles.listProfiles(staff, { organizationUnitId: orgB.id })).profiles.length > 0, true);
+    assert.equal((await profiles.getProfile(staff, inB.id)).id, inB.id);
+    assert.equal((await profiles.getProfile(outsider, inA.id)).id, inA.id);
+    await assert.rejects(
+      () => profiles.updateProfile(staff, inB.id, updateResearcherProfilePipe.transform({ contextVersion: contextVersion(inB), position: "Ngoài phạm vi" })),
+      ForbiddenException,
+      "reading another unit never grants write access"
+    );
 
     await assert.rejects(
       () => profiles.updateProfile(staff, inA.id, updateResearcherProfilePipe.transform({ contextVersion: contextVersion(inA), managementOrganizationUnitId: orgB.id })),

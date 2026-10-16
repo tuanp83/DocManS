@@ -9,7 +9,7 @@ import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { formatResearcherDisplayName } from "./researcher-display-name.js";
-import { assertResearcherProfileAction, canEditOwnResearcherProfile, canHoldResearcherProfile, canManageResearcherProfiles, hasResearcherProfileScope, profileAccountRoles, projectResearcherProfileAuthorization } from "./researcher-profile-access.js";
+import { assertResearcherProfileAction, canEditOwnResearcherProfile, canReadAllResearcherProfiles, canViewResearcherProfiles, canHoldResearcherProfile, canManageResearcherProfiles, hasResearcherProfileScope, profileAccountRoles, projectResearcherProfileAuthorization } from "./researcher-profile-access.js";
 import type { CreateResearcherProfileDto, ResearcherProfileParticipationInput, ResearcherProfilePublicationInput, UpdateResearcherProfileDto, ResearcherAccountInput } from "./researcher-profiles.dto.js";
 import { MailService } from "../notifications/mail.service.js";
 
@@ -92,21 +92,22 @@ export class ResearcherProfilesService {
 
   async listProfiles(actor: SafeUserContext, query: { profileType?: string; researchFieldId?: string; organizationUnitId?: string; status?: string; keyword?: string; page?: string; pageSize?: string }) {
     if (Object.values(query).some((value) => value !== undefined && typeof value !== "string")) throw new BadRequestException();
-    if (!canManageResearcherProfiles(actor)) {
+    if (!canViewResearcherProfiles(actor)) {
       throw new ForbiddenException({ message: "Bạn không có quyền xem danh sách hồ sơ nhà khoa học." });
     }
     if (query.profileType && !["INTERNAL", "EXTERNAL"].includes(query.profileType)) throw new BadRequestException();
     if (query.status && !["ACTIVE", "INACTIVE"].includes(query.status)) throw new BadRequestException();
     const organizationIds = activeScopeIds(actor);
     const requestedOrganizationId = query.organizationUnitId?.trim();
-    if (requestedOrganizationId && !hasResearcherProfileScope(actor, requestedOrganizationId)) {
+    const readsAllUnits = canReadAllResearcherProfiles(actor);
+    if (requestedOrganizationId && !readsAllUnits && !hasResearcherProfileScope(actor, requestedOrganizationId)) {
       throw new ForbiddenException({ message: "Bạn không có quyền xem hồ sơ trong phạm vi này." });
     }
     const page = Math.max(Number.parseInt(query.page ?? "1", 10) || 1, 1);
     const pageSize = Math.min(Math.max(Number.parseInt(query.pageSize ?? "20", 10) || 20, 1), 100);
     const keyword = query.keyword?.trim() ? normalizeResearcherKey(query.keyword) : undefined;
     const where = {
-      managementOrganizationUnitId: requestedOrganizationId ? requestedOrganizationId : { in: organizationIds },
+      ...(requestedOrganizationId ? { managementOrganizationUnitId: requestedOrganizationId } : readsAllUnits ? {} : { managementOrganizationUnitId: { in: organizationIds } }),
       ...(query.profileType ? { profileType: query.profileType } : {}),
       ...(query.researchFieldId ? { researchFields: { some: { catalogItemId: query.researchFieldId } } } : {}),
       ...(query.status ? { status: query.status } : {}),
@@ -134,6 +135,9 @@ export class ResearcherProfilesService {
       }),
       this.prisma.researcherProfile.count({ where })
     ]);
+    const filterOptions = readsAllUnits
+      ? await this.prisma.organizationUnit.findMany({ where: { status: "active" }, select: { id: true, code: true, name: true }, orderBy: { name: "asc" } })
+      : actor.organizationScopes;
     return {
       profiles: profiles.map((profile) => ({
         id: profile.id,
@@ -146,10 +150,11 @@ export class ResearcherProfilesService {
         viewerAuthorization: projectResearcherProfileAuthorization(actor, profile)
       })),
       organizationOptions: actor.organizationScopes,
+      filterOptions,
       page,
       pageSize,
       total,
-      canCreate: organizationIds.length > 0
+      canCreate: canManageResearcherProfiles(actor) && organizationIds.length > 0
     };
   }
 

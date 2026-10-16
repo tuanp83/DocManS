@@ -6,6 +6,7 @@ import { SYSTEM_ROLES, type SafeUserContext, type SystemRole } from "../auth/aut
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { readCode, readText } from "./admin-access.js";
 import { validateNewPassword } from "../auth/password-request.pipe.js";
+import { grantAcademyWideScopes, grantUnitToAcademyWideUsers, hasAcademyWideScope } from "../organization/academy-scope.js";
 import { findPosition, inferUnitType, isUnitType, positionDisplay, UNIT_POSITIONS, UNIT_TYPE_LABELS, UNIT_TYPES } from "../organization/unit-positions.js";
 
 const MAX_POSITIONS_PER_USER = 10;
@@ -213,6 +214,7 @@ export class AdminUsersService {
         unitType: input.unitType === undefined ? inferUnitType(readText(input.name, "name")) : this.readUnitType(input.unitType)
       }
     }));
+    if (unit.status === "active") await grantUnitToAcademyWideUsers(this.prisma as never, unit.id);
 
     await this.auditLog.record({
       action: "create-organization-unit",
@@ -260,6 +262,7 @@ export class AdminUsersService {
       where: { id: unitId },
       data
     }));
+    if (unit.status === "active") await grantUnitToAcademyWideUsers(this.prisma as never, unit.id);
 
     await this.auditLog.record({
       action: "update-organization-unit",
@@ -331,6 +334,7 @@ export class AdminUsersService {
           isPrimary: true
         }
       });
+      if (hasAcademyWideScope(systemRole)) await grantAcademyWideScopes(tx as never, created.id);
 
       return created;
     });
@@ -421,9 +425,10 @@ export class AdminUsersService {
       });
 
       if (organizationUnit) {
-        await tx.userOrganizationScope.updateMany({
-          where: { userId, isPrimary: true },
-          data: { isPrimary: false }
+        // Đổi đơn vị chính là chuyển công tác: gỡ phạm vi của đơn vị chính cũ để người dùng không còn xem được
+        // dữ liệu đơn vị đó. Phạm vi phụ đã cấp riêng (nhiều đơn vị) được giữ nguyên.
+        await tx.userOrganizationScope.deleteMany({
+          where: { userId, isPrimary: true, organizationUnitId: { not: organizationUnit.id } }
         });
         await tx.userOrganizationScope.upsert({
           where: { userId_organizationUnitId: { userId, organizationUnitId: organizationUnit.id } },
@@ -431,6 +436,8 @@ export class AdminUsersService {
           create: { userId, organizationUnitId: organizationUnit.id, isPrimary: true }
         });
       }
+      // Vai trò toàn Học viện luôn có đủ mọi đơn vị, kể cả sau khi đổi vai trò hoặc đổi đơn vị chính.
+      if (hasAcademyWideScope((data.systemRole as string | undefined) ?? existing.systemRole)) await grantAcademyWideScopes(tx as never, userId);
 
       return updated;
     });

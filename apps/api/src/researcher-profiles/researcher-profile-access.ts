@@ -23,6 +23,12 @@ export const RESEARCHER_PROFILE_ACTIONS = [
 
 export const RESEARCHER_PROFILE_MANAGER_ROLES = ["SYSTEM_ADMIN", "RESEARCH_MANAGEMENT_HEAD", "RESEARCH_MANAGEMENT_STAFF"] as const;
 
+/** Phó phòng KHQS chỉ xem hồ sơ nhà khoa học (không tạo, sửa, cấp tài khoản). */
+export const RESEARCHER_PROFILE_VIEWER_ROLES = ["RESEARCH_MANAGEMENT_DEPUTY_HEAD"] as const;
+
+/** Vai trò xem hồ sơ nhà khoa học của mọi đơn vị trong Học viện, không bị giới hạn bởi phạm vi đơn vị. */
+export const RESEARCHER_PROFILE_ACADEMY_READ_ROLES = ["RESEARCH_MANAGEMENT_HEAD", "RESEARCH_MANAGEMENT_DEPUTY_HEAD", "RESEARCH_MANAGEMENT_STAFF"] as const;
+
 /** Tài khoản có lý lịch khoa học: mọi vai trò trừ Quản trị hệ thống. */
 export function canHoldResearcherProfile(systemRole?: string | null) {
   return (SCIENTIFIC_PROFILE_ROLES as readonly string[]).includes(systemRole ?? "");
@@ -37,12 +43,22 @@ export function hasResearcherProfileScope(actor: SafeUserContext, organizationId
   return actor.organizationScopes.some((scope) => scope.id === organizationId);
 }
 
+export function canReadAllResearcherProfiles(actor: SafeUserContext) {
+  return (RESEARCHER_PROFILE_ACADEMY_READ_ROLES as readonly string[]).includes(actor.systemRole ?? "");
+}
+
 export function canManageResearcherProfile(actor: SafeUserContext, action: PermissionActionV1, organizationId: string) {
+  if (action === "researcher-profile.read" && canReadAllResearcherProfiles(actor)) return true;
   return RESEARCHER_PROFILE_MANAGER_ROLES.includes(actor.systemRole as (typeof RESEARCHER_PROFILE_MANAGER_ROLES)[number]) && RESEARCHER_PROFILE_ACTIONS.includes(action as (typeof RESEARCHER_PROFILE_ACTIONS)[number]) && hasResearcherProfileScope(actor, organizationId);
 }
 
 export function canManageResearcherProfiles(actor: SafeUserContext) {
   return RESEARCHER_PROFILE_MANAGER_ROLES.includes(actor.systemRole as (typeof RESEARCHER_PROFILE_MANAGER_ROLES)[number]);
+}
+
+/** Được xem danh sách hồ sơ: vai trò quản lý hồ sơ và vai trò chỉ xem. */
+export function canViewResearcherProfiles(actor: SafeUserContext) {
+  return canManageResearcherProfiles(actor) || (RESEARCHER_PROFILE_VIEWER_ROLES as readonly string[]).includes(actor.systemRole ?? "");
 }
 
 export function canEditOwnResearcherProfile(actor: SafeUserContext, profile: { linkedUserId?: string | null; status: string }) {
