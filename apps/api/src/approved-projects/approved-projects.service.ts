@@ -18,6 +18,7 @@ import { toAcceptanceResponse, toFinanceSummary, toLiquidationResponse, toProduc
 import { baselineFromMilestones, calendarDayIndex, HEALTH_APPLICABLE_STATUSES, HEALTH_LEVELS, localDayIndex, resolveEffectiveHealth, validateDeclaredWeights, type HealthLevel } from "./project-progress.js";
 import { computeProgressForProject, summarizeProjectProgress } from "./project-progress-summary.js";
 import { assertAdjustmentValues, assertExtensionValues, MILESTONE_CHANGE_KEYS, optionalText, parseAdjustmentValues, projectDay, requiredText, storedContextVersion, type AdjustmentValues } from "./project-request-values.js";
+import { readScopeSnapshot } from "./project-snapshots.js";
 
 const PREPARING = PROJECT_STATUSES.preparing;
 const EXECUTING = PROJECT_STATUSES.executing;
@@ -266,7 +267,7 @@ export class ApprovedProjectsService {
       acceptances: (project.acceptances ?? []).map((row) => toAcceptanceResponse(row)),
       finance: capability.allowedActions?.includes("project.finance.read") ? toFinanceSummary(project.finance) : null,
       liquidation: project.liquidation ? toLiquidationResponse(project.liquidation) : null,
-      level: (project.scopeSnapshot as AnyRecord | null)?.proposalTypeCode ?? null,
+      level: readScopeSnapshot(project.scopeSnapshot).proposalTypeCode ?? null,
       products: (project.products ?? []).map((row) => toProductResponse(row)),
       superiorAcceptance: project.superiorAcceptance ? toSuperiorResponse(project.superiorAcceptance, now) : null,
       viewerAuthorization: capability
@@ -387,7 +388,7 @@ export class ApprovedProjectsService {
       // thức gần nhất trước thời điểm quyết định (bỏ qua bản ghi "kiểm tra đầy đủ").
       const submissions = decision ? await tx.proposalSubmissionEvent.findMany({ where: { proposalId, toStatus: { in: ["submitted", "resubmitted"] }, submittedAt: { lte: decision.decidedAt } }, orderBy: { submittedAt: "desc" } }) : [];
       const submission = submissions.find((event: AnyRecord) => {
-        const eventSnapshot = event.snapshot as AnyRecord | null;
+        const eventSnapshot = event.snapshot;
         return !!eventSnapshot && !eventSnapshot.kind && eventSnapshot.id === proposalId;
       }) ?? null;
       if (!submission || submission.proposalId !== proposalId || !["submitted", "resubmitted"].includes(submission.toStatus) || !decision) throw new BadRequestException({ code: "SOURCE_EVIDENCE_MISSING", message: "Không tìm thấy phiên bản nộp gắn với quyết định phê duyệt." });
@@ -416,7 +417,7 @@ export class ApprovedProjectsService {
       return { id: project.id, proposalId, status: project.status };
     }, { isolationLevel: "Serializable", timeout: 15000 }).catch(async (error) => {
       const denied = ["P2034", "P2002"].includes(error?.code) ? new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Đề tài đã được tạo hoặc ngữ cảnh đã thay đổi. Vui lòng tải lại." }) : error;
-      const evidence = denied as AnyRecord;
+      const evidence = denied;
       await this.auditLog.record({ action: "create-approved-project", result: "failure", actorId: actor.id, targetEntity: "research-proposal", targetEntityId: proposalId, username: actor.username, reason: evidence?.response?.code ?? evidence?.code ?? "ACTION_NOT_GRANTED" }).catch(() => undefined);
       throw denied;
     });
@@ -490,7 +491,7 @@ export class ApprovedProjectsService {
     const eligible = users.filter((user) => user.organizationScopes?.some((scope) => scope.organizationUnitId === loaded.project.hostOrganizationUnitId && scope.organizationUnit?.status === "active") && !(loaded.project.members ?? []).some((member) => member.userId === user.id && isRelationshipActiveAt(member, new Date())));
     const reviewAccess = new ProposalReviewAccessService(this.prisma);
     const checks = await Promise.all(eligible.map((user) => reviewAccess.resolveConflictForProposal(user.id, loaded.project.proposalId)));
-    return eligible.filter((_: AnyRecord, index: number) => !checks[index].unresolved && !checks[index].isAssignedReviewer && !checks[index].hasPersistedReview).map((user) => ({ id: user.id, username: user.username, displayName: user.displayName, unit: user.unit }));
+    return eligible.filter((_, index) => !checks[index].unresolved && !checks[index].isAssignedReviewer && !checks[index].hasPersistedReview).map((user) => ({ id: user.id, username: user.username, displayName: user.displayName, unit: user.unit }));
   }
 
   async assignOfficer(actor: SafeUserContext, projectId: string, input: AnyRecord) {
@@ -679,9 +680,9 @@ export class ApprovedProjectsService {
 
   /** Trọng số sau điều chỉnh phải hợp lệ (để trống tất cả, hoặc đủ mọi mốc với tổng 100) — kiểm tra sớm cho PI. */
   private assertAdjustmentWeights(project: LoadedProject, values: AdjustmentValues) {
-    const changes = (values.milestoneChanges ?? []).filter((change: AnyRecord) => change?.weightPercent !== undefined);
+    const changes = (values.milestoneChanges ?? []).filter((change) => change?.weightPercent !== undefined);
     if (!changes.length) return;
-    const next = (project.milestones ?? []).map((item) => { const change = changes.find((entry: AnyRecord) => entry.id === item.id); return change ? change.weightPercent : item.weightPercent; });
+    const next = (project.milestones ?? []).map((item) => { const change = changes.find((entry) => entry.id === item.id); return change ? change.weightPercent : item.weightPercent; });
     const result = validateDeclaredWeights(next);
     if (!result.ok) throw new BadRequestException({ code: "WEIGHTS_INVALID", message: result.message });
   }
@@ -805,7 +806,7 @@ export class ApprovedProjectsService {
       await this.assertOfficer(tx, currentActor, project);
       const request = await this.findRequest(tx, project, input.requestId);
       if (request.requestType !== ADJUSTMENT || request.status !== "under_staff_review") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
-      const submitted = request.revisions.find((revision: AnyRecord) => revision.revision === request.revision);
+      const submitted = request.revisions.find((revision) => revision.revision === request.revision);
       this.adjustmentUpdate(project, parseAdjustmentValues(submitted?.proposedValues ?? request.proposedValues));
       const now = await readTransactionClockV1(tx);
       const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: "ready_for_head_decision", preparedById: currentActor.id, preparedAt: now, appraisal: { reviewNote: input.note ?? "Đã thẩm định đề nghị điều chỉnh" } } });
@@ -845,7 +846,7 @@ export class ApprovedProjectsService {
       await assertReadyForLeadership(tx, currentActor, routingKey);
       if (request.requesterId === currentActor.id || this.activeMember(project, currentActor.id)) throw new ForbiddenException({ code: "CONFLICT_DENIED" });
       if (decision === "reject" && !input.reason) throw new BadRequestException({ message: "Cần lý do từ chối." });
-      const submitted = request.revisions.find((revision: AnyRecord) => revision.revision === request.revision);
+      const submitted = request.revisions.find((revision) => revision.revision === request.revision);
       if (!submitted || submitted.status !== "submitted") throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
       const expected = storedContextVersion(request.submittedContextVersion);
       if (!expected || expected.aggregateVersion !== project.aggregateVersion || expected.relationshipVersion !== project.relationshipVersion) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });

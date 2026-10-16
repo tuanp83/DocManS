@@ -3,6 +3,6 @@
   "as any": 10,
   "as never": 28,
   "as unknown as": 57,
-  "AnyRecord": 135,
+  "AnyRecord": 107,
   "@ts-ignore": 9
 }

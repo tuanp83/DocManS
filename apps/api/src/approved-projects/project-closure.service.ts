@@ -11,6 +11,7 @@ import { computeDisbursementTotals, readApprovedBudget, readDisbursementInput, s
 import { ApprovedProjectsService, closureFacts, openAcceptanceRound, type LoadedProject, type NotifyFn } from "./approved-projects.service.js";
 import { ACCEPTANCE_ROUND_STATUSES as R, LIQUIDATION_STATUSES, PROJECT_STATUSES, SUPERIOR_ACCEPTANCE_LEVELS, SUPERIOR_STATUSES } from "./project-capability-v1.js";
 import { money, readDay, readFileIds, readMoney, readRequiredText, toDisbursementRecord } from "./project-closure-model.js";
+import { readScopeSnapshot } from "./project-snapshots.js";
 
 type AnyRecord = Record<string, any>;
 
@@ -71,7 +72,7 @@ export class ProjectClosureService {
       where: { status: "ACTIVE" },
       select: { id: true, fullName: true, title: true, linkedUserId: true, managementOrganizationUnitId: true, managementOrganizationUnit: { select: { name: true } } },
       orderBy: { fullName: "asc" }
-    })) as AnyRecord[];
+    }));
     return profiles.map((profile) => {
       const conflicted = !!profile.linkedUserId && teamUserIds.has(profile.linkedUserId);
       const sameUnit = profile.managementOrganizationUnitId === loaded.project.hostOrganizationUnitId;
@@ -165,7 +166,7 @@ export class ProjectClosureService {
       this.assertAllowed(loaded.capability, "project.acceptance.submit");
       if (openAcceptanceRound(project)) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Đề tài đang có vòng nghiệm thu chưa kết thúc." });
       // Bước 1: mọi sản phẩm (nội dung công việc trong thuyết minh) phải được tổ chuyên gia nghiệm thu đạt.
-      const products = (project.products ?? []) as AnyRecord[];
+      const products = (project.products ?? []);
       if (!products.length) throw new BadRequestException({ code: "ACCEPTANCE_NOT_READY", message: "Đề tài chưa có danh sách sản phẩm (nội dung công việc). Chuyên viên phụ trách cần nhập danh sách sản phẩm theo thuyết minh." });
       const pendingProducts = products.filter((item) => item.status !== "PASSED");
       if (pendingProducts.length) throw new BadRequestException({ code: "ACCEPTANCE_NOT_READY", message: `Còn ${pendingProducts.length} sản phẩm chưa được tổ chuyên gia nghiệm thu đạt (${pendingProducts.slice(0, 3).map((item) => item.title).join("; ")}).` });
@@ -173,7 +174,7 @@ export class ProjectClosureService {
       if ((project.reports ?? []).some((item) => PENDING_REPORT_STATUSES.includes(item.status))) throw new BadRequestException({ code: "ACCEPTANCE_NOT_READY", message: "Còn báo cáo tiến độ đang chờ chuyên viên xem xét." });
       const dossier = await this.readDossier(tx, projectId, input, true);
       const now = await readTransactionClockV1(tx);
-      const round = ((project.acceptances ?? []).reduce((max: number, row: AnyRecord) => Math.max(max, row.round), 0) as number) + 1;
+      const round = ((project.acceptances ?? []).reduce((max: number, row) => Math.max(max, row.round), 0) as number) + 1;
       const created = await tx.projectAcceptance.create({ data: { projectId, round, status: R.submitted, dossier: { ...dossier, submittedAt: now.toISOString() }, submittedById: currentActor.id, submittedAt: now } });
       await this.transition(tx, currentActor, project, PROJECT_STATUSES.pendingAcceptance, "project.acceptance.submit", "Chủ nhiệm nộp hồ sơ nghiệm thu", { acceptanceId: created.id, round, evidenceFileIds: dossier.evidenceFileIds }, now);
       const officerIds = loaded.officer ? [loaded.officer.officerUserId] : await researchManagersInScope(tx, project.hostOrganizationUnitId);
@@ -293,7 +294,7 @@ export class ProjectClosureService {
       const dossier = await this.readDossier(tx, projectId, input, false);
       const now = await readTransactionClockV1(tx);
       // Giữ mọi lần nộp bản hoàn thiện: lần trước chuyển vào `previous`, tệp của mọi lần nằm trong `allEvidenceFileIds` (bị khoá).
-      const prior = (round.revisionDossier ?? null) as AnyRecord | null;
+      const prior = (round.revisionDossier ?? null);
       const previous = prior ? [...(Array.isArray(prior.previous) ? prior.previous : []), { finalReportSummary: prior.finalReportSummary, evidenceFileIds: prior.evidenceFileIds ?? [], submittedAt: prior.submittedAt ?? null, returnNote: round.revisionNote ?? null }] : [];
       const allEvidenceFileIds = [...new Set([...(Array.isArray(prior?.allEvidenceFileIds) ? prior!.allEvidenceFileIds : prior?.evidenceFileIds ?? []), ...dossier.evidenceFileIds])];
       await tx.projectAcceptance.update({ where: { id: round.id }, data: { status: R.revisionSubmitted, revisionDossier: { ...dossier, submittedAt: now.toISOString(), previous, allEvidenceFileIds } } });
@@ -418,10 +419,10 @@ export class ProjectClosureService {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       await this.authorizeOperator(tx, currentActor, project, "project.product.manage");
       if (!Array.isArray(input.products) || input.products.length > 100) throw new BadRequestException({ message: "Danh sách sản phẩm không hợp lệ (tối đa 100)." });
-      const existing = new Map(((project.products ?? []) as AnyRecord[]).map((item) => [item.id, item]));
+      const existing = new Map(((project.products ?? [])).map((item) => [item.id, item]));
       const milestoneIds = new Set((project.milestones ?? []).map((item) => item.id));
       const keep = new Set<string>();
-      const rows = input.products.map((item: AnyRecord, position: number) => {
+      const rows = input.products.map((item, position) => {
         const label = `Sản phẩm #${position + 1}`;
         const title = readRequiredText(item?.title, `${label}: nội dung công việc`, 1000);
         const productForm = Number(item?.productForm);
@@ -482,7 +483,7 @@ export class ProjectClosureService {
       if (!submittedFiles.length) throw new BadRequestException({ message: "Sản phẩm chưa có minh chứng." });
       await this.assertProjectFiles(tx, projectId, submittedFiles, PRODUCT_EVIDENCE_PURPOSE);
       if (!Array.isArray(input.members) || input.members.length < 3 || input.members.length > 5) throw new BadRequestException({ message: "Tổ chuyên gia gồm từ 3 đến 5 người." });
-      const requested = input.members.map((item: AnyRecord, index: number) => {
+      const requested = input.members.map((item, index) => {
         if (!item || typeof item.profileId !== "string" || !item.profileId.trim()) throw new BadRequestException({ message: `Thành viên #${index + 1} không hợp lệ.` });
         if (!PANEL_ROLES.includes(item.role)) throw new BadRequestException({ message: `Vai trò của thành viên #${index + 1} không hợp lệ.` });
         return { profileId: item.profileId.trim(), role: item.role as string };
@@ -522,7 +523,7 @@ export class ProjectClosureService {
       await tx.projectProductReview.update({ where: { id: review.id }, data: { status: "CONCLUDED", result: input.result, conclusion, minutesFileIds, reviewDate, recordedById: currentActor.id, concludedAt: now } });
       await tx.projectProduct.update({ where: { id: product.id }, data: { status: input.result } });
       await this.record(tx, currentActor, project, "project.product.review", `Tổ chuyên gia kết luận sản phẩm "${product.title}": ${input.result === "PASSED" ? "đạt" : "không đạt"}`, { productId: product.id, round: review.round, result: input.result }, now);
-      const remaining = ((project.products ?? []) as AnyRecord[]).filter((item) => item.id !== product.id && item.status !== "PASSED").length;
+      const remaining = ((project.products ?? [])).filter((item) => item.id !== product.id && item.status !== "PASSED").length;
       notify({ type: NOTIFICATION_TYPES.productResult, userIds: this.projects.projectRecipients(project).pi, excludeUserIds: [currentActor.id], title: `Kết quả nghiệm thu sản phẩm: ${product.title}`, message: input.result === "PASSED" ? `Sản phẩm "${product.title}" của đề tài ${label(project)} đạt.${remaining === 0 ? " Tất cả sản phẩm đã đạt — chủ nhiệm có thể nộp hồ sơ nghiệm thu cơ sở." : ` Còn ${remaining} sản phẩm chưa đạt.`}` : `Sản phẩm "${product.title}" của đề tài ${label(project)} không đạt: ${conclusion}. Chủ nhiệm hoàn thiện và nộp lại minh chứng.`, link: projectLink(projectId), metadata: { projectId, productId: product.id, result: input.result } });
       return this.reload(tx, currentActor, projectId);
     });
@@ -552,7 +553,7 @@ export class ProjectClosureService {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.authorizeOperator(tx, currentActor, project, "project.superior.send");
       const superior = project.superiorAcceptance as AnyRecord;
-      const checklist = Array.isArray(superior.checklist) ? superior.checklist as AnyRecord[] : [];
+      const checklist = Array.isArray(superior.checklist) ? superior.checklist : [];
       if (!checklist.length) throw new BadRequestException({ code: "SUPERIOR_NOT_READY", message: "Chưa có danh mục hồ sơ theo yêu cầu của cấp trên." });
       const missing = checklist.filter((item) => !item.done || !Array.isArray(item.fileIds) || !item.fileIds.length);
       if (missing.length) throw new BadRequestException({ code: "SUPERIOR_NOT_READY", message: `Còn ${missing.length} mục hồ sơ chưa hoàn thành hoặc chưa có tệp: ${missing.slice(0, 3).map((item) => item.title).join("; ")}.` });
@@ -592,7 +593,7 @@ export class ProjectClosureService {
 
   /** Đề tài cấp Bộ / Nhà nước phải được cấp trên nghiệm thu sau nghiệm thu cơ sở. */
   needsSuperior(project: LoadedProject) {
-    return SUPERIOR_ACCEPTANCE_LEVELS.includes(String((project.scopeSnapshot as AnyRecord | null)?.proposalTypeCode ?? ""));
+    return SUPERIOR_ACCEPTANCE_LEVELS.includes(String(readScopeSnapshot(project.scopeSnapshot).proposalTypeCode ?? ""));
   }
 
   /**
@@ -606,7 +607,7 @@ export class ProjectClosureService {
     }
     const facilityAcceptedOn = new Date(`${(acceptedOn instanceof Date ? (acceptedOn.getUTCHours() === 0 && acceptedOn.getUTCMinutes() === 0 ? acceptedOn.toISOString().slice(0, 10) : localDay(acceptedOn)) : String(acceptedOn).slice(0, 10))}T00:00:00.000Z`);
     const dueDate = new Date(facilityAcceptedOn.getTime() + SUPERIOR_DEADLINE_DAYS * 86_400_000);
-    const level = String((project.scopeSnapshot as AnyRecord).proposalTypeCode);
+    const level = String(readScopeSnapshot(project.scopeSnapshot).proposalTypeCode);
     await tx.projectSuperiorAcceptance.upsert({ where: { projectId: project.id }, create: { projectId: project.id, level, acceptanceId, facilityAcceptedOn, dueDate, status: SUPERIOR_STATUSES.preparing }, update: { level, acceptanceId, facilityAcceptedOn, dueDate, status: SUPERIOR_STATUSES.preparing } });
     await this.transition(tx, actor, project, PROJECT_STATUSES.pendingSuperiorAcceptance, action, `${reason}; chờ đề nghị cấp trên nghiệm thu (hạn ${vnDate(dueDate)})`, { ...facts, facilityAcceptedOn: facilityAcceptedOn.toISOString().slice(0, 10), superiorDueDate: dueDate.toISOString().slice(0, 10) }, now);
     const officer = await this.projects.currentOfficer(tx, project.id);
@@ -616,7 +617,7 @@ export class ProjectClosureService {
   private readChecklist(value: unknown) {
     if (!Array.isArray(value) || value.length > 100) throw new BadRequestException({ message: "Danh mục hồ sơ không hợp lệ (tối đa 100 mục)." });
     const ids = new Set<string>();
-    return value.map((item: AnyRecord, index: number) => {
+    return value.map((item, index) => {
       const id = typeof item?.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(item.id) ? item.id : `item-${index + 1}-${Date.now().toString(36)}`;
       if (ids.has(id)) throw new BadRequestException({ message: `Mục hồ sơ #${index + 1} bị trùng mã.` });
       ids.add(id);
@@ -661,7 +662,7 @@ export class ProjectClosureService {
   }
 
   private approvedBudget(project: LoadedProject, finance: AnyRecord | null) {
-    return readApprovedBudget(project.proposal?.budgetMetadata) || readApprovedBudget((project.scopeSnapshot as AnyRecord | null)?.budgetMetadata) || money(finance?.totalBudget);
+    return readApprovedBudget(project.proposal?.budgetMetadata) || readApprovedBudget(readScopeSnapshot(project.scopeSnapshot).budgetMetadata) || money(finance?.totalBudget);
   }
 
   private async readDossier(tx: Prisma.TransactionClient, projectId: string, input: Record<string, unknown>, initial: boolean) {
@@ -690,7 +691,7 @@ export class ProjectClosureService {
   }
 
   private async resolveProfiles(tx: Prisma.TransactionClient, project: LoadedProject, requested: Array<{ profileId: string; role: string }>, body: string) {
-    const profiles = (await tx.researcherProfile.findMany({ where: { id: { in: requested.map((member) => member.profileId) } }, select: { id: true, fullName: true, title: true, status: true, linkedUserId: true, managementOrganizationUnit: { select: { name: true } } } })) as AnyRecord[];
+    const profiles = (await tx.researcherProfile.findMany({ where: { id: { in: requested.map((member) => member.profileId) } }, select: { id: true, fullName: true, title: true, status: true, linkedUserId: true, managementOrganizationUnit: { select: { name: true } } } }));
     const byId = new Map(profiles.map((profile) => [profile.id, profile]));
     const teamUserIds = new Set((project.members ?? []).map((member) => member.userId).filter(Boolean));
     return requested.map((member) => {

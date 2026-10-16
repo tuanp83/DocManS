@@ -4,6 +4,7 @@ import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { summarizeProjectProgress } from "../approved-projects/project-progress-summary.js";
 import { HEALTH_APPLICABLE_STATUSES, localDayIndex } from "../approved-projects/project-progress.js";
+import { readScopeSnapshot } from "../approved-projects/project-snapshots.js";
 
 type AnyRecord = Record<string, any>;
 
@@ -33,7 +34,7 @@ const nonNegativeBigInt = (value: unknown): bigint | null => {
 /** Một dòng ảnh chụp từ đề tài đã tải kèm mốc, kế hoạch gốc, kỳ báo cáo, báo cáo, đánh giá sức khoẻ, kinh phí. */
 export function snapshotRow(project: SnapshotProject, snapshotDate: Date, now: Date) {
   const summary = summarizeProjectProgress(project, now);
-  const scope = (project.scopeSnapshot ?? {}) as AnyRecord;
+  const scope = readScopeSnapshot(project.scopeSnapshot);
   const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim().slice(0, 80) : null);
   // Mốc / kỳ báo cáo không được đóng khi nghiệm thu: chỉ tính trễ cho đề tài còn thực hiện, tạm dừng.
   const tracked = HEALTH_APPLICABLE_STATUSES.includes(project.status);
