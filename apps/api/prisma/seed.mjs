@@ -198,6 +198,10 @@ const users = [
 // Re-running the seed on later deploys never resets the admin's credentials.
 const PRODUCTION_ADMIN_ID = "user-admin-prod";
 
+// Production chạy seed ở MỌI lần triển khai: chỉ thêm dữ liệu nền còn thiếu, không ghi đè đơn vị, danh mục,
+// tham số và mẫu thông báo mà quản trị đã chỉnh (đổi tên, ngừng hoạt động, xoá, đổi thời gian phiên...).
+const keepAdminChanges = process.env.NODE_ENV === "production";
+
 if (process.env.NODE_ENV === "production") {
   users.length = 0;
 
@@ -385,7 +389,7 @@ function inferUnitType(name) {
 for (const [id, code, name] of organizationUnits) {
   await prisma.organizationUnit.upsert({
     where: { code },
-    update: { name, status: "active" },
+    update: keepAdminChanges ? {} : { name, status: "active" },
     create: { id, code, name, status: "active", unitType: inferUnitType(name) }
   });
 }
@@ -484,7 +488,7 @@ for (const [type, code, name] of catalogs) {
     where: {
       type_code: { type, code }
     },
-    update: { name, status: "active", deletedAt: null },
+    update: keepAdminChanges ? {} : { name, status: "active", deletedAt: null },
     create: { type, code, name, status: "active" }
   });
 }
@@ -547,13 +551,13 @@ if (process.env.NODE_ENV !== "production") {
 
 await prisma.systemParameter.upsert({
   where: { key: "session_timeout_minutes" },
-  update: { value: "720", label: "Thời gian phiên đăng nhập" },
+  update: keepAdminChanges ? {} : { value: "720", label: "Thời gian phiên đăng nhập" },
   create: { key: "session_timeout_minutes", value: "720", label: "Thời gian phiên đăng nhập" }
 });
 
 await prisma.notificationTemplate.upsert({
   where: { key: "user_created" },
-  update: {
+  update: keepAdminChanges ? {} : {
     subject: "Tài khoản RTMS đã được tạo",
     body: "Tài khoản của đồng chí đã được tạo trên hệ thống RTMS.",
     status: "active"
@@ -568,7 +572,7 @@ await prisma.notificationTemplate.upsert({
 
 await prisma.notificationTemplate.upsert({
   where: { key: "researcher_account_activation" },
-  update: {
+  update: keepAdminChanges ? {} : {
     subject: "Kích hoạt tài khoản DocManS",
     body: "Xin chào {{displayName}}, vui lòng thiết lập mật khẩu để kích hoạt tài khoản DocManS.",
     status: "active"

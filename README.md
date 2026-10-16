@@ -155,6 +155,8 @@ docker compose down
 
 The provided Compose configuration is a development starting point. Before a production deployment, review secrets, TLS termination, database backups, storage retention, trusted proxy settings, and institution-specific access policies.
 
+For a production server, follow the deployment and operations runbook (Vietnamese): [docs/van-hanh/trien-khai-va-van-hanh.md](docs/van-hanh/trien-khai-va-van-hanh.md). It covers the readiness assessment, server preparation, first deployment, data initialization, daily operations, backups, upgrades and troubleshooting.
+
 ## Project Structure
 
 ```text

@@ -2,6 +2,11 @@
 # only variables defined in the container environment (SERVER_NAME) are substituted; nginx's own
 # $host, $scheme, ... are left untouched.
 
+# X-Forwarded-For được GHI ĐÈ bằng địa chỉ kết nối thật ($remote_addr), không nối tiếp giá trị trình duyệt gửi:
+# trong mạng nội bộ (dải IP riêng được API tin cậy qua TRUST_PROXY), người dùng không tự đặt được IP để vượt giới
+# hạn đăng nhập sai hay làm sai IP trong nhật ký. Nếu đặt thêm một bộ cân bằng tải phía trước nginx, đổi lại
+# thành $proxy_add_x_forwarded_for và chỉ tin địa chỉ của bộ cân bằng tải đó.
+
 # Giới hạn tốc độ: quá ngưỡng thì xếp hàng (tăng độ trễ) trước, chỉ trả 429 khi vượt cả hàng đợi.
 # API tính theo cookie phiên vì nhiều người dùng nội bộ có thể đi chung một IP qua NAT; chưa đăng nhập thì theo IP.
 map $cookie_rtms_session $api_limit_key {
@@ -61,9 +66,15 @@ server {
     ssl_session_cache shared:SSL:10m;
     ssl_session_timeout 1d;
 
+    # Không lộ phiên bản nginx trong header và trang lỗi.
+    server_tokens off;
+
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
+    # Chống clickjacking: không cho trang khác nhúng hệ thống vào iframe.
+    add_header X-Frame-Options DENY always;
+    add_header Content-Security-Policy "frame-ancestors 'none'" always;
 
     # FILE_MAX_UPLOAD_BYTES defaults to 10 MB; 11m leaves room for multipart overhead.
     # Raise both together (backend remains authoritative).
@@ -86,7 +97,7 @@ server {
         proxy_set_header X-Request-Id $request_id;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
@@ -100,7 +111,7 @@ server {
         proxy_set_header X-Request-Id $request_id;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 120s;
     }
@@ -113,7 +124,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
