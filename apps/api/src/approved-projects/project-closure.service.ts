@@ -8,7 +8,7 @@ import { readTransactionClockV1 } from "../permissions/authorization-v1.service.
 import { APPROVAL_KINDS, assertReadyForLeadership, boardReviewEvent, closeApprovalSubmission, openApprovalSubmission } from "../proposals-shared/approval-routing.js";
 import { readAcceptanceMembers, readAcceptanceScores, readCouncilType, readOptionalText, readResolution, type AcceptanceMemberInput } from "../proposal-evaluations/acceptance-council.js";
 import { computeDisbursementTotals, readApprovedBudget, readDisbursementInput, stampMilestoneDates } from "../proposal-evaluations/disbursement.js";
-import { ApprovedProjectsService, closureFacts, openAcceptanceRound, type NotifyFn } from "./approved-projects.service.js";
+import { ApprovedProjectsService, closureFacts, openAcceptanceRound, type LoadedProject, type NotifyFn } from "./approved-projects.service.js";
 import { ACCEPTANCE_ROUND_STATUSES as R, LIQUIDATION_STATUSES, PROJECT_STATUSES, SUPERIOR_ACCEPTANCE_LEVELS, SUPERIOR_STATUSES } from "./project-capability-v1.js";
 import { money, readDay, readFileIds, readMoney, readRequiredText, toDisbursementRecord } from "./project-closure-model.js";
 
@@ -55,7 +55,7 @@ export class ProjectClosureService {
     return {
       projectId,
       disbursement: toDisbursementRecord(finance, tranches, costItems, this.approvedBudget(loaded.project, null)),
-      projectMilestones: (loaded.project.milestones ?? []).map((item: AnyRecord) => ({ id: item.id, title: item.title, dueDate: item.dueDate?.toISOString?.() ?? null, status: item.status })),
+      projectMilestones: (loaded.project.milestones ?? []).map((item) => ({ id: item.id, title: item.title, dueDate: item.dueDate?.toISOString?.() ?? null, status: item.status })),
       canManage: loaded.capability.allowedActions.includes("project.finance.manage"),
       manageDeniedReason: loaded.capability.blockedActions.find((item: AnyRecord) => item.action === "project.finance.manage")?.reason ?? null,
       contextVersion: loaded.capability.contextVersion
@@ -66,7 +66,7 @@ export class ProjectClosureService {
   async councilCandidates(actor: SafeUserContext, projectId: string) {
     const loaded = await this.projects.loadAuthorized(this.prisma, actor, projectId);
     if (!loaded.capability.allowedActions.includes("project.product.review")) this.assertAllowed(loaded.capability, "project.acceptance.council.propose");
-    const teamUserIds = new Set((loaded.project.members ?? []).map((member: AnyRecord) => member.userId).filter(Boolean));
+    const teamUserIds = new Set((loaded.project.members ?? []).map((member) => member.userId).filter(Boolean));
     const profiles = (await this.prisma.researcherProfile.findMany({
       where: { status: "ACTIVE" },
       select: { id: true, fullName: true, title: true, linkedUserId: true, managementOrganizationUnitId: true, managementOrganizationUnit: { select: { name: true } } },
@@ -89,7 +89,7 @@ export class ProjectClosureService {
 
   // ---- Kinh phí -----------------------------------------------------------------------------------
 
-  async updateFinance(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async updateFinance(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.projects.loadAuthorized(tx, currentActor, projectId, project);
       this.assertAllowed(loaded.capability, "project.finance.manage");
@@ -105,7 +105,7 @@ export class ProjectClosureService {
       const totalBudget = this.approvedBudget(project, previous);
       const accepted = readDisbursementInput(input, totalBudget);
       const milestones = stampMilestoneDates(accepted.milestones, previousRecord);
-      const projectMilestoneIds = new Set((project.milestones ?? []).map((item: AnyRecord) => item.id));
+      const projectMilestoneIds = new Set((project.milestones ?? []).map((item) => item.id));
       for (const milestone of milestones) {
         if (milestone.projectMilestoneId && !projectMilestoneIds.has(milestone.projectMilestoneId)) {
           throw new BadRequestException({ code: "DISBURSEMENT_INVALID", message: `Đợt "${milestone.name}" gắn với mốc không thuộc đề tài.` });
@@ -159,7 +159,7 @@ export class ProjectClosureService {
   // ---- Nghiệm thu ---------------------------------------------------------------------------------
 
   /** Chủ nhiệm nộp hồ sơ nghiệm thu: báo cáo tổng kết, sản phẩm, tự đánh giá và tệp minh chứng. */
-  async submitAcceptance(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async submitAcceptance(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.projects.loadAuthorized(tx, currentActor, projectId, project);
       this.assertAllowed(loaded.capability, "project.acceptance.submit");
@@ -169,8 +169,8 @@ export class ProjectClosureService {
       if (!products.length) throw new BadRequestException({ code: "ACCEPTANCE_NOT_READY", message: "Đề tài chưa có danh sách sản phẩm (nội dung công việc). Chuyên viên phụ trách cần nhập danh sách sản phẩm theo thuyết minh." });
       const pendingProducts = products.filter((item) => item.status !== "PASSED");
       if (pendingProducts.length) throw new BadRequestException({ code: "ACCEPTANCE_NOT_READY", message: `Còn ${pendingProducts.length} sản phẩm chưa được tổ chuyên gia nghiệm thu đạt (${pendingProducts.slice(0, 3).map((item) => item.title).join("; ")}).` });
-      if ((project.requests ?? []).some((item: AnyRecord) => OPEN_REQUEST_STATUSES.includes(item.status))) throw new BadRequestException({ code: "ACCEPTANCE_NOT_READY", message: "Còn yêu cầu điều chỉnh/gia hạn đang xử lý." });
-      if ((project.reports ?? []).some((item: AnyRecord) => PENDING_REPORT_STATUSES.includes(item.status))) throw new BadRequestException({ code: "ACCEPTANCE_NOT_READY", message: "Còn báo cáo tiến độ đang chờ chuyên viên xem xét." });
+      if ((project.requests ?? []).some((item) => OPEN_REQUEST_STATUSES.includes(item.status))) throw new BadRequestException({ code: "ACCEPTANCE_NOT_READY", message: "Còn yêu cầu điều chỉnh/gia hạn đang xử lý." });
+      if ((project.reports ?? []).some((item) => PENDING_REPORT_STATUSES.includes(item.status))) throw new BadRequestException({ code: "ACCEPTANCE_NOT_READY", message: "Còn báo cáo tiến độ đang chờ chuyên viên xem xét." });
       const dossier = await this.readDossier(tx, projectId, input, true);
       const now = await readTransactionClockV1(tx);
       const round = ((project.acceptances ?? []).reduce((max: number, row: AnyRecord) => Math.max(max, row.round), 0) as number) + 1;
@@ -183,7 +183,7 @@ export class ProjectClosureService {
   }
 
   /** Chuyên viên trả hồ sơ nghiệm thu chưa đạt yêu cầu; đề tài quay lại "đang thực hiện". */
-  async returnAcceptance(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async returnAcceptance(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.authorizeOperator(tx, currentActor, project, "project.acceptance.return");
       const round = this.currentRound(project, [R.submitted]);
@@ -196,7 +196,7 @@ export class ProjectClosureService {
     });
   }
 
-  async proposeCouncil(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async proposeCouncil(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       await this.authorizeOperator(tx, currentActor, project, "project.acceptance.council.propose");
       const round = this.currentRound(project, [R.submitted, R.councilProposed]);
@@ -221,7 +221,7 @@ export class ProjectClosureService {
   }
 
   /** Lãnh đạo ký quyết định thành lập hội đồng nghiệm thu (số quyết định tự cấp nếu không nhập). */
-  async establishCouncil(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async establishCouncil(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     try {
       return await this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
         const loaded = await this.projects.loadAuthorized(tx, currentActor, projectId, project);
@@ -250,7 +250,7 @@ export class ProjectClosureService {
   }
 
   /** Biên bản họp hội đồng: điểm bắt buộc, kết luận đạt / hoàn thiện / không đạt. */
-  async recordMinutes(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async recordMinutes(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.authorizeOperator(tx, currentActor, project, "project.acceptance.minutes.record");
       const round = this.currentRound(project, [R.councilEstablished]);
@@ -285,7 +285,7 @@ export class ProjectClosureService {
     });
   }
 
-  async submitRevision(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async submitRevision(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.projects.loadAuthorized(tx, currentActor, projectId, project);
       this.assertAllowed(loaded.capability, "project.acceptance.revision.submit");
@@ -304,7 +304,7 @@ export class ProjectClosureService {
   }
 
   /** Chuyên viên xác nhận bản hoàn thiện (đề tài được nghiệm thu) hoặc yêu cầu hoàn thiện tiếp. */
-  async confirmRevision(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async confirmRevision(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.authorizeOperator(tx, currentActor, project, "project.acceptance.revision.confirm");
       const round = this.currentRound(project, [R.revisionSubmitted]);
@@ -325,7 +325,7 @@ export class ProjectClosureService {
 
   // ---- Thanh lý và đóng ---------------------------------------------------------------------------
 
-  async prepareLiquidation(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async prepareLiquidation(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       await this.authorizeOperator(tx, currentActor, project, "project.liquidation.prepare");
       const finance = await tx.projectFinance.findUnique({ where: { projectId } });
@@ -356,7 +356,7 @@ export class ProjectClosureService {
   }
 
   /** Lãnh đạo phê duyệt thanh lý: số liệu chốt lại theo kinh phí hiện tại và phải cân (quyết toán + thu hồi = đã cấp). */
-  async approveLiquidation(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async approveLiquidation(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     try {
       return await this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
         const loaded = await this.projects.loadAuthorized(tx, currentActor, projectId, project);
@@ -366,7 +366,7 @@ export class ProjectClosureService {
         if (!liquidation || liquidation.status !== LIQUIDATION_STATUSES.draft) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chưa có dự thảo biên bản thanh lý." });
         await assertReadyForLeadership(tx, currentActor, { kind: APPROVAL_KINDS.liquidation, subjectType: "project", subjectId: projectId });
         // Tệp kèm dự thảo có thể đã bị xoá sau khi lập: kiểm tra lại trước khi khoá vĩnh viễn.
-        await this.assertProjectFiles(tx, projectId, Array.isArray(liquidation.evidenceFileIds) ? liquidation.evidenceFileIds : [], LIQUIDATION_RECORD_PURPOSE);
+        await this.assertProjectFiles(tx, projectId, Array.isArray(liquidation.evidenceFileIds) ? (liquidation.evidenceFileIds as string[]) : [], LIQUIDATION_RECORD_PURPOSE);
         const finance = await tx.projectFinance.findUnique({ where: { projectId } });
         const totalDisbursed = money(finance?.totalDisbursed);
         const totalSettled = money(finance?.totalSettled);
@@ -393,10 +393,10 @@ export class ProjectClosureService {
     }
   }
 
-  async closeProject(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async closeProject(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.authorizeOperator(tx, currentActor, project, "project.close");
-      if ((project.requests ?? []).some((item: AnyRecord) => OPEN_REQUEST_STATUSES.includes(item.status))) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Còn yêu cầu điều chỉnh/gia hạn chưa xử lý xong." });
+      if ((project.requests ?? []).some((item) => OPEN_REQUEST_STATUSES.includes(item.status))) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Còn yêu cầu điều chỉnh/gia hạn chưa xử lý xong." });
       const note = readOptionalText(input.note, "Ghi chú đóng đề tài", 2000) || null;
       const now = await readTransactionClockV1(tx);
       await tx.approvedProject.update({ where: { id: projectId }, data: { status: PROJECT_STATUSES.closed, closedAt: now, closedById: currentActor.id, closureNote: note, aggregateVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
@@ -414,12 +414,12 @@ export class ProjectClosureService {
    * Danh sách sản phẩm = các nội dung công việc trong thuyết minh (dạng 1–6). Chuyên viên phụ trách lập và sửa;
    * sản phẩm đã nộp minh chứng không đổi tên / dạng và không xoá được.
    */
-  async saveProducts(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async saveProducts(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       await this.authorizeOperator(tx, currentActor, project, "project.product.manage");
       if (!Array.isArray(input.products) || input.products.length > 100) throw new BadRequestException({ message: "Danh sách sản phẩm không hợp lệ (tối đa 100)." });
       const existing = new Map(((project.products ?? []) as AnyRecord[]).map((item) => [item.id, item]));
-      const milestoneIds = new Set((project.milestones ?? []).map((item: AnyRecord) => item.id));
+      const milestoneIds = new Set((project.milestones ?? []).map((item) => item.id));
       const keep = new Set<string>();
       const rows = input.products.map((item: AnyRecord, position: number) => {
         const label = `Sản phẩm #${position + 1}`;
@@ -449,13 +449,13 @@ export class ProjectClosureService {
         else await tx.projectProduct.create({ data: { projectId, status: "PLANNED", position: row.position, title: row.title, productForm: row.productForm, requirements: row.requirements, milestoneId: row.milestoneId, createdById: currentActor.id } });
       }
       const now = await readTransactionClockV1(tx);
-      await this.record(tx, currentActor, project, "project.product.manage", "Cập nhật danh sách sản phẩm theo thuyết minh", { products: rows.map((row: AnyRecord) => ({ title: row.title, productForm: row.productForm, requirements: row.requirements })), removed: removed.map((id) => ({ id, title: existing.get(id)?.title, productForm: existing.get(id)?.productForm })) }, now);
+      await this.record(tx, currentActor, project, "project.product.manage", "Cập nhật danh sách sản phẩm theo thuyết minh", { products: rows.map((row) => ({ title: row.title, productForm: row.productForm, requirements: row.requirements })), removed: removed.map((id) => ({ id, title: existing.get(id)?.title, productForm: existing.get(id)?.productForm })) }, now);
       return this.reload(tx, currentActor, projectId);
     });
   }
 
   /** Chủ nhiệm nộp minh chứng một sản phẩm (lần đầu hoặc nộp lại sau khi tổ chuyên gia kết luận không đạt). */
-  async submitProduct(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async submitProduct(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.projects.loadAuthorized(tx, currentActor, projectId, project);
       this.assertAllowed(loaded.capability, "project.product.submit");
@@ -473,7 +473,7 @@ export class ProjectClosureService {
   }
 
   /** Chuyên viên lập tổ chuyên gia 3–5 người (đúng một tổ trưởng; không có người tham gia đề tài). */
-  async formProductPanel(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async formProductPanel(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       await this.authorizeOperator(tx, currentActor, project, "project.product.review");
       const product = this.findProduct(project, input.productId, ["SUBMITTED"]);
@@ -487,8 +487,8 @@ export class ProjectClosureService {
         if (!PANEL_ROLES.includes(item.role)) throw new BadRequestException({ message: `Vai trò của thành viên #${index + 1} không hợp lệ.` });
         return { profileId: item.profileId.trim(), role: item.role as string };
       });
-      if (new Set(requested.map((item: AnyRecord) => item.profileId)).size !== requested.length) throw new BadRequestException({ message: "Một người không thể có tên hai lần trong tổ chuyên gia." });
-      if (requested.filter((item: AnyRecord) => item.role === "LEADER").length !== 1) throw new BadRequestException({ message: "Tổ chuyên gia phải có đúng một tổ trưởng." });
+      if (new Set(requested.map((item) => item.profileId)).size !== requested.length) throw new BadRequestException({ message: "Một người không thể có tên hai lần trong tổ chuyên gia." });
+      if (requested.filter((item) => item.role === "LEADER").length !== 1) throw new BadRequestException({ message: "Tổ chuyên gia phải có đúng một tổ trưởng." });
       const members = await this.resolveProfiles(tx, project, requested, "tổ chuyên gia nghiệm thu sản phẩm");
       const now = await readTransactionClockV1(tx);
       const round = ((product.reviews ?? []) as AnyRecord[]).reduce((max, row) => Math.max(max, row.round), 0) + 1;
@@ -505,7 +505,7 @@ export class ProjectClosureService {
   }
 
   /** Chuyên viên ghi kết luận của tổ chuyên gia: đạt, hoặc không đạt (chủ nhiệm hoàn thiện và nộp lại). */
-  async recordProductReview(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async recordProductReview(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       await this.authorizeOperator(tx, currentActor, project, "project.product.review");
       const product = this.findProduct(project, input.productId, ["UNDER_REVIEW"]);
@@ -531,7 +531,7 @@ export class ProjectClosureService {
   // ---- Bước 3: đề nghị cấp trên nghiệm thu (cấp Bộ / Nhà nước) ------------------------------------
 
   /** Chuyên viên cập nhật danh mục hồ sơ cấp trên yêu cầu (tự đặt tên từng mục) và thông tin công văn đề nghị. */
-  async saveSuperiorDossier(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async saveSuperiorDossier(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       await this.authorizeOperator(tx, currentActor, project, "project.superior.prepare");
       const checklist = this.readChecklist(input.checklist);
@@ -548,7 +548,7 @@ export class ProjectClosureService {
   }
 
   /** Gửi công văn đề nghị: đủ số, ngày, tệp công văn và mọi mục hồ sơ đã hoàn thành. */
-  async sendSuperiorRequest(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async sendSuperiorRequest(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.authorizeOperator(tx, currentActor, project, "project.superior.send");
       const superior = project.superiorAcceptance as AnyRecord;
@@ -569,7 +569,7 @@ export class ProjectClosureService {
   }
 
   /** Ghi kết quả nghiệm thu của cấp trên: đạt → đã nghiệm thu; không đạt → không đạt. */
-  async recordSuperiorResult(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async recordSuperiorResult(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.authorizeOperator(tx, currentActor, project, "project.superior.result");
       if (input.result !== "PASSED" && input.result !== "FAILED") throw new BadRequestException({ message: "Kết quả phải là đạt (PASSED) hoặc không đạt (FAILED)." });
@@ -591,7 +591,7 @@ export class ProjectClosureService {
   }
 
   /** Đề tài cấp Bộ / Nhà nước phải được cấp trên nghiệm thu sau nghiệm thu cơ sở. */
-  needsSuperior(project: AnyRecord) {
+  needsSuperior(project: LoadedProject) {
     return SUPERIOR_ACCEPTANCE_LEVELS.includes(String((project.scopeSnapshot as AnyRecord | null)?.proposalTypeCode ?? ""));
   }
 
@@ -599,7 +599,7 @@ export class ProjectClosureService {
    * Nghiệm thu cơ sở đạt. Đề tài cấp Học viện: đã nghiệm thu. Cấp Bộ / Nhà nước: chờ cấp trên, hạn gửi đề nghị
    * 30 ngày kể từ ngày nghiệm thu cơ sở xong.
    */
-  private async concludeFacilityAcceptance(tx: Prisma.TransactionClient, actor: SafeUserContext, project: AnyRecord, acceptanceId: string, acceptedOn: Date, action: string, reason: string, facts: AnyRecord, now: Date, notify: NotifyFn) {
+  private async concludeFacilityAcceptance(tx: Prisma.TransactionClient, actor: SafeUserContext, project: LoadedProject, acceptanceId: string, acceptedOn: Date, action: string, reason: string, facts: AnyRecord, now: Date, notify: NotifyFn) {
     if (!this.needsSuperior(project)) {
       await this.transition(tx, actor, project, PROJECT_STATUSES.accepted, action, reason, facts, now);
       return;
@@ -630,7 +630,7 @@ export class ProjectClosureService {
     });
   }
 
-  private findProduct(project: AnyRecord, productId: unknown, allowed: string[]) {
+  private findProduct(project: LoadedProject, productId: unknown, allowed: string[]) {
     const product = ((project.products ?? []) as AnyRecord[]).find((item) => item.id === productId);
     if (!product) throw new BadRequestException({ message: "Không tìm thấy sản phẩm của đề tài." });
     if (!allowed.includes(product.status)) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Sản phẩm không ở bước cho phép thao tác này." });
@@ -647,24 +647,24 @@ export class ProjectClosureService {
   }
 
   /** Thao tác của chuyên viên phụ trách: capability + kiểm tra lại phân công, xung đột lợi ích trong giao dịch. */
-  private async authorizeOperator(tx: Prisma.TransactionClient, actor: SafeUserContext, project: AnyRecord, action: string) {
+  private async authorizeOperator(tx: Prisma.TransactionClient, actor: SafeUserContext, project: LoadedProject, action: string) {
     const loaded = await this.projects.loadAuthorized(tx, actor, project.id, project);
     this.assertAllowed(loaded.capability, action);
     await this.projects.assertOfficer(tx, actor, project);
     return loaded;
   }
 
-  private currentRound(project: AnyRecord, allowed: string[]) {
+  private currentRound(project: LoadedProject, allowed: string[]) {
     const round = closureFacts(project).latestAcceptance;
     if (!round || !allowed.includes(round.status)) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Vòng nghiệm thu không ở bước cho phép thao tác này." });
     return round;
   }
 
-  private approvedBudget(project: AnyRecord, finance: AnyRecord | null) {
+  private approvedBudget(project: LoadedProject, finance: AnyRecord | null) {
     return readApprovedBudget(project.proposal?.budgetMetadata) || readApprovedBudget((project.scopeSnapshot as AnyRecord | null)?.budgetMetadata) || money(finance?.totalBudget);
   }
 
-  private async readDossier(tx: Prisma.TransactionClient, projectId: string, input: AnyRecord, initial: boolean) {
+  private async readDossier(tx: Prisma.TransactionClient, projectId: string, input: Record<string, unknown>, initial: boolean) {
     const evidenceFileIds = readFileIds(input.evidenceFileIds, "Tệp hồ sơ nghiệm thu");
     if (!evidenceFileIds.length) throw new BadRequestException({ message: "Cần đính kèm ít nhất một tệp (báo cáo tổng kết hoặc bản hoàn thiện)." });
     await this.assertProjectFiles(tx, projectId, evidenceFileIds, ACCEPTANCE_DOSSIER_PURPOSE);
@@ -685,14 +685,14 @@ export class ProjectClosureService {
   }
 
   /** Thành viên hội đồng lấy từ hồ sơ nhà khoa học; chủ nhiệm và thành viên đề tài (kể cả đã kết thúc) không được tham gia. */
-  private async resolveCouncilMembers(tx: Prisma.TransactionClient, project: AnyRecord, requested: AcceptanceMemberInput[]) {
+  private async resolveCouncilMembers(tx: Prisma.TransactionClient, project: LoadedProject, requested: AcceptanceMemberInput[]) {
     return this.resolveProfiles(tx, project, requested, "hội đồng nghiệm thu") as Promise<Array<{ profileId: string; fullName: string; academicTitle?: string; unit?: string; userId?: string; role: AcceptanceMemberInput["role"] }>>;
   }
 
-  private async resolveProfiles(tx: Prisma.TransactionClient, project: AnyRecord, requested: Array<{ profileId: string; role: string }>, body: string) {
+  private async resolveProfiles(tx: Prisma.TransactionClient, project: LoadedProject, requested: Array<{ profileId: string; role: string }>, body: string) {
     const profiles = (await tx.researcherProfile.findMany({ where: { id: { in: requested.map((member) => member.profileId) } }, select: { id: true, fullName: true, title: true, status: true, linkedUserId: true, managementOrganizationUnit: { select: { name: true } } } })) as AnyRecord[];
     const byId = new Map(profiles.map((profile) => [profile.id, profile]));
-    const teamUserIds = new Set((project.members ?? []).map((member: AnyRecord) => member.userId).filter(Boolean));
+    const teamUserIds = new Set((project.members ?? []).map((member) => member.userId).filter(Boolean));
     return requested.map((member) => {
       const profile = byId.get(member.profileId);
       if (!profile || profile.status !== "ACTIVE") throw new BadRequestException({ code: "ACCEPTANCE_INVALID", message: `Có thành viên ${body} không tồn tại hoặc hồ sơ đã ngừng hoạt động.` });
@@ -726,14 +726,14 @@ export class ProjectClosureService {
     throw new ConflictException({ code: "DOCUMENT_NUMBER_TAKEN", message: kind.takenMessage });
   }
 
-  private async transition(tx: any, actor: SafeUserContext, project: AnyRecord, toStatus: string, action: string, reason: string, facts: AnyRecord, now: Date) {
+  private async transition(tx: any, actor: SafeUserContext, project: LoadedProject, toStatus: string, action: string, reason: string, facts: AnyRecord, now: Date) {
     await tx.approvedProject.update({ where: { id: project.id }, data: { status: toStatus, aggregateVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
     await tx.projectHistory.create({ data: { projectId: project.id, actorId: actor.id, action, fromStatus: project.status, toStatus, reason, beforeFacts: { status: project.status }, afterFacts: { status: toStatus, ...facts }, createdAt: now } });
     await new AuditLogService(tx).record({ action, result: "success", actorId: actor.id, targetEntity: "approved-project", targetEntityId: project.id, username: actor.username, reason, beforeFacts: { status: project.status }, afterFacts: { status: toStatus, ...facts } });
   }
 
   /** Bước nghiệp vụ không đổi trạng thái đề tài: vẫn tăng aggregateVersion để giao diện cũ phải tải lại. */
-  private async record(tx: any, actor: SafeUserContext, project: AnyRecord, action: string, reason: string, facts: AnyRecord, now: Date) {
+  private async record(tx: any, actor: SafeUserContext, project: LoadedProject, action: string, reason: string, facts: AnyRecord, now: Date) {
     await tx.approvedProject.update({ where: { id: project.id }, data: { aggregateVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
     await tx.projectHistory.create({ data: { projectId: project.id, actorId: actor.id, action, reason, afterFacts: facts, createdAt: now } });
     await new AuditLogService(tx).record({ action, result: "success", actorId: actor.id, targetEntity: "approved-project", targetEntityId: project.id, username: actor.username, reason, afterFacts: facts });

@@ -198,7 +198,7 @@ export class DashboardAnalyticsService {
     this.assertActor(actor);
     // Đề tài có phân công chuyên viên mâu thuẫn (409) bị bỏ qua thay vì làm hỏng toàn bộ dashboard.
     const responses = await this.projects.listProjects(actor, { skipUnresolved: true });
-    const projects = await this.withMilitaryScope(responses.map((response: AnyRecord) => toDashboardProject(response, now)));
+    const projects = await this.withMilitaryScope(responses.map((response) => toDashboardProject(response, now)));
     if (!isResearchOversightAuthority(actor) || !projects.length) return projects;
     // Các Phó Giám đốc chỉ theo dõi không đọc kinh phí từng đề tài (project.finance.read), nhưng được xem báo cáo
     // kinh phí tổng hợp: nạp kinh phí để cộng vào số tổng, còn các dòng chi tiết để trống (drillDown).
