@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
@@ -598,7 +599,7 @@ export class ProjectClosureService {
    * Nghiệm thu cơ sở đạt. Đề tài cấp Học viện: đã nghiệm thu. Cấp Bộ / Nhà nước: chờ cấp trên, hạn gửi đề nghị
    * 30 ngày kể từ ngày nghiệm thu cơ sở xong.
    */
-  private async concludeFacilityAcceptance(tx: any, actor: SafeUserContext, project: AnyRecord, acceptanceId: string, acceptedOn: Date, action: string, reason: string, facts: AnyRecord, now: Date, notify: NotifyFn) {
+  private async concludeFacilityAcceptance(tx: Prisma.TransactionClient, actor: SafeUserContext, project: AnyRecord, acceptanceId: string, acceptedOn: Date, action: string, reason: string, facts: AnyRecord, now: Date, notify: NotifyFn) {
     if (!this.needsSuperior(project)) {
       await this.transition(tx, actor, project, PROJECT_STATUSES.accepted, action, reason, facts, now);
       return;
@@ -646,7 +647,7 @@ export class ProjectClosureService {
   }
 
   /** Thao tác của chuyên viên phụ trách: capability + kiểm tra lại phân công, xung đột lợi ích trong giao dịch. */
-  private async authorizeOperator(tx: any, actor: SafeUserContext, project: AnyRecord, action: string) {
+  private async authorizeOperator(tx: Prisma.TransactionClient, actor: SafeUserContext, project: AnyRecord, action: string) {
     const loaded = await this.projects.loadAuthorized(tx, actor, project.id, project);
     this.assertAllowed(loaded.capability, action);
     await this.projects.assertOfficer(tx, actor, project);
@@ -663,7 +664,7 @@ export class ProjectClosureService {
     return readApprovedBudget(project.proposal?.budgetMetadata) || readApprovedBudget((project.scopeSnapshot as AnyRecord | null)?.budgetMetadata) || money(finance?.totalBudget);
   }
 
-  private async readDossier(tx: any, projectId: string, input: AnyRecord, initial: boolean) {
+  private async readDossier(tx: Prisma.TransactionClient, projectId: string, input: AnyRecord, initial: boolean) {
     const evidenceFileIds = readFileIds(input.evidenceFileIds, "Tệp hồ sơ nghiệm thu");
     if (!evidenceFileIds.length) throw new BadRequestException({ message: "Cần đính kèm ít nhất một tệp (báo cáo tổng kết hoặc bản hoàn thiện)." });
     await this.assertProjectFiles(tx, projectId, evidenceFileIds, ACCEPTANCE_DOSSIER_PURPOSE);
@@ -676,7 +677,7 @@ export class ProjectClosureService {
   }
 
   /** Tệp phải thuộc chính đề tài, còn hoạt động và đúng loại (hồ sơ nghiệm thu / biên bản thanh lý): tệp đã gắn sẽ bị khoá vĩnh viễn. */
-  private async assertProjectFiles(tx: any, projectId: string, fileIds: string[], filePurpose: string) {
+  private async assertProjectFiles(tx: Prisma.TransactionClient, projectId: string, fileIds: string[], filePurpose: string) {
     const ids = [...new Set(fileIds)];
     if (!ids.length) return;
     const files = await tx.fileRecord.findMany({ where: { id: { in: ids }, relatedEntityType: "approved_project", relatedEntityId: projectId, filePurpose, status: "active", deletedAt: null }, select: { id: true } });
@@ -684,11 +685,11 @@ export class ProjectClosureService {
   }
 
   /** Thành viên hội đồng lấy từ hồ sơ nhà khoa học; chủ nhiệm và thành viên đề tài (kể cả đã kết thúc) không được tham gia. */
-  private async resolveCouncilMembers(tx: any, project: AnyRecord, requested: AcceptanceMemberInput[]) {
+  private async resolveCouncilMembers(tx: Prisma.TransactionClient, project: AnyRecord, requested: AcceptanceMemberInput[]) {
     return this.resolveProfiles(tx, project, requested, "hội đồng nghiệm thu") as Promise<Array<{ profileId: string; fullName: string; academicTitle?: string; unit?: string; userId?: string; role: AcceptanceMemberInput["role"] }>>;
   }
 
-  private async resolveProfiles(tx: any, project: AnyRecord, requested: Array<{ profileId: string; role: string }>, body: string) {
+  private async resolveProfiles(tx: Prisma.TransactionClient, project: AnyRecord, requested: Array<{ profileId: string; role: string }>, body: string) {
     const profiles = (await tx.researcherProfile.findMany({ where: { id: { in: requested.map((member) => member.profileId) } }, select: { id: true, fullName: true, title: true, status: true, linkedUserId: true, managementOrganizationUnit: { select: { name: true } } } })) as AnyRecord[];
     const byId = new Map(profiles.map((profile) => [profile.id, profile]));
     const teamUserIds = new Set((project.members ?? []).map((member: AnyRecord) => member.userId).filter(Boolean));
@@ -700,7 +701,7 @@ export class ProjectClosureService {
     });
   }
 
-  private async acceptanceNumberTaken(tx: any, number: string, acceptanceId: string, proposalId: string) {
+  private async acceptanceNumberTaken(tx: Prisma.TransactionClient, number: string, acceptanceId: string, proposalId: string) {
     if (await tx.projectAcceptance.findFirst({ where: { decisionNumber: number, NOT: { id: acceptanceId } }, select: { id: true } })) return true;
     // Số đã cấp theo luồng cũ (trên đề xuất chưa có đề tài) vẫn được giữ chỗ.
     const legacy = await tx.$queryRaw`SELECT id FROM research_proposals WHERE id <> ${proposalId} AND acceptance_council_metadata->>'decisionNumber' = ${number} LIMIT 1`;
@@ -738,7 +739,7 @@ export class ProjectClosureService {
     await new AuditLogService(tx).record({ action, result: "success", actorId: actor.id, targetEntity: "approved-project", targetEntityId: project.id, username: actor.username, reason, afterFacts: facts });
   }
 
-  private async reload(tx: any, actor: SafeUserContext, projectId: string) {
+  private async reload(tx: Prisma.TransactionClient, actor: SafeUserContext, projectId: string) {
     const loaded = await this.projects.loadAuthorized(tx, actor, projectId);
     return this.projects.toProjectResponse(loaded.project, loaded.capability, loaded.officer, actor);
   }

@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
@@ -114,7 +115,7 @@ export class ApprovalRoutingService {
     return this.toResponse(submission);
   }
 
-  private async lockPending(tx: any, submissionId: string) {
+  private async lockPending(tx: Prisma.TransactionClient, submissionId: string) {
     await tx.$queryRaw`SELECT id FROM approval_submissions WHERE id = ${submissionId} FOR UPDATE`;
     const submission = (await tx.approvalSubmission.findUnique({ where: { id: submissionId } })) as ApprovalSubmissionRow | null;
     if (!submission) throw new NotFoundException({ message: "Không tìm thấy tờ trình." });
@@ -132,12 +133,12 @@ export class ApprovalRoutingService {
     if (submission.submittedById === actor.id) throw new ForbiddenException({ message: "Không tự rà soát tờ trình của chính mình." });
   }
 
-  private async usersInScope(tx: any, systemRole: string, organizationUnitId: string) {
+  private async usersInScope(tx: Prisma.TransactionClient, systemRole: string, organizationUnitId: string) {
     const rows = (await tx.user.findMany({ where: { status: "active", systemRole, organizationScopes: { some: { organizationUnitId } } }, select: { id: true } })) as Array<{ id: string }>;
     return rows.map((row) => row.id);
   }
 
-  private async signers(tx: any, signer: string) {
+  private async signers(tx: Prisma.TransactionClient, signer: string) {
     const roles = signer === "DIRECTOR" ? ["LEADERSHIP_APPROVAL_AUTHORITY"] : ["LEADERSHIP_APPROVAL_AUTHORITY", "SCIENCE_DEPUTY_DIRECTOR"];
     const rows = (await tx.user.findMany({ where: { status: "active", systemRole: { in: roles } }, select: { id: true } })) as Array<{ id: string }>;
     return rows.map((row) => row.id);
@@ -201,7 +202,7 @@ function readNote(value: unknown, required: boolean) {
 }
 
 /** Trả lại thì thủ tục về trạng thái chuyên viên sửa được (theo từng loại thủ tục). */
-async function revertOnReturn(tx: any, submission: ApprovalSubmissionRow, actor: SafeUserContext, note: string) {
+async function revertOnReturn(tx: Prisma.TransactionClient, submission: ApprovalSubmissionRow, actor: SafeUserContext, note: string) {
   const returnedInfo = { returnReason: note, returnedAt: new Date().toISOString(), returnedByName: actor.displayName };
   switch (submission.kind) {
     case "EVALUATION_COUNCIL": {

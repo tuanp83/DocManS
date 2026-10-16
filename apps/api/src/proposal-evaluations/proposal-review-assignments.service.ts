@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { assertCurrentCompletenessEvidence, currentRoundAssignments, currentRoundReviews, findCurrentSubmission } from "../proposals-shared/submission-evidence.js";
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
 import { assignmentLimitError, EVALUATION_COUNCIL_LIMITS } from "../proposals-shared/evaluation-council-rules.js";
@@ -812,7 +813,7 @@ export class ProposalReviewAssignmentsService {
  * Phân công còn mở của một người ở lần nộp cũ (hoặc chưa gắn lần nộp): thu hồi khi người đó được phân công ở vòng
  * mới. Chỉ mục duy nhất (proposal, reviewer) WHERE status = 'assigned' không cho hai phân công mở cùng lúc.
  */
-export async function retireStaleOpenAssignments(tx: any, proposalId: string, reviewerUserId: string, submissionEventId: string, at: Date) {
+export async function retireStaleOpenAssignments(tx: Prisma.TransactionClient, proposalId: string, reviewerUserId: string, submissionEventId: string, at: Date) {
   const open = (await tx.proposalReviewAssignment.findMany({ where: { proposalId, reviewerUserId, status: REVIEW_ASSIGNMENT_STATUS.assigned } })) as ReviewAssignmentRecord[];
   for (const stale of open.filter((assignment) => assignment.reviewedSubmissionEventId !== submissionEventId)) {
     await tx.proposalReviewAssignment.update({ where: { id: stale.id }, data: { status: REVIEW_ASSIGNMENT_STATUS.revoked, revokedAt: at } });

@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { label, councilSignerUserIds, leadershipUserIds, NOTIFICATION_TYPES, projectLink, vnDate, type WorkflowEvent } from "../notifications/workflow-events.js";
@@ -111,7 +112,7 @@ export class ApprovedProjectsService {
     };
   }
 
-  async readCurrentActor(tx: any, actorId: string): Promise<SafeUserContext> {
+  async readCurrentActor(tx: Prisma.TransactionClient, actorId: string): Promise<SafeUserContext> {
     const user = await tx.user.findUnique({ where: { id: actorId }, include: { organizationScopes: { include: { organizationUnit: true } } } });
     if (!user || user.status !== "active") throw new ForbiddenException({ code: "ACCOUNT_INACTIVE", message: "Tài khoản hiện không hoạt động." });
     return {
@@ -128,14 +129,14 @@ export class ApprovedProjectsService {
     if (!isInProjectScope(actor, project.hostOrganizationUnitId)) throw new ForbiddenException({ code: "ORG_SCOPE_DENIED", message: "Không có phạm vi tổ chức phù hợp cho đề tài." });
   }
 
-  async currentOfficer(tx: any, projectId: string, asOf = new Date()): Promise<ProjectOfficerFact | null> {
+  async currentOfficer(tx: Prisma.TransactionClient, projectId: string, asOf = new Date()): Promise<ProjectOfficerFact | null> {
     const rows = await tx.projectManagementOfficer.findMany({ where: { projectId, status: "ACTIVE" }, orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }] });
     const active = rows.filter((row: any) => isRelationshipActiveAt(row, asOf));
     if (active.length > 1) throw new ConflictException({ code: "CONTEXT_AMBIGUOUS", message: "Phân công chuyên viên của đề tài không rõ ràng." });
     return active[0] ?? null;
   }
 
-  async assertOfficer(tx: any, actor: SafeUserContext, project: AnyRecord) {
+  async assertOfficer(tx: Prisma.TransactionClient, actor: SafeUserContext, project: AnyRecord) {
     this.assertScope(actor, project);
     if (this.activeMember(project, actor.id)) throw new ForbiddenException({ code: "CONFLICT_DENIED" });
     await this.assertNoEvaluationConflict(tx, actor.id, project.proposalId);
@@ -348,7 +349,7 @@ export class ApprovedProjectsService {
   }
 
   /** Tạo phiên bản kế hoạch gốc mới từ các mốc hiện hành (không sửa phiên bản cũ). */
-  private async createBaseline(tx: any, projectId: string, actorId: string, source: "setup" | "adjustment" | "extension", sourceRequestId: string | null, now: Date) {
+  private async createBaseline(tx: Prisma.TransactionClient, projectId: string, actorId: string, source: "setup" | "adjustment" | "extension", sourceRequestId: string | null, now: Date) {
     const project = await tx.approvedProject.findUnique({ where: { id: projectId } });
     const milestones = await tx.projectMilestone.findMany({ where: { projectId }, orderBy: [{ dueDate: "asc" }, { position: "asc" }] });
     const latest = await tx.projectPlanBaseline.findFirst({ where: { projectId }, orderBy: { version: "desc" } });
@@ -526,12 +527,12 @@ export class ApprovedProjectsService {
     if (requireExecution && project.status !== EXECUTING) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Đề tài chưa ở trạng thái thực hiện." });
   }
 
-  private async nextReportRevision(tx: any, projectId: string) {
+  private async nextReportRevision(tx: Prisma.TransactionClient, projectId: string) {
     const latest = await tx.projectReportRevision.findFirst({ where: { projectId }, orderBy: { revision: "desc" } });
     return (latest?.revision ?? 0) + 1;
   }
 
-  private async findReport(tx: any, project: AnyRecord, reportId: string) {
+  private async findReport(tx: Prisma.TransactionClient, project: AnyRecord, reportId: string) {
     const report = await tx.projectReportRevision.findUnique({ where: { id: reportId }, include: { evidence: { include: { fileRecord: true } }, checkpoint: true } });
     if (!report || report.projectId !== project.id) throw new NotFoundException({ message: "Không tìm thấy phiên bản báo cáo của đề tài." });
     return report;
@@ -542,7 +543,7 @@ export class ApprovedProjectsService {
     if (project.reports.some((item: AnyRecord) => item.id !== currentId && item.checkpointId === checkpointId && ![REPORT_SUPPLEMENT].includes(item.status) && item.reportingPeriodStart && item.reportingPeriodEnd && start <= item.reportingPeriodEnd && end >= item.reportingPeriodStart)) throw new ConflictException({ code: "REPORT_PERIOD_OVERLAP", message: "Kỳ báo cáo trùng với phiên bản đang xử lý." });
   }
 
-  private async assertUsableEvidence(tx: any, projectId: string, fileIds: string[] | undefined, expectedEntityId?: string) {
+  private async assertUsableEvidence(tx: Prisma.TransactionClient, projectId: string, fileIds: string[] | undefined, expectedEntityId?: string) {
     if (!fileIds?.length) return [];
     const files = await tx.fileRecord.findMany({ where: { id: { in: fileIds }, status: "active", deletedAt: null } });
     if (files.length !== fileIds.length) throw new BadRequestException({ code: "EVIDENCE_UNUSABLE", message: "Tệp minh chứng không tồn tại, đã xóa hoặc chưa hoàn tất." });
@@ -906,7 +907,7 @@ export class ApprovedProjectsService {
     return update;
   }
 
-  private async applyAdjustmentChanges(tx: any, actor: SafeUserContext, project: AnyRecord, values: AnyRecord, now: Date) {
+  private async applyAdjustmentChanges(tx: Prisma.TransactionClient, actor: SafeUserContext, project: AnyRecord, values: AnyRecord, now: Date) {
     for (const change of values.milestoneChanges ?? []) {
       if (!change || typeof change !== "object" || Array.isArray(change) || !change.id || Object.keys(change).some((key) => !MILESTONE_CHANGE_KEYS.includes(key))) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
       const weightOnly = Object.keys(change).every((key) => key === "id" || key === "weightPercent");
