@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -43,7 +44,7 @@ const PROJECT_INCLUDE = {
   supervisor: { select: { id: true, displayName: true, username: true } },
   officer: { select: { id: true, displayName: true } },
   organizationUnit: { select: { id: true, code: true, name: true } }
-};
+} satisfies Prisma.StudentResearchProjectInclude;
 
 const DETAIL_INCLUDE = {
   ...PROJECT_INCLUDE,
@@ -56,7 +57,11 @@ const DETAIL_INCLUDE = {
     orderBy: { uploadedAt: "desc" }
   },
   events: { include: { actor: { select: { displayName: true } } }, orderBy: { createdAt: "desc" }, take: 200 }
-};
+} satisfies Prisma.StudentResearchProjectInclude;
+
+/** Đề tài NCKH sinh viên kèm người hướng dẫn, chuyên viên, đơn vị (danh sách) và thêm tài liệu, nhật ký (chi tiết). */
+type StudentProject = Prisma.StudentResearchProjectGetPayload<{ include: typeof PROJECT_INCLUDE }>;
+type StudentProjectDetail = Prisma.StudentResearchProjectGetPayload<{ include: typeof DETAIL_INCLUDE }>;
 
 /** Tệp do module này lưu cho đúng đề tài này (không phải tệp của hồ sơ đề xuất/đề tài khác gắn theo cách cũ). */
 function isOwnFile(file: AnyRecord | null | undefined, projectId: string) {
@@ -64,7 +69,7 @@ function isOwnFile(file: AnyRecord | null | undefined, projectId: string) {
 }
 
 /** Khoá dòng đề tài trong giao dịch để thao tác tài liệu không chen giữa lúc đề tài đổi trạng thái. */
-async function lockProject(client: any, projectId: string) {
+async function lockProject(client: Prisma.TransactionClient, projectId: string) {
   await client.$queryRaw`SELECT id FROM student_research_projects WHERE id = ${projectId} FOR UPDATE`;
 }
 
@@ -82,15 +87,15 @@ export class StudentResearchService {
   ) {}
 
   private get db() {
-    return this.prisma as any;
+    return this.prisma;
   }
 
   /** Bản trình bày theo người xem: ẩn liên lạc của sinh viên, kèm thao tác được phép. */
-  private present(actor: SafeUserContext, project: AnyRecord) {
+  private present(actor: SafeUserContext, project: StudentProject & Partial<Pick<StudentProjectDetail, "documents" | "events">>) {
     const facts = project as StudentProjectFacts;
     const actions = studentProjectActions(actor, facts);
     const canManage = project.status !== "DRAFT" && canManageStudentProject(actor, facts);
-    const documents = project.documents?.filter((document: AnyRecord) => !document.file || document.file.status === "active").map((document: AnyRecord) => {
+    const documents = project.documents?.filter((document) => !document.file || document.file.status === "active").map((document) => {
       // Tài liệu gắn theo cách cũ (tệp thuộc hồ sơ/đề tài khác): chỉ hiện tên, không tải về hay xoá qua module này.
       const own = isOwnFile(document.file, project.id);
       return {
@@ -104,7 +109,7 @@ export class StudentResearchService {
         canDelete: own && canDeleteStudentDocument(actor, facts, document as { uploadedById: string })
       };
     });
-    const events = project.events?.map((event: AnyRecord) => ({ id: event.id, action: event.action, fromStatus: event.fromStatus, toStatus: event.toStatus, reason: event.reason, actor: event.actor ?? null, createdAt: event.createdAt }));
+    const events = project.events?.map((event) => ({ id: event.id, action: event.action, fromStatus: event.fromStatus, toStatus: event.toStatus, reason: event.reason, actor: event.actor ?? null, createdAt: event.createdAt }));
     const { documents: _documents, events: _events, ...rest } = project;
     return {
       ...rest,
@@ -116,16 +121,19 @@ export class StudentResearchService {
     };
   }
 
-  private async load(actor: SafeUserContext, id: string, include: AnyRecord = PROJECT_INCLUDE) {
+  private async load(actor: SafeUserContext, id: string): Promise<StudentProject>;
+  private async load(actor: SafeUserContext, id: string, include: typeof DETAIL_INCLUDE): Promise<StudentProjectDetail>;
+  private async load(actor: SafeUserContext, id: string, include: Prisma.StudentResearchProjectInclude = PROJECT_INCLUDE): Promise<StudentProject | StudentProjectDetail> {
     const project = await this.db.studentResearchProject.findUnique({ where: { id }, include });
     // Không phân biệt "không tồn tại" và "không có quyền" để không lộ sự tồn tại của đề tài.
     if (!project || !canReadStudentProject(actor, project)) throw new NotFoundException({ message: "Không tìm thấy đề tài." });
-    return project;
+    // include là một trong hai hằng ở trên (theo overload), nên kết quả đúng một trong hai kiểu.
+    return project as StudentProject | StudentProjectDetail;
   }
 
   private async assertSupervisor(supervisorId: string) {
     const supervisor = await this.db.user.findUnique({ where: { id: supervisorId } });
-    if (!supervisor || supervisor.status !== "active" || !SUPERVISOR_ROLES.includes(supervisor.systemRole)) throw new BadRequestException({ message: "Giảng viên hướng dẫn phải là tài khoản nội bộ đang hoạt động." });
+    if (!supervisor || supervisor.status !== "active" || !SUPERVISOR_ROLES.includes(supervisor.systemRole ?? "")) throw new BadRequestException({ message: "Giảng viên hướng dẫn phải là tài khoản nội bộ đang hoạt động." });
     return supervisor;
   }
 
@@ -135,7 +143,7 @@ export class StudentResearchService {
     return unit;
   }
 
-  private async recordEvent(client: any, projectId: string, actor: SafeUserContext, action: string, extra: { fromStatus?: string | null; toStatus?: string | null; reason?: string | null; facts?: AnyRecord } = {}) {
+  private async recordEvent(client: Prisma.TransactionClient, projectId: string, actor: SafeUserContext, action: string, extra: { fromStatus?: string | null; toStatus?: string | null; reason?: string | null; facts?: AnyRecord } = {}) {
     await client.studentResearchEvent.create({ data: { projectId, actorId: actor.id, action, fromStatus: extra.fromStatus ?? null, toStatus: extra.toStatus ?? null, reason: extra.reason ?? null, facts: extra.facts ?? undefined } });
   }
 
@@ -143,7 +151,7 @@ export class StudentResearchService {
    * Cập nhật có điều kiện: chỉ ghi khi trạng thái và phiên bản (updatedAt) vẫn như lúc người dùng xem, để hai người
    * thao tác cùng lúc không ghi đè nhau. Trả về false nếu đề tài đã đổi.
    */
-  private async guardedUpdate(client: any, project: AnyRecord, version: string | undefined, data: AnyRecord) {
+  private async guardedUpdate(client: Prisma.TransactionClient, project: AnyRecord, version: string | undefined, data: AnyRecord) {
     const where: AnyRecord = { id: project.id, status: project.status };
     if (version) where.updatedAt = new Date(version);
     try {
@@ -175,7 +183,7 @@ export class StudentResearchService {
     await this.assertActiveUnit(input.organizationUnitId);
     let project: AnyRecord;
     try {
-      project = await this.db.$transaction(async (tx: any) => {
+      project = await this.db.$transaction(async (tx) => {
         const created = await tx.studentResearchProject.create({
           data: {
             code: input.code, name: input.name, studentName: input.studentName, studentClass: input.studentClass, studentContact: input.studentContact ?? null,
@@ -199,7 +207,7 @@ export class StudentResearchService {
     if (!canRegisterStudentProject(actor)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chỉ nghiên cứu viên nội bộ hoặc chuyên viên QLKH được đăng ký hướng dẫn đề tài NCKH sinh viên." });
     await this.assertSupervisor(actor.id);
     await this.assertActiveUnit(input.organizationUnitId);
-    const project: AnyRecord = await this.db.$transaction(async (tx: any) => {
+    const project: AnyRecord = await this.db.$transaction(async (tx) => {
         const created = await tx.studentResearchProject.create({
           data: {
             code: null, name: input.name, studentName: input.studentName, studentClass: input.studentClass, studentContact: input.studentContact ?? null,
@@ -218,7 +226,7 @@ export class StudentResearchService {
 
   async findAll(actor: SafeUserContext) {
     const projects = await this.db.studentResearchProject.findMany({ where: studentProjectReadFilter(actor), include: PROJECT_INCLUDE, orderBy: { createdAt: "desc" } });
-    return projects.filter((project: AnyRecord) => canReadStudentProject(actor, project as StudentProjectFacts)).map((project: AnyRecord) => this.present(actor, project));
+    return projects.filter((project) => canReadStudentProject(actor, project)).map((project) => this.present(actor, project));
   }
 
   async findOne(actor: SafeUserContext, id: string) {
@@ -246,7 +254,7 @@ export class StudentResearchService {
     const manager = project.status !== "DRAFT" && canManageStudentProject(actor, project);
 
     const data: AnyRecord = {};
-    for (const key of ["code", "name", "studentName", "studentClass", "studentContact", "startDate", "endDate"] as const) if (key in input) data[key] = (input as AnyRecord)[key];
+    for (const key of ["code", "name", "studentName", "studentClass", "studentContact", "startDate", "endDate"] as const) if (key in input) data[key] = (input)[key];
     // Mã đề tài do người quản lý cấp; giảng viên không tự đặt mã cho bản nháp.
     if ("code" in data && data.code !== project.code && !manager) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Mã đề tài do chuyên viên QLKH cấp khi duyệt." });
     if (input.supervisorId !== undefined && input.supervisorId !== project.supervisorId) {
@@ -267,14 +275,15 @@ export class StudentResearchService {
     const endDate = "endDate" in data ? data.endDate : project.endDate;
     if (startDate && endDate && endDate < startDate) throw new BadRequestException({ message: "Ngày kết thúc phải sau ngày bắt đầu." });
 
-    const changed = Object.keys(data).filter((key) => iso(data[key]) !== iso(project[key]));
+    const current = project as Record<string, unknown>;
+    const changed = Object.keys(data).filter((key) => iso(data[key]) !== iso(current[key]));
     if (!changed.length) return this.findOne(actor, project.id);
     const updateData = Object.fromEntries(changed.map((key) => [key, data[key]]));
-    await this.db.$transaction(async (tx: any) => {
+    await this.db.$transaction(async (tx) => {
       if (!await this.guardedUpdate(tx, project, input.version, updateData)) this.stale();
       await this.recordEvent(tx, project.id, actor, "update", { fromStatus: project.status, toStatus: project.status, facts: { fields: changed } });
     });
-    await this.auditLog.record({ action: "update-student-research-project", result: "success", actorId: actor.id, targetEntity: "student-research-project", targetEntityId: project.id, username: actor.username, beforeFacts: Object.fromEntries(changed.map((key) => [key, key === "studentContact" ? "(ẩn)" : project[key] ?? null])), afterFacts: Object.fromEntries(changed.map((key) => [key, key === "studentContact" ? "(ẩn)" : updateData[key] ?? null])) });
+    await this.auditLog.record({ action: "update-student-research-project", result: "success", actorId: actor.id, targetEntity: "student-research-project", targetEntityId: project.id, username: actor.username, beforeFacts: Object.fromEntries(changed.map((key) => [key, key === "studentContact" ? "(ẩn)" : current[key] ?? null])), afterFacts: Object.fromEntries(changed.map((key) => [key, key === "studentContact" ? "(ẩn)" : updateData[key] ?? null])) });
     return this.findOne(actor, project.id);
   }
 
@@ -295,7 +304,7 @@ export class StudentResearchService {
       data.code = code;
       data.officerId = actor.id;
     }
-    await this.db.$transaction(async (tx: any) => {
+    await this.db.$transaction(async (tx) => {
       if (!await this.guardedUpdate(tx, project, input.version, data)) this.stale();
       await this.recordEvent(tx, project.id, actor, action, { fromStatus: project.status, toStatus: rule.to, reason: input.reason ?? null, facts: action === "approve" ? { code: data.code } : undefined });
     });
@@ -313,7 +322,7 @@ export class StudentResearchService {
       throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chỉ chuyên viên quản lý đề tài (không phải giảng viên hướng dẫn) được ghi nhận hoàn thành." });
     }
     this.assertVersion(project, input.version);
-    await this.db.$transaction(async (tx: any) => {
+    await this.db.$transaction(async (tx) => {
       // Cập nhật có điều kiện trạng thái: hai người bấm cùng lúc thì chỉ một lần thành công.
       if (!await this.guardedUpdate(tx, project, input.version, { status: "COMPLETED", score: input.score ?? null, award: input.award ?? null })) this.stale();
       await this.recordEvent(tx, project.id, actor, "complete", { fromStatus: "ACTIVE", toStatus: "COMPLETED", facts: { score: input.score ?? null, award: input.award ?? null } });
@@ -336,7 +345,7 @@ export class StudentResearchService {
     await this.storage.putObject({ objectKey, content: file.buffer, mimeType: file.mimetype, sizeBytes: file.size });
     let document: AnyRecord;
     try {
-      document = await this.db.$transaction(async (tx: any) => {
+      document = await this.db.$transaction(async (tx) => {
         // Kho tệp không chung giao dịch với cơ sở dữ liệu: khoá đề tài rồi kiểm tra lại trạng thái trước khi ghi bản ghi tệp.
         await lockProject(tx, project.id);
         const current = await tx.studentResearchProject.findUnique({ where: { id: project.id } });
@@ -384,7 +393,7 @@ export class StudentResearchService {
     const project = await this.load(actor, id);
     const document = await this.findDocument(project.id, documentId);
     if (!canDeleteStudentDocument(actor, project, document)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chỉ người tải lên hoặc chuyên viên quản lý được xoá tài liệu khi đề tài chưa kết thúc." });
-    await this.db.$transaction(async (tx: any) => {
+    await this.db.$transaction(async (tx) => {
       await lockProject(tx, project.id);
       const current = await tx.studentResearchProject.findUnique({ where: { id: project.id } });
       if (!current || !canDeleteStudentDocument(actor, current, document)) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Đề tài vừa đổi trạng thái. Vui lòng tải lại trang." });
