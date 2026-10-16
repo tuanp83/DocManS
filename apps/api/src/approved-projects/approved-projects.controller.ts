@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Put, Qu
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
 import { assignProjectOfficerPipe, closureBodyPipe, createProjectPipe, healthAssessmentPipe, milestoneProgressPipe, readHealthFilter, projectDecisionPipe, projectMutationPipe, projectReportPipe, projectReportReviewPipe, projectReportSubmissionPipe, projectRequestPipe, readRequestType, revokeProjectOfficerPipe } from "./approved-projects.dto.js";
+import type { AssignProjectOfficerDto, CreateProjectDto, HealthAssessmentDto, MilestoneProgressDto, ProjectDecisionDto, ProjectMutationDto, ProjectReportDto, ProjectReportReviewDto, ProjectReportSubmissionDto, ProjectRequestDto, RevokeProjectOfficerDto } from "./approved-projects.dto.js";
 import { ApprovedProjectsService } from "./approved-projects.service.js";
 import { ProjectClosureService } from "./project-closure.service.js";
 
@@ -22,7 +23,7 @@ export class ApprovedProjectsController {
   async monitor(@Req() req: RequestWithCurrentUser, @Query() query: Record<string, string>) { return { projects: await this.projects.listMonitoring(req.currentUser!, filters(query)) }; }
 
   @Post()
-  async create(@Req() req: RequestWithCurrentUser, @Body(createProjectPipe) body: any) { return { project: await this.projects.createFromApprovedProposal(req.currentUser!, body.proposalId, body) }; }
+  async create(@Req() req: RequestWithCurrentUser, @Body(createProjectPipe) body: CreateProjectDto) { return { project: await this.projects.createFromApprovedProposal(req.currentUser!, body.proposalId, body) }; }
 
   @Get(":id")
   async detail(@Req() req: RequestWithCurrentUser, @Param("id") id: string) { return { project: await this.projects.getProject(req.currentUser!, id) }; }
@@ -31,73 +32,73 @@ export class ApprovedProjectsController {
   async progress(@Req() req: RequestWithCurrentUser, @Param("id") id: string) { return { progress: await this.projects.getProgress(req.currentUser!, id) }; }
 
   @Post(":id/milestones/:milestoneId/progress")
-  async updateProgress(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("milestoneId") milestoneId: string, @Body(milestoneProgressPipe) body: Record<string, unknown>) { return await this.projects.updateMilestoneProgress(req.currentUser!, id, { ...body, milestoneId }); }
+  async updateProgress(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("milestoneId") milestoneId: string, @Body(milestoneProgressPipe) body: MilestoneProgressDto) { return await this.projects.updateMilestoneProgress(req.currentUser!, id, { ...body, milestoneId }); }
 
   @Post(":id/health-assessments")
-  async assessHealth(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(healthAssessmentPipe) body: Record<string, unknown>) { return { assessment: await this.projects.assessHealth(req.currentUser!, id, body) }; }
+  async assessHealth(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(healthAssessmentPipe) body: HealthAssessmentDto) { return { assessment: await this.projects.assessHealth(req.currentUser!, id, body) }; }
 
   @Get(":id/officer-candidates")
   async candidates(@Req() req: RequestWithCurrentUser, @Param("id") id: string) { return { users: await this.projects.listOfficerCandidates(req.currentUser!, id) }; }
 
   @Post(":id/officer")
-  async assign(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(assignProjectOfficerPipe) body: Record<string, unknown>) { return { officer: await this.projects.assignOfficer(req.currentUser!, id, body) }; }
+  async assign(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(assignProjectOfficerPipe) body: AssignProjectOfficerDto) { return { officer: await this.projects.assignOfficer(req.currentUser!, id, body) }; }
 
   @Post(":id/officer/revoke")
-  async revoke(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(revokeProjectOfficerPipe) body: Record<string, unknown>) { return { officer: await this.projects.revokeOfficer(req.currentUser!, id, body) }; }
+  async revoke(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(revokeProjectOfficerPipe) body: RevokeProjectOfficerDto) { return { officer: await this.projects.revokeOfficer(req.currentUser!, id, body) }; }
 
   @Post(":id/setup")
   async setup(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown>) { return { setup: await this.projects.configureSetup(req.currentUser!, id, body ?? {}) }; }
 
   @Post(":id/setup/confirm")
-  async confirm(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(projectMutationPipe) body: Record<string, unknown>) { return { project: await this.projects.confirmSetup(req.currentUser!, id, body) }; }
+  async confirm(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(projectMutationPipe) body: ProjectMutationDto) { return { project: await this.projects.confirmSetup(req.currentUser!, id, body) }; }
 
   @Post(":id/reports")
-  async draftReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(projectReportPipe) body: Record<string, unknown>) { return { report: await this.projects.createReportDraft(req.currentUser!, id, body) }; }
+  async draftReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(projectReportPipe) body: ProjectReportDto) { return { report: await this.projects.createReportDraft(req.currentUser!, id, body) }; }
 
   @Patch(":id/reports/:reportId")
-  async editReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("reportId") reportId: string, @Body(projectReportPipe) body: Record<string, unknown>) { return { report: await this.projects.updateReportDraft(req.currentUser!, id, { ...body, reportId }) }; }
+  async editReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("reportId") reportId: string, @Body(projectReportPipe) body: ProjectReportDto) { return { report: await this.projects.updateReportDraft(req.currentUser!, id, { ...body, reportId }) }; }
 
   @Post(":id/reports/:reportId/submit")
-  async submitReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("reportId") reportId: string, @Body(projectReportSubmissionPipe) body: Record<string, unknown>) { return { report: await this.projects.submitReport(req.currentUser!, id, { ...body, reportId }) }; }
+  async submitReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("reportId") reportId: string, @Body(projectReportSubmissionPipe) body: ProjectReportSubmissionDto) { return { report: await this.projects.submitReport(req.currentUser!, id, { ...body, reportId }) }; }
 
   @Post(":id/reports/:reportId/review")
-  async reviewReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("reportId") reportId: string, @Body(projectDecisionPipe) body: Record<string, unknown>) { return { report: await this.projects.reviewReport(req.currentUser!, id, { ...body, reportId }) }; }
+  async reviewReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("reportId") reportId: string, @Body(projectDecisionPipe) body: ProjectDecisionDto) { return { report: await this.projects.reviewReport(req.currentUser!, id, { ...body, reportId }) }; }
 
   @Post(":id/reports/:reportId/supplement")
-  async supplementReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("reportId") reportId: string, @Body(projectReportReviewPipe) body: Record<string, unknown>) { return { report: await this.projects.requestReportSupplement(req.currentUser!, id, { ...body, reportId }) }; }
+  async supplementReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("reportId") reportId: string, @Body(projectReportReviewPipe) body: ProjectReportReviewDto) { return { report: await this.projects.requestReportSupplement(req.currentUser!, id, { ...body, reportId }) }; }
 
   @Post(":id/reports/:reportId/accept")
-  async acceptReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("reportId") reportId: string, @Body(projectDecisionPipe) body: Record<string, unknown>) { return { report: await this.projects.acceptReport(req.currentUser!, id, { ...body, reportId }) }; }
+  async acceptReport(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("reportId") reportId: string, @Body(projectDecisionPipe) body: ProjectDecisionDto) { return { report: await this.projects.acceptReport(req.currentUser!, id, { ...body, reportId }) }; }
 
   @Post(":id/requests/:type")
-  async draftRequest(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Body(projectRequestPipe) body: Record<string, unknown>) { const kind = readRequestType(type); return { request: kind === "adjustment" ? await this.projects.createAdjustment(req.currentUser!, id, body) : await this.projects.createExtension(req.currentUser!, id, body) }; }
+  async draftRequest(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Body(projectRequestPipe) body: ProjectRequestDto) { const kind = readRequestType(type); return { request: kind === "adjustment" ? await this.projects.createAdjustment(req.currentUser!, id, body) : await this.projects.createExtension(req.currentUser!, id, body) }; }
 
   @Patch(":id/requests/:type/:requestId")
-  async editRequest(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectRequestPipe) body: Record<string, unknown>) { return { request: await this.projects.editRequestDraft(req.currentUser!, id, readRequestType(type), { ...body, requestId }) }; }
+  async editRequest(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectRequestPipe) body: ProjectRequestDto) { return { request: await this.projects.editRequestDraft(req.currentUser!, id, readRequestType(type), { ...body, requestId }) }; }
 
   @Post(":id/requests/:type/:requestId/submit")
-  async submitRequest(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectReportSubmissionPipe) body: Record<string, unknown>) { return { request: await this.projects.submitRequest(req.currentUser!, id, readRequestType(type), { ...body, requestId }) }; }
+  async submitRequest(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectReportSubmissionPipe) body: ProjectReportSubmissionDto) { return { request: await this.projects.submitRequest(req.currentUser!, id, readRequestType(type), { ...body, requestId }) }; }
 
   @Post(":id/requests/adjustment/:requestId/review")
-  async reviewAdjustment(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: Record<string, unknown>) { return { request: await this.projects.reviewAdjustment(req.currentUser!, id, { ...body, requestId }) }; }
+  async reviewAdjustment(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: ProjectDecisionDto) { return { request: await this.projects.reviewAdjustment(req.currentUser!, id, { ...body, requestId }) }; }
 
   @Post(":id/requests/extension/:requestId/validate")
-  async validateExtension(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: Record<string, unknown>) { return { request: await this.projects.validateExtension(req.currentUser!, id, { ...body, requestId }) }; }
+  async validateExtension(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: ProjectDecisionDto) { return { request: await this.projects.validateExtension(req.currentUser!, id, { ...body, requestId }) }; }
 
   @Post(":id/requests/adjustment/:requestId/prepare")
-  async prepareAdjustment(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: Record<string, unknown>) { return { request: await this.projects.prepareAdjustment(req.currentUser!, id, { ...body, requestId }) }; }
+  async prepareAdjustment(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: ProjectDecisionDto) { return { request: await this.projects.prepareAdjustment(req.currentUser!, id, { ...body, requestId }) }; }
 
   @Post(":id/requests/extension/:requestId/prepare")
-  async prepareExtension(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: Record<string, unknown>) { return { request: await this.projects.prepareExtension(req.currentUser!, id, { ...body, requestId }) }; }
+  async prepareExtension(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: ProjectDecisionDto) { return { request: await this.projects.prepareExtension(req.currentUser!, id, { ...body, requestId }) }; }
 
   @Post(":id/requests/:type/:requestId/supplement")
-  async supplementRequest(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: Record<string, unknown>) { return { request: await this.projects.requestSupplement(req.currentUser!, id, readRequestType(type), { ...body, requestId }) }; }
+  async supplementRequest(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: ProjectDecisionDto) { return { request: await this.projects.requestSupplement(req.currentUser!, id, readRequestType(type), { ...body, requestId }) }; }
 
   @Post(":id/requests/:type/:requestId/approve")
-  async approve(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: Record<string, unknown>) { return { request: await this.projects.decideRequest(req.currentUser!, id, readRequestType(type), "approve", { ...body, requestId }) }; }
+  async approve(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: ProjectDecisionDto) { return { request: await this.projects.decideRequest(req.currentUser!, id, readRequestType(type), "approve", { ...body, requestId }) }; }
 
   @Post(":id/requests/:type/:requestId/reject")
-  async reject(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: Record<string, unknown>) { return { request: await this.projects.decideRequest(req.currentUser!, id, readRequestType(type), "reject", { ...body, requestId }) }; }
+  async reject(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("type") type: string, @Param("requestId") requestId: string, @Body(projectDecisionPipe) body: ProjectDecisionDto) { return { request: await this.projects.decideRequest(req.currentUser!, id, readRequestType(type), "reject", { ...body, requestId }) }; }
 
   // ---- Kinh phí, nghiệm thu, thanh lý, đóng đề tài (project-closure.service.ts) ----
   @Get(":id/finance")

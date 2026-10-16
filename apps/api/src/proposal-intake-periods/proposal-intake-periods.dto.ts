@@ -73,7 +73,7 @@ export const createProposalIntakePeriodPipe: PipeTransform<unknown, CreatePropos
     readOptionalText(input.applicableOrganizationUnitId, "applicableOrganizationUnitId", 80);
     readRequiredPackage(input.requiredPackage);
 
-    return input as unknown as CreateProposalIntakePeriodDto;
+    return input as CreateProposalIntakePeriodDto;
   }
 };
 

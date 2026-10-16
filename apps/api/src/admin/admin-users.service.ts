@@ -113,7 +113,7 @@ export class AdminUsersService {
       where: options.includeInactive ? {} : { status: "active" },
       include: { unitPositions: { include: { user: { select: { id: true, displayName: true, status: true } } }, orderBy: { createdAt: "asc" } } },
       orderBy: [{ status: "asc" }, { name: "asc" }]
-    })) as unknown as Array<{ unitType: string; unitPositions: Array<{ userId: string; positionCode: string; user: { displayName: string; status: string } }> } & Record<string, unknown>>;
+    })) as Array<{ unitType: string; unitPositions: Array<{ userId: string; positionCode: string; user: { displayName: string; status: string } }> } & Record<string, unknown>>;
     return units.map(({ unitPositions, ...unit }) => ({
       ...unit,
       unitTypeLabel: isUnitType(unit.unitType) ? UNIT_TYPE_LABELS[unit.unitType] : unit.unitType,
@@ -198,7 +198,7 @@ export class AdminUsersService {
     const users = (await this.prisma.user.findMany({
       where: { status: "active", organizationScopes: { some: { organizationUnitId: unitId } } },
       select: { id: true, organizationScopes: { select: { organizationUnitId: true, organizationUnit: { select: { status: true } } } } }
-    })) as unknown as Array<{ id: string; organizationScopes: Array<{ organizationUnitId: string; organizationUnit: { status: string } }> }>;
+    })) as Array<{ id: string; organizationScopes: Array<{ organizationUnitId: string; organizationUnit: { status: string } }> }>;
     const usersLosingAccess = users.filter((user) => !user.organizationScopes.some((scope) => scope.organizationUnitId !== unitId && scope.organizationUnit.status === "active")).length;
     return { unitId, scopedUsers: users.length, usersLosingAccess };
   }

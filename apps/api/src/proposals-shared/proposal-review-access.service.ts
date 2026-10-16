@@ -123,7 +123,7 @@ export class ProposalReviewAccessService {
 
   /** Hồ sơ mà người dùng là thành viên Hội đồng IRB đã được ký thành lập (CSDL giả lập không có bảng: rỗng). */
   private async activeIrbProposalIds(userId: string, proposalIds: string[]) {
-    const table = (this.prisma as unknown as { proposalIrbMember?: { findMany(args: unknown): Promise<Array<{ proposalId: string }>> } }).proposalIrbMember;
+    const table = (this.prisma as { proposalIrbMember?: { findMany(args: unknown): Promise<Array<{ proposalId: string }>> } }).proposalIrbMember;
     if (!table?.findMany || !proposalIds.length) return new Set<string>();
     const rows = await table.findMany({ where: { userId, proposalId: { in: proposalIds }, status: "active" }, select: { proposalId: true } });
     return new Set(rows.map((row) => row.proposalId));
