@@ -17,6 +17,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -32,6 +33,7 @@ function readUserFilters(formElement: HTMLFormElement): UserFilterInput {
 }
 
 export function AdminUsersPanel() {
+  const confirm = useConfirm();
   const [state, setState] = useState<LoadState>("loading");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [resultCount, setResultCount] = useState(0);
@@ -149,10 +151,11 @@ export function AdminUsersPanel() {
   async function handleStatusChange(userId: string, status: string) {
     setMessage("");
     setFormError("");
-    const confirmed = window.confirm(
+    const confirmed = await confirm(
       status === "active"
         ? "Mở khóa/kích hoạt lại tài khoản này?"
-        : "Khóa/vô hiệu hóa tài khoản này? Người dùng sẽ không thể đăng nhập hoặc tiếp tục phiên hiện tại."
+        : "Khóa/vô hiệu hóa tài khoản này? Người dùng sẽ không thể đăng nhập hoặc tiếp tục phiên hiện tại.",
+      status === "active" ? { confirmLabel: "Mở khóa" } : { confirmLabel: "Khóa tài khoản", tone: "danger" }
     );
     if (!confirmed) {
       return;
@@ -169,7 +172,7 @@ export function AdminUsersPanel() {
 
   async function handlePasswordReset(user: AdminUser) {
     if (isResetting) return;
-    if (!window.confirm(`Khởi tạo mã đặt lại mật khẩu một lần cho ${user.username}? Mã sẽ chỉ hiển thị sau khi tạo.`)) return;
+    if (!(await confirm(`Khởi tạo mã đặt lại mật khẩu một lần cho ${user.username}? Mã sẽ chỉ hiển thị sau khi tạo.`, { confirmLabel: "Tạo mã đặt lại" }))) return;
     setFormError(""); setMessage("");
     setIsResetting(true);
     try { const result = await initiateAdminPasswordReset(user.id); setResetCredential({ username: user.username, ...result }); }

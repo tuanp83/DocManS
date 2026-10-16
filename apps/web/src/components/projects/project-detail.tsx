@@ -12,12 +12,14 @@ import { ProjectProgressPanel } from "@/components/projects/project-progress-pan
 import { ProjectSetupForm } from "@/components/projects/project-setup-form";
 import { canProject, getProject, PROJECT_LEVEL_LABELS, listProjectFiles, projectAction, projectCapability, projectDenial, projectFileUrl, projectOfficerCandidates, projectStatusLabel, uploadProjectFile, type ProjectRecord } from "@/lib/projects-api";
 import { projectHistoryLabel } from "@/lib/project-history-labels";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 function day(value?: string | null) { return value?.slice(0, 10) ?? ""; }
 function date(value?: string | null) { return value ? new Intl.DateTimeFormat("vi-VN", { timeZone: "UTC" }).format(new Date(value)) : "Chưa có"; }
 function message(error: unknown) { return error instanceof Error ? error.message : "Không thể hoàn tất thao tác."; }
 
 export function ProjectDetail({ id }: { id: string }) {
+  const confirm = useConfirm();
   const [project, setProject] = useState<ProjectRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -57,7 +59,7 @@ export function ProjectDetail({ id }: { id: string }) {
 
   async function run(path: string, body: Record<string, unknown> = {}, confirmText?: string, method = "POST"): Promise<boolean> {
     if (!project) return false;
-    if (confirmText && !window.confirm(confirmText)) return false;
+    if (confirmText && !(await confirm(confirmText))) return false;
     const contextVersion = projectCapability(project)?.contextVersion;
     if (!contextVersion) { setNotice("Ngữ cảnh quyền không hợp lệ. Vui lòng tải lại."); return false; }
     setBusy(true); setNotice("");

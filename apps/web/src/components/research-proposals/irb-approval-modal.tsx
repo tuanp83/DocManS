@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useModalBehavior } from "@/components/ui/modal-dialog";
 import { AlertCircle, CheckCircle2, FileText, HeartPulse, Send, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import {
   approveIrbCouncil,
@@ -22,6 +23,7 @@ import {
 import { exportIrbCertificateWord, type ProposalExportData } from "@/lib/word-export";
 import { RoutingStatus } from "@/components/approvals/routing-status";
 import "@/styles/council-modals.css";
+import { useAskReason } from "@/components/ui/confirm-dialog";
 
 const ROLES: IrbRole[] = ["chair", "secretary", "reviewer", "member"];
 const COUNCIL_STATUS_LABELS: Record<string, string> = {
@@ -68,6 +70,9 @@ export function IRBApprovalModal({
   proposal: { id: string; code?: string; title: string; ownerDisplayName?: string; hostOrganizationUnit?: string; hostOrganizationUnitName?: string };
   onSuccess?: () => void;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalBehavior(panelRef, onClose, isOpen);
+  const askReason = useAskReason();
   const [info, setInfo] = useState<IRBInfo | null>(null);
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -154,10 +159,6 @@ export function IRBApprovalModal({
       action === "save" ? "Đã lưu nháp danh sách." : action === "invite" ? "Đã gửi lời mời cho thành viên mới." : "Đã trình Trưởng ban QLKH rà soát."
     );
 
-  const askReason = (label: string) => {
-    const reason = window.prompt(label);
-    return reason && reason.trim() ? reason.trim() : null;
-  };
 
   function handleExportWord() {
     if (!certificate) return;
@@ -184,7 +185,7 @@ export function IRBApprovalModal({
 
   return (
     <div className="cmd-overlay" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="cmd-modal" role="dialog" aria-modal="true" aria-label="Hội đồng Đạo đức (IRB)" style={{ maxWidth: "960px", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+      <div ref={panelRef} className="cmd-modal" role="dialog" aria-modal="true" aria-label="Hội đồng Đạo đức (IRB)" style={{ maxWidth: "960px", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
         <div className="cmd-header" style={{ flexShrink: 0 }}>
           <div className="cmd-header-left">
             <div className="cmd-header-icon rose"><HeartPulse size={22} /></div>
@@ -297,7 +298,7 @@ export function IRBApprovalModal({
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "8px" }}>
-                      <button type="button" disabled={saving} className="cmd-btn outline" onClick={() => { const reason = askReason("Lý do trả lại tờ trình Hội đồng IRB:"); if (reason) void run(() => rejectIrbCouncil(proposal.id, { reason, contextVersion: info.contextVersion }), "Đã trả lại tờ trình cho chuyên viên."); }}>Trả lại</button>
+                      <button type="button" disabled={saving} className="cmd-btn outline" onClick={async () => { const reason = await askReason("Trả lại tờ trình Hội đồng IRB.", { label: "Lý do trả lại", confirmLabel: "Trả lại", tone: "danger" }); if (reason) void run(() => rejectIrbCouncil(proposal.id, { reason, contextVersion: info.contextVersion }), "Đã trả lại tờ trình cho chuyên viên."); }}>Trả lại</button>
                       <button type="button" disabled={saving} className="cmd-btn rose" onClick={() => void run(() => approveIrbCouncil(proposal.id, { decisionNumber, approvalNote, contextVersion: info.contextVersion }), "Đã ký quyết định thành lập Hội đồng IRB.")}>Ký thành lập hội đồng</button>
                     </div>
                   </div>
@@ -369,7 +370,7 @@ export function IRBApprovalModal({
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "8px" }}>
-                        <button type="button" disabled={saving} className="cmd-btn outline" onClick={() => { const reason = askReason("Lý do trả lại kết luận cho thư ký hội đồng:"); if (reason) void run(() => returnIrbConclusion(proposal.id, { reason, contextVersion: info.contextVersion }), "Đã trả lại kết luận."); }}>Trả lại thư ký</button>
+                        <button type="button" disabled={saving} className="cmd-btn outline" onClick={async () => { const reason = await askReason("Trả lại kết luận cho thư ký hội đồng.", { label: "Lý do trả lại", confirmLabel: "Trả lại", tone: "danger" }); if (reason) void run(() => returnIrbConclusion(proposal.id, { reason, contextVersion: info.contextVersion }), "Đã trả lại kết luận."); }}>Trả lại thư ký</button>
                         <button type="button" disabled={saving} className="cmd-btn rose" onClick={() => void run(() => updateIRBStatus(proposal.id, { certificateNumber, decisionDate, validUntil: validUntil || undefined, contextVersion: info.contextVersion }), "Đã ký cấp Giấy chứng nhận IRB.")}>
                           Ký {conclusion.decision === "APPROVED" ? "cấp Giấy chứng nhận" : "văn bản không chấp thuận"}
                         </button>

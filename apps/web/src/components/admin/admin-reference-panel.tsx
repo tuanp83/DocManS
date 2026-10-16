@@ -15,6 +15,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export function AdminRolesPanel() {
   const [roles, setRoles] = useState<AdminRole[]>([]);
@@ -68,6 +69,7 @@ const UNIT_TYPE_OPTIONS = [
 ];
 
 export function AdminUnitsPanel() {
+  const confirm = useConfirm();
   const [units, setUnits] = useState<OrganizationUnit[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState("");
@@ -152,7 +154,7 @@ export function AdminUnitsPanel() {
         const warning = impact.usersLosingAccess > 0
           ? `${impact.usersLosingAccess} tài khoản chỉ thuộc đơn vị này sẽ không đăng nhập được nữa`
           : "Không tài khoản nào mất quyền đăng nhập";
-        if (!window.confirm(`Tắt đơn vị "${unit.name}"?\n\n${impact.scopedUsers} tài khoản đang có phạm vi tại đơn vị này. ${warning}.`)) return;
+        if (!(await confirm(`Tắt đơn vị "${unit.name}"?\n\n${impact.scopedUsers} tài khoản đang có phạm vi tại đơn vị này. ${warning}.`, { confirmLabel: "Tắt đơn vị", tone: "danger" }))) return;
       }
       const result = await updateOrganizationUnitStatus(unit.id, unit.status === "active" ? "inactive" : "active");
       setUnits((current) => current.map((item) => (item.id === unit.id ? result.organizationUnit : item)));

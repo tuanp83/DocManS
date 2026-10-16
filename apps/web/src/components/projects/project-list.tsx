@@ -6,6 +6,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { useSession } from "@/components/auth/session-provider";
 import { createProject, HEALTH_LABELS, HEALTH_TONES, listProjects, projectStatusLabel, type HealthLevel, type ProjectRecord } from "@/lib/projects-api";
 import { loadResearchProposal, loadResearchProposals, type ResearchProposal } from "@/lib/research-proposals-api";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 function date(value?: string | null) { return value ? new Intl.DateTimeFormat("vi-VN", { timeZone: "UTC" }).format(new Date(value)) : "Chưa có"; }
 
@@ -21,6 +22,7 @@ function ProgressLine({ project }: { project: ProjectRecord }) {
 }
 
 export function ProjectList({ mine = false }: { mine?: boolean }) {
+  const confirm = useConfirm();
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [approved, setApproved] = useState<ResearchProposal[]>([]);
   const [filter, setFilter] = useState("all");
@@ -43,7 +45,7 @@ export function ProjectList({ mine = false }: { mine?: boolean }) {
   useEffect(() => { void refresh(); }, [mine, canCreateProjects]);
 
   async function create(proposalId: string) {
-    if (!window.confirm("Tạo đề tài từ phiên bản đề xuất đã được Lãnh đạo phê duyệt?")) return;
+    if (!(await confirm("Tạo đề tài từ phiên bản đề xuất đã được Lãnh đạo phê duyệt?", { confirmLabel: "Tạo đề tài" }))) return;
     setBusy(true); setMessage("");
     try {
       const proposal = await loadResearchProposal(proposalId);

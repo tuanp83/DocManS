@@ -43,6 +43,7 @@ import {
   type ProposalReadiness,
   type ResearchProposal
 } from "@/lib/research-proposals-api";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 type LoadState = "loading" | "ready" | "error";
 const ST23A_ALLOWED_FILE_TYPES = ".doc, .docx, .pdf, .xls, .xlsx";
@@ -92,6 +93,7 @@ function toDraftInput(proposal: ResearchProposal): ProposalDraftInput {
 }
 
 export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) {
+  const confirm = useConfirm();
   const { account } = useSession();
   const [catalogs, setCatalogs] = useState<CatalogItem[]>([]);
   const [state, setState] = useState<LoadState>("loading");
@@ -338,7 +340,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
   async function handleDeleteAttachment(attachmentId: string, fileName: string) {
     setAttachmentError("");
     setMessage("");
-    const confirmed = window.confirm(`Xóa tệp "${fileName}" khỏi danh sách hồ sơ?`);
+    const confirmed = await confirm(`Xóa tệp "${fileName}" khỏi danh sách hồ sơ?`, { confirmLabel: "Xóa tệp", tone: "danger" });
     if (!confirmed) {
       return;
     }
@@ -362,7 +364,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
 
     setMessage("");
     setFormError({});
-    const confirmed = window.confirm("Nộp chính thức hồ sơ này? Sau khi nộp, hồ sơ chuyển sang trạng thái đã nộp và không còn sửa nháp.");
+    const confirmed = await confirm("Nộp chính thức hồ sơ này? Sau khi nộp, hồ sơ chuyển sang trạng thái đã nộp và không còn sửa nháp.", { confirmLabel: "Nộp hồ sơ" });
     if (!confirmed) {
       return;
     }
@@ -402,7 +404,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
       return;
     }
 
-    const confirmed = window.confirm("Gửi yêu cầu bổ sung cho hồ sơ này?");
+    const confirmed = await confirm("Gửi yêu cầu bổ sung cho hồ sơ này?", { confirmLabel: "Gửi yêu cầu" });
     if (!confirmed) {
       return;
     }
@@ -434,7 +436,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
 
     setMessage("");
     setFormError({});
-    const confirmed = window.confirm("Nộp lại hồ sơ sau bổ sung?");
+    const confirmed = await confirm("Nộp lại hồ sơ sau bổ sung?", { confirmLabel: "Nộp lại" });
     if (!confirmed) {
       return;
     }
@@ -507,7 +509,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
       <div className="grid">
         {invitationCard}
         {irbPanel}
-        <button className="button" type="button" disabled={isSaving || isUploading || isSubmitting || isResubmitting} onClick={() => { if (!unsaved || window.confirm("Bỏ thay đổi chưa lưu và tải lại hồ sơ?")) void refresh(); }}>Tải lại hồ sơ</button>
+        <button className="button" type="button" disabled={isSaving || isUploading || isSubmitting || isResubmitting} onClick={async () => { if (!unsaved || (await confirm("Bỏ thay đổi chưa lưu và tải lại hồ sơ?", { confirmLabel: "Bỏ thay đổi", tone: "danger" }))) void refresh(); }}>Tải lại hồ sơ</button>
         {unsaved ? <p role="status" className="state-message">Có thay đổi chưa lưu. Lưu bản nháp trước khi nộp.</p> : null}
         {message ? <p className="state-message success" role="status">{message}</p> : null}
         {showCompletenessCheck ? (
@@ -517,7 +519,7 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
               type="button"
               disabled={!canPerformProposalAction(capabilityState, "proposal.completeness.check") || !readiness?.ready || isSaving}
               title={blockedProposalAction(capabilityState, "proposal.completeness.check")?.reason}
-              onClick={async () => { if (!proposal.viewerAuthorization || !window.confirm("Xác nhận hồ sơ đầy đủ theo danh sách kiểm tra?")) return; setIsSaving(true); try { await completeProposalCheck(proposal.id, proposal.viewerAuthorization.contextVersion); await refreshWorkflowState(); setMessage("Đã ghi nhận kết quả kiểm tra."); } catch (error) { setMessage(error instanceof Error ? error.message : "Không thể ghi nhận kiểm tra."); } finally { setIsSaving(false); } }}
+              onClick={async () => { if (!proposal.viewerAuthorization || !(await confirm("Xác nhận hồ sơ đầy đủ theo danh sách kiểm tra?", { confirmLabel: "Xác nhận đầy đủ" }))) return; setIsSaving(true); try { await completeProposalCheck(proposal.id, proposal.viewerAuthorization.contextVersion); await refreshWorkflowState(); setMessage("Đã ghi nhận kết quả kiểm tra."); } catch (error) { setMessage(error instanceof Error ? error.message : "Không thể ghi nhận kiểm tra."); } finally { setIsSaving(false); } }}
             >
               Xác nhận hồ sơ đầy đủ
             </button>

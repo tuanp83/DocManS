@@ -17,6 +17,7 @@ import {
 import type { ResearchProposal } from "@/lib/research-proposals-api";
 import { exportIndividualReviewWord } from "@/lib/word-export";
 import { formatDate, formatDueDate } from "./evaluation-format";
+import { useConfirm, useAskReason } from "@/components/ui/confirm-dialog";
 
 type AssignmentForm = { profileId: string; effectiveFrom: string; effectiveUntil: string; assignmentRole: ReviewAssignmentRole; dueDate: string };
 type AssignmentFormAction = { type: "set"; field: keyof AssignmentForm; value: string } | { type: "reset" };
@@ -51,6 +52,8 @@ export function ReviewerAssignmentSection({
   /** Tải lại dữ liệu và báo cho trang cha sau khi phân công hoặc thu hồi. */
   onChanged: () => Promise<void>;
 }) {
+  const confirm = useConfirm();
+  const askReason = useAskReason();
   const [form, dispatch] = useReducer(assignmentFormReducer, emptyAssignmentForm);
   const [actionError, setActionError] = useState("");
   const [message, setMessage] = useState("");
@@ -75,7 +78,7 @@ export function ReviewerAssignmentSection({
       return;
     }
 
-    if (!window.confirm("Xác nhận người đánh giá, hồ sơ nhà khoa học, vai trò và thời hạn phân công?")) return;
+    if (!(await confirm("Xác nhận người đánh giá, hồ sơ nhà khoa học, vai trò và thời hạn phân công?", { confirmLabel: "Phân công" }))) return;
     setIsAssigning(true);
     try {
       await assignProposalReviewer(proposalId, {
@@ -99,12 +102,8 @@ export function ReviewerAssignmentSection({
   async function handleRevoke(assignmentId: string, reviewerName: string) {
     setActionError("");
     setMessage("");
-    if (!window.confirm(`Thu hồi phân công đánh giá của ${reviewerName}? Lịch sử phân công vẫn được giữ lại.`)) {
-      return;
-    }
-
-    const reason = window.prompt("Lý do thu hồi phân công:");
-    if (!reason?.trim()) return;
+    const reason = await askReason(`Thu hồi phân công đánh giá của ${reviewerName}? Lịch sử phân công vẫn được giữ lại.`, { label: "Lý do thu hồi", confirmLabel: "Thu hồi", tone: "danger" });
+    if (!reason) return;
     setRevokingId(assignmentId);
     try {
       await revokeProposalReviewAssignment(proposalId, assignmentId, reason, contextVersion);

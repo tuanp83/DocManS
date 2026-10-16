@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { acceptReviewInvitation, declineReviewInvitation, type ProposalReviewAssignment } from "@/lib/proposal-evaluations-api";
+import { useConfirm, useAskReason } from "@/components/ui/confirm-dialog";
 
 /**
  * Nút Đồng ý / Từ chối lời mời phản biện hoặc lời mời vào hội đồng. Đồng ý lời mời phản biện mở hồ sơ ngay;
@@ -21,13 +22,15 @@ export function ReviewInvitationActions({
   compact?: boolean;
   onResponded: (response: "accept" | "decline", assignment: ProposalReviewAssignment) => void | Promise<void>;
 }) {
+  const confirm = useConfirm();
+  const askReason = useAskReason();
   const [busy, setBusy] = useState<"" | "accept" | "decline">("");
   const [error, setError] = useState("");
   const size = compact ? { padding: "4px 10px", fontSize: "12px" } : { padding: "6px 12px", fontSize: "12px" };
 
   async function handleAccept() {
     setError("");
-    if (!window.confirm(`Đồng ý tham gia đánh giá hồ sơ "${proposalTitle}"?`)) return;
+    if (!(await confirm(`Đồng ý tham gia đánh giá hồ sơ "${proposalTitle}"?`, { confirmLabel: "Đồng ý tham gia" }))) return;
     setBusy("accept");
     try {
       const assignment = await acceptReviewInvitation(proposalId, assignmentId);
@@ -41,12 +44,8 @@ export function ReviewInvitationActions({
 
   async function handleDecline() {
     setError("");
-    const reason = window.prompt(`Lý do từ chối tham gia đánh giá hồ sơ "${proposalTitle}":`);
+    const reason = await askReason(`Từ chối tham gia đánh giá hồ sơ "${proposalTitle}".`, { label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" });
     if (reason === null) return;
-    if (!reason.trim()) {
-      setError("Cần nhập lý do từ chối.");
-      return;
-    }
     setBusy("decline");
     try {
       const assignment = await declineReviewInvitation(proposalId, assignmentId, reason.trim());

@@ -18,6 +18,7 @@ import {
   type ProposalIntakePeriod,
   type RequiredPackageItem
 } from "@/lib/proposal-intake-periods-api";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -38,6 +39,7 @@ const emptyForm = {
 };
 
 export function ProposalIntakePeriodsPanel() {
+  const confirm = useConfirm();
   const [options, setOptions] = useState<IntakeOptions>({ canCreate: false, organizationUnits: [] });
   const [state, setState] = useState<LoadState>("loading");
   const [periods, setPeriods] = useState<ProposalIntakePeriod[]>([]);
@@ -139,7 +141,7 @@ export function ProposalIntakePeriodsPanel() {
   }
 
   async function handleStatusAction(period: ProposalIntakePeriod, action: "open" | "close") {
-    if (isSubmitting || !window.confirm(action === "close" ? "Đóng đợt tiếp nhận? Các hồ sơ đã nộp vẫn tiếp tục được xử lý." : "Mở đợt tiếp nhận?")) return;
+    if (isSubmitting || !(await confirm(action === "close" ? "Đóng đợt tiếp nhận? Các hồ sơ đã nộp vẫn tiếp tục được xử lý." : "Mở đợt tiếp nhận?", { confirmLabel: action === "close" ? "Đóng đợt" : "Mở đợt" }))) return;
     setIsSubmitting(true);
     setMessage("");
     setFormError("");

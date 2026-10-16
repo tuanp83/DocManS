@@ -12,6 +12,7 @@ import {
   updateScientificDocument,
   type ScientificDocument
 } from "@/lib/scientific-documents-api";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export type SubCategoryKey =
   | "LAW_REGULATION"
@@ -110,6 +111,7 @@ function getFileExtensionBadge(fileName: string) {
 }
 
 export function ScientificDocumentsPanel() {
+  const confirm = useConfirm();
   const { account } = useSession();
   const [documents, setDocuments] = useState<ScientificDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -299,7 +301,7 @@ export function ScientificDocumentsPanel() {
   }
 
   async function handleDelete(doc: ScientificDocument) {
-    if (!confirm(`Bạn có chắc chắn muốn xóa văn bản "${doc.documentNumber} - ${doc.title}" không?`)) {
+    if (!(await confirm(`Xóa văn bản "${doc.documentNumber} - ${doc.title}"?`, { confirmLabel: "Xóa", tone: "danger" }))) {
       return;
     }
 

@@ -21,6 +21,7 @@ import {
   type OrganizationUnitOption,
   type StudentProject
 } from "@/lib/student-research-api";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 function date(value?: string | null) { return value ? new Intl.DateTimeFormat("vi-VN", { timeZone: "UTC" }).format(new Date(value)) : "—"; }
 function dateTime(value?: string | null) { return value ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(value)) : "—"; }
@@ -30,6 +31,7 @@ function size(bytes: number) { return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 
 type Dialog = "none" | "edit" | "approve" | "return" | "cancel" | "complete";
 
 export function StudentProjectDetail({ id }: { id: string }) {
+  const confirm = useConfirm();
   const { account } = useSession();
   const router = useRouter();
   const [project, setProject] = useState<StudentProject | null>(null);
@@ -104,7 +106,7 @@ export function StudentProjectDetail({ id }: { id: string }) {
 
       <div className="button-row">
         {can("edit") ? <button className="button" type="button" disabled={busy} onClick={openEdit}>Sửa thông tin</button> : null}
-        {can("submit") ? <button className="button primary" type="button" disabled={busy} onClick={() => { if (window.confirm("Nộp đề tài cho chuyên viên QLKH duyệt? Sau khi nộp bạn không sửa được, trừ khi đề tài bị trả lại.")) void run(() => transitionStudentProject(id, "submit", { version }), "Đã nộp đề tài, chờ duyệt."); }}>Nộp để duyệt</button> : null}
+        {can("submit") ? <button className="button primary" type="button" disabled={busy} onClick={async () => { if (await confirm("Nộp đề tài cho chuyên viên QLKH duyệt? Sau khi nộp bạn không sửa được, trừ khi đề tài bị trả lại.", { confirmLabel: "Nộp đề tài" })) void run(() => transitionStudentProject(id, "submit", { version }), "Đã nộp đề tài, chờ duyệt."); }}>Nộp để duyệt</button> : null}
         {can("approve") ? <button className="button primary" type="button" disabled={busy} onClick={() => { setCode(project.code ?? ""); setDialog("approve"); }}>Duyệt</button> : null}
         {can("return") ? <button className="button" type="button" disabled={busy} onClick={() => { setReason(""); setDialog("return"); }}>Trả lại</button> : null}
         {can("complete") ? <button className="button" type="button" disabled={busy} onClick={() => setDialog("complete")}>Ghi nhận hoàn thành</button> : null}
@@ -147,13 +149,13 @@ export function StudentProjectDetail({ id }: { id: string }) {
         <label className="field"><span>Điểm (thang 10, tuỳ chọn)</span><input type="number" min={0} max={10} step={0.01} value={score} onChange={(event) => setScore(event.target.value)} /></label>
         <label className="field"><span>Giải thưởng (tuỳ chọn)</span><input value={award} maxLength={200} onChange={(event) => setAward(event.target.value)} /></label>
       </div>
-      <div className="button-row"><button className="button primary" type="button" disabled={busy || !scoreValid} onClick={() => { if (window.confirm("Ghi nhận đề tài đã hoàn thành? Sau bước này không sửa được kết quả.")) void run(() => completeStudentProject(id, { version, ...(scoreValue !== undefined ? { score: scoreValue } : {}), ...(award.trim() ? { award: award.trim() } : {}) }), "Đã ghi nhận hoàn thành."); }}>Xác nhận hoàn thành</button><button className="button" type="button" onClick={() => setDialog("none")}>Đóng</button></div>
+      <div className="button-row"><button className="button primary" type="button" disabled={busy || !scoreValid} onClick={async () => { if (await confirm("Ghi nhận đề tài đã hoàn thành? Sau bước này không sửa được kết quả.", { confirmLabel: "Ghi nhận hoàn thành" })) void run(() => completeStudentProject(id, { version, ...(scoreValue !== undefined ? { score: scoreValue } : {}), ...(award.trim() ? { award: award.trim() } : {}) }), "Đã ghi nhận hoàn thành."); }}>Xác nhận hoàn thành</button><button className="button" type="button" onClick={() => setDialog("none")}>Đóng</button></div>
     </SectionCard> : null}
 
     <SectionCard title="Tài liệu" subtitle="Định dạng .doc, .docx, .pdf, .xls, .xlsx">
       {!project.documents?.length ? <p>Chưa có tài liệu.</p> : <ul className="plain-list">{project.documents.map((doc) => <li key={doc.id}>
         <strong>{STUDENT_DOCUMENT_LABELS[doc.documentType] ?? doc.documentType}</strong> · {doc.file && !doc.legacy ? <a href={studentDocumentDownloadUrl(id, doc.id)}>{doc.file.originalFileName}</a> : `${doc.file?.originalFileName ?? "Tệp"} (gắn theo cách cũ, mở tại hồ sơ gốc)`}{doc.file ? ` (${size(doc.file.sizeBytes)})` : ""} · {doc.uploadedBy?.displayName ?? ""} · {dateTime(doc.uploadedAt)}
-        {doc.canDelete ? <> {" "}<button className="button small" type="button" disabled={busy} onClick={() => { if (window.confirm(`Xoá tài liệu “${doc.file?.originalFileName ?? ""}”?`)) void run(() => deleteStudentDocument(id, doc.id), "Đã xoá tài liệu."); }}>Xoá</button></> : null}
+        {doc.canDelete ? <> {" "}<button className="button small" type="button" disabled={busy} onClick={async () => { if (await confirm(`Xoá tài liệu “${doc.file?.originalFileName ?? ""}”?`, { confirmLabel: "Xoá", tone: "danger" })) void run(() => deleteStudentDocument(id, doc.id), "Đã xoá tài liệu."); }}>Xoá</button></> : null}
       </li>)}</ul>}
       {project.viewer.canAttach ? <div className="form-section-inline">
         <div className="form-grid two">

@@ -6,6 +6,7 @@ import { CornerUpLeft, ExternalLink, Send } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { advanceSubmission, loadApprovalInbox, returnSubmission, type ApprovalSubmission } from "@/lib/approval-routing-api";
+import { useAskReason } from "@/components/ui/confirm-dialog";
 
 const ROLE_TEXT: Record<string, { title: string; subtitle: string; advance: string }> = {
   board_head: { title: "Tờ trình chờ Trưởng ban rà soát", subtitle: "Rà soát hồ sơ chuyên viên lập rồi trình Trưởng phòng, hoặc trả lại chuyên viên kèm lý do.", advance: "Trình Trưởng phòng" },
@@ -16,6 +17,7 @@ const ROLE_TEXT: Record<string, { title: string; subtitle: string; advance: stri
 
 /** Hàng chờ tờ trình theo vai trò (Trưởng ban, Trưởng phòng, Ban giám đốc, chuyên viên). */
 export function SubmissionsInbox() {
+  const askReason = useAskReason();
   const [role, setRole] = useState<string>("");
   const [items, setItems] = useState<ApprovalSubmission[] | null>(null);
   const [error, setError] = useState("");
@@ -40,12 +42,10 @@ export function SubmissionsInbox() {
   async function act(item: ApprovalSubmission, kind: "advance" | "return") {
     setMessage("");
     setError("");
-    const note = kind === "return" ? window.prompt(`Lý do trả lại "${item.kindLabel}" của ${item.title}:`) : window.prompt(`Ý kiến khi ${ROLE_TEXT[role]?.advance.toLowerCase()} (không bắt buộc):`, "");
+    const note = kind === "return"
+      ? await askReason(`Trả lại "${item.kindLabel}" của ${item.title}.`, { label: "Lý do trả lại", confirmLabel: "Trả lại", tone: "danger" })
+      : await askReason(`${ROLE_TEXT[role]?.advance ?? "Chuyển tiếp"}: "${item.kindLabel}" của ${item.title}.`, { label: "Ý kiến (không bắt buộc)", optional: true, confirmLabel: ROLE_TEXT[role]?.advance ?? "Đồng ý" });
     if (note === null) return;
-    if (kind === "return" && !note.trim()) {
-      setError("Cần nhập lý do trả lại.");
-      return;
-    }
     setBusyId(item.id);
     try {
       if (kind === "advance") await advanceSubmission(item.id, note);

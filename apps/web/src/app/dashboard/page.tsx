@@ -5,8 +5,10 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { PageHeader } from "@/components/ui/page-header";
 import { DashboardAnalytics } from "@/components/dashboard/dashboard-analytics";
 import { getApiBaseUrl } from "@/lib/session";
+import { useNotice } from "@/components/ui/confirm-dialog";
 
 export default function DashboardPage() {
+  const notice = useNotice();
   const handleExport = async () => {
     try {
       const response = await fetch(`${getApiBaseUrl()}/dashboard/export-proposals`, { credentials: "include" });
@@ -21,7 +23,7 @@ export default function DashboardPage() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch {
-      alert("Lỗi khi tải báo cáo Excel.");
+      await notice("Không tải được tệp Excel danh sách đề tài. Vui lòng thử lại.", "Lỗi xuất Excel");
     }
   };
 

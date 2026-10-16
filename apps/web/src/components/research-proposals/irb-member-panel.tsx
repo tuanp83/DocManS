@@ -17,22 +17,24 @@ import {
   type IrbInvitation,
   type IrbRecommendation
 } from "@/lib/proposal-evaluations-api";
+import { useConfirm, useAskReason } from "@/components/ui/confirm-dialog";
 
 const vnDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" }) : "—");
 
 /** Đồng ý / Từ chối lời mời IRB. Từ chối bắt buộc lý do; máy chủ kiểm tra lại người được mời và trạng thái lời mời. */
 function IrbInvitationActions({ invitation, onDone }: { invitation: IrbInvitation; onDone: () => void | Promise<void> }) {
+  const askReason = useAskReason();
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function respond(response: "accept" | "decline") {
     setError("");
     let reason = "";
-    if (response === "accept" && !window.confirm(`Đồng ý làm ${invitation.roleLabel} Hội đồng Đạo đức của đề tài "${invitation.proposal.title}"?`)) return;
+    if (response === "accept" && !(await confirm(`Đồng ý làm ${invitation.roleLabel} Hội đồng Đạo đức của đề tài "${invitation.proposal.title}"?`, { confirmLabel: "Đồng ý tham gia" }))) return;
     if (response === "decline") {
-      const typed = window.prompt(`Lý do từ chối tham gia Hội đồng IRB của đề tài "${invitation.proposal.title}":`);
+      const typed = await askReason(`Từ chối tham gia Hội đồng IRB của đề tài "${invitation.proposal.title}".`, { label: "Lý do từ chối", confirmLabel: "Từ chối", tone: "danger" });
       if (typed === null) return;
-      if (!typed.trim()) { setError("Cần nhập lý do từ chối."); return; }
-      reason = typed.trim();
+      reason = typed;
     }
     setBusy(true);
     try {
@@ -97,6 +99,7 @@ export function IrbInvitationsPanel() {
  * sơ), nhận xét (Chủ tịch, Phản biện, Ủy viên), kết luận (Thư ký). Người không phải thành viên: không hiện gì.
  */
 export function IrbMemberPanel({ proposalId, onChanged, onPresence }: { proposalId: string; onChanged?: () => void | Promise<void>; onPresence?: (status: IrbInvitation["status"] | null) => void }) {
+  const confirm = useConfirm();
   const [invitation, setInvitation] = useState<IrbInvitation | null>(null);
   const [info, setInfo] = useState<IRBInfo | null>(null);
   const [recommendation, setRecommendation] = useState<IrbRecommendation>("approve");
@@ -238,7 +241,7 @@ export function IrbMemberPanel({ proposalId, onChanged, onPresence }: { proposal
           ) : (
             <div style={{ display: "flex", gap: "8px" }}>
               <button type="button" className="button" disabled={busy || !conclusion.ethicsNotes.trim()} onClick={() => void run(() => saveIrbConclusion(proposalId, { ...conclusion, action: "save", contextVersion: info?.contextVersion }), "Đã lưu nháp kết luận.")}>Lưu nháp</button>
-              <button type="button" className="button primary" disabled={busy || !conclusion.ethicsNotes.trim()} onClick={() => { if (window.confirm("Chốt kết luận? Sau khi chốt, thành viên không sửa nhận xét và chuyên viên sẽ trình Ban giám đốc.")) void run(() => saveIrbConclusion(proposalId, { ...conclusion, action: "finalize", contextVersion: info?.contextVersion }), "Đã chốt kết luận, đã báo chuyên viên trình."); }}>Chốt kết luận</button>
+              <button type="button" className="button primary" disabled={busy || !conclusion.ethicsNotes.trim()} onClick={async () => { if (await confirm("Chốt kết luận? Sau khi chốt, thành viên không sửa nhận xét và chuyên viên sẽ trình Ban giám đốc.", { confirmLabel: "Chốt kết luận" })) void run(() => saveIrbConclusion(proposalId, { ...conclusion, action: "finalize", contextVersion: info?.contextVersion }), "Đã chốt kết luận, đã báo chuyên viên trình."); }}>Chốt kết luận</button>
             </div>
           )}
         </form>

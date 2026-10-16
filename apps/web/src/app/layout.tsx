@@ -4,6 +4,7 @@ import "@/themes/hvqy1.css";
 import "@/themes/science-profile.css";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { AppShell } from "@/components/layout/app-shell";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 
 export const metadata: Metadata = {
   title: "HỆ THỐNG QUẢN LÝ NGHIÊN CỨU KHOA HỌC, CÔNG NGHỆ VÀ ĐỔI MỚI SÁNG TẠO | HỌC VIỆN QUÂN Y",
@@ -24,7 +25,9 @@ export default async function RootLayout({
     <html lang="vi" suppressHydrationWarning>
       <body>
         <SessionProvider>
-          <AppShell>{children}</AppShell>
+          <ConfirmProvider>
+            <AppShell>{children}</AppShell>
+          </ConfirmProvider>
         </SessionProvider>
       </body>
     </html>

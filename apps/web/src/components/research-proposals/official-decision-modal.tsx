@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useRef } from "react";
+import { useModalBehavior } from "@/components/ui/modal-dialog";
 import { Printer, X, FileText, FileDown } from "lucide-react";
 import { formatVndNumber, numberToVietnameseWords } from "@/lib/vietnamese-currency";
 import {
@@ -65,21 +66,8 @@ function calculateDurationMonths(startDate?: string | null, endDate?: string | n
 }
 
 export function OfficialDecisionModal({ isOpen, onClose, proposal }: OfficialDecisionModalProps) {
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    }
-    if (isOpen) {
-      window.addEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "hidden";
-    }
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
-    };
-  }, [isOpen, onClose]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalBehavior(panelRef, onClose, isOpen);
 
   if (!isOpen) return null;
 
@@ -123,6 +111,10 @@ export function OfficialDecisionModal({ isOpen, onClose, proposal }: OfficialDec
       }}
     >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Quyết định phê duyệt đề tài"
         className="official-decision-modal-container"
         style={{
           background: "var(--surface, #ffffff)",

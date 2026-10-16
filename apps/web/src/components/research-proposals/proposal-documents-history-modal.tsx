@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useModalBehavior } from "@/components/ui/modal-dialog";
 import {
   Calendar,
   CheckCircle2,
@@ -69,6 +70,8 @@ export function ProposalDocumentsHistoryModal({
   const [loading, setLoading] = useState(true);
   const [proposal, setProposal] = useState<ResearchProposal | null>(null);
   const [activeTab, setActiveTab] = useState<"documents" | "timeline">("documents");
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalBehavior(panelRef, onClose, isOpen);
 
   useEffect(() => {
     if (!isOpen || !proposalId) return;
@@ -218,6 +221,10 @@ export function ProposalDocumentsHistoryModal({
       onClick={onClose}
     >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Lịch sử nộp các văn bản liên quan đến đề tài"
         style={{
           backgroundColor: "#ffffff",
           borderRadius: "12px",
@@ -400,14 +407,7 @@ export function ProposalDocumentsHistoryModal({
                               <Download size={13} /> Tải về
                             </a>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => alert(`Tải bản sao văn bản: ${doc.fileName}`)}
-                              className="button secondary"
-                              style={{ padding: "4px 8px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}
-                            >
-                              <Download size={13} /> Tải về
-                            </button>
+                            <span style={{ color: "var(--text-secondary)", fontSize: "12px" }}>Chưa có tệp</span>
                           )}
                         </td>
                       </tr>

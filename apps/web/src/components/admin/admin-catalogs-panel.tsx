@@ -6,6 +6,7 @@ import { createCatalogItem, loadCatalogItems, softDeleteCatalogItem, updateCatal
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const catalogTypes = [
   { value: "research-field", label: "Lĩnh vực nghiên cứu" },
@@ -17,6 +18,7 @@ const catalogTypes = [
 ];
 
 export function AdminCatalogsPanel() {
+  const confirm = useConfirm();
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [selectedType, setSelectedType] = useState(catalogTypes[0].value);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -156,7 +158,7 @@ export function AdminCatalogsPanel() {
   }
 
   async function handleDelete(item: CatalogItem) {
-    const confirmed = window.confirm(`Xóa mềm danh mục "${item.name}"?`);
+    const confirmed = await confirm(`Xóa mềm danh mục "${item.name}"?`, { confirmLabel: "Xóa", tone: "danger" });
     if (!confirmed) {
       return;
     }

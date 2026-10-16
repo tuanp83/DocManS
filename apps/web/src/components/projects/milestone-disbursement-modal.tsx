@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useModalBehavior } from "@/components/ui/modal-dialog";
 import {
   X,
   DollarSign,
@@ -54,6 +55,8 @@ export function MilestoneDisbursementModal({
   currentUserUsername,
   onSuccess
 }: MilestoneDisbursementModalProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalBehavior(panelRef, onClose, isOpen);
   const proposal = { code: project.code ?? "", title: project.title };
   const [finance, setFinance] = useState<ProjectFinanceResponse | null>(null);
   // Quyền do máy chủ trả về (capability project.finance.manage), không suy đoán theo vai trò ở trình duyệt.
@@ -194,7 +197,7 @@ export function MilestoneDisbursementModal({
 
   return (
     <div className="cmd-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="cmd-modal">
+      <div ref={panelRef} className="cmd-modal" role="dialog" aria-modal="true" aria-label="Giám sát giải ngân và quyết toán theo mốc">
         {/* Header */}
         <div className="cmd-header">
           <div className="cmd-header-left">

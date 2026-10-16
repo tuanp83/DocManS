@@ -9,6 +9,7 @@ import {
 } from "@/lib/research-proposals-api";
 import { SectionCard } from "@/components/ui/section-card";
 import { FileText, Pencil, PlusCircle, Trash2 } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface ProposalDeliverablesPanelProps {
   proposalId: string;
@@ -23,6 +24,7 @@ const EMPTY_DRAFT: Draft = { id: null, type: DELIVERABLE_TYPES[0], title: "", de
  * đang bổ sung; sản phẩm hoàn thành và nghiệm thu từng sản phẩm được quản lý trong đề tài sau khi hồ sơ được duyệt.
  */
 export function ProposalDeliverablesPanel({ proposalId }: ProposalDeliverablesPanelProps) {
+  const confirm = useConfirm();
   const [deliverables, setDeliverables] = useState<ProposalDeliverable[]>([]);
   const [canEdit, setCanEdit] = useState(false);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -70,7 +72,7 @@ export function ProposalDeliverablesPanel({ proposalId }: ProposalDeliverablesPa
   }
 
   async function remove(item: ProposalDeliverable) {
-    if (!window.confirm(`Xoá sản phẩm dự kiến "${item.title}"?`)) return;
+    if (!(await confirm(`Xoá sản phẩm dự kiến "${item.title}"?`, { confirmLabel: "Xoá", tone: "danger" }))) return;
     setBusy(true);
     setFormError("");
     try {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useRef } from "react";
+import { useModalBehavior } from "@/components/ui/modal-dialog";
 import { Printer, X, Users, Award, FileDown } from "lucide-react";
 import type { CouncilMetadata } from "@/lib/research-proposals-api";
 import {
@@ -39,21 +40,8 @@ function formatDateShort(dateString?: string | null) {
 }
 
 export function OfficialCouncilDecisionModal({ isOpen, onClose, proposal }: OfficialCouncilDecisionModalProps) {
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    }
-    if (isOpen) {
-      window.addEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "hidden";
-    }
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
-    };
-  }, [isOpen, onClose]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalBehavior(panelRef, onClose, isOpen);
 
   if (!isOpen) return null;
 
@@ -95,6 +83,10 @@ export function OfficialCouncilDecisionModal({ isOpen, onClose, proposal }: Offi
       }}
     >
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Quyết định thành lập Hội đồng"
         className="official-decision-card"
         style={{
           background: "#ffffff",

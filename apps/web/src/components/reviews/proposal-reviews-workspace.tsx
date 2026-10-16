@@ -54,6 +54,7 @@ import { IRBApprovalModal } from "@/components/research-proposals/irb-approval-m
 import { ProposalAuditTimeline } from "@/components/research-proposals/proposal-audit-timeline";
 import { useSession } from "@/components/auth/session-provider";
 import { HeartPulse } from "lucide-react";
+import { useAskReason } from "@/components/ui/confirm-dialog";
 
 const IRB_COUNCIL_LABELS: Record<string, string> = { draft: "Đang soạn / mời", submitted: "Đang trình", returned: "Bị trả lại", rejected: "Ban giám đốc trả lại", approved: "Đã ký thành lập" };
 const IRB_CONCLUSION_LABELS: Record<string, string> = { draft: "Thư ký đang soạn", finalized: "Chờ chuyên viên trình", submitted: "Đang trình ký", returned: "Bị trả lại", signed: "Đã ký" };
@@ -108,6 +109,7 @@ export function ProposalReviewsWorkspace() {
 }
 
 function ReviewsWorkspaceContent() {
+  const askReason = useAskReason();
   const { account } = useSession();
   const [activeTab, setActiveTab] = useState<ActiveTab>("progress");
   const [proposals, setProposals] = useState<ResearchProposal[]>([]);
@@ -161,8 +163,8 @@ function ReviewsWorkspaceContent() {
   async function changeOfficer(proposalId: string, officerUserId: string) {
     const proposal = proposals.find((item) => item.id === proposalId);
     if (!officerUserId || !proposal) return;
-    const reason = window.prompt("Lý do giao/đổi chuyên viên phụ trách:", "Trưởng phòng giao phụ trách hồ sơ");
-    if (!reason?.trim()) return;
+    const reason = await askReason(`Giao chuyên viên phụ trách hồ sơ "${proposal.title}".`, { label: "Lý do giao/đổi chuyên viên", defaultValue: "Trưởng phòng giao phụ trách hồ sơ", confirmLabel: "Giao phụ trách" });
+    if (!reason) return;
     setOfficerChanging(proposalId);
     setOfficerMessage("");
     try {

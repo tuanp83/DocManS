@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProposalEvaluationPanel } from "@/components/research-proposals/proposal-evaluation-panel";
+import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import * as evaluationApi from "@/lib/proposal-evaluations-api";
 import * as proposalsApi from "@/lib/research-proposals-api";
 
@@ -82,19 +83,27 @@ const props = {
   contextVersion
 };
 
+// Hộp xác nhận / nhập lý do của hệ thống (thay window.confirm, prompt) nằm trong ConfirmProvider ở gốc ứng dụng.
+const renderPanel = (ui: React.ReactElement) => render(ui, { wrapper: ConfirmProvider });
+
+/** Trả lời hộp thoại đang mở: nhập lý do (nếu có) rồi bấm nút `button`. */
+async function answerDialog(user: ReturnType<typeof userEvent.setup>, button: string, reason?: string) {
+  const dialog = await screen.findByRole("dialog");
+  if (reason !== undefined) await user.type(within(dialog).getByRole("textbox"), reason);
+  await user.click(within(dialog).getByRole("button", { name: button }));
+}
+
 function setup(overrides: { progress?: unknown; proposal?: unknown; candidates?: unknown; roster?: unknown } = {}) {
   api.loadProposalReviewProgress.mockResolvedValue((overrides.progress ?? progress()) as never);
   api.loadReviewerCandidates.mockResolvedValue((overrides.candidates ?? { profiles: [{ id: "rp9", fullName: "TS. Chuyên Gia", linkedUserId: "u9", linkedAccountUsername: "cg", linkedAccountDisplayName: "Chuyên Gia" }] }) as never);
   api.loadCouncilCandidates.mockResolvedValue({ candidates: overrides.roster ?? [] } as never);
   proposals.loadResearchProposal.mockResolvedValue((overrides.proposal ?? { id: "p1", code: "DT-1", title: "Đề tài thử", councilMetadata: null }) as never);
-  return render(<ProposalEvaluationPanel {...props} {...overrides} />);
+  return renderPanel(<ProposalEvaluationPanel {...props} {...overrides} />);
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   props.onWorkflowChange = vi.fn();
-  vi.spyOn(window, "confirm").mockReturnValue(true);
-  vi.spyOn(window, "alert").mockImplementation(() => undefined);
 });
 
 describe("tải dữ liệu", () => {
@@ -109,7 +118,7 @@ describe("tải dữ liệu", () => {
     api.loadProposalReviewProgress.mockRejectedValue(Object.assign(new Error("cấm"), { status: 403 }));
     api.loadCouncilCandidates.mockResolvedValue({ candidates: [] } as never);
     proposals.loadResearchProposal.mockResolvedValue(null as never);
-    render(<ProposalEvaluationPanel {...props} />);
+    renderPanel(<ProposalEvaluationPanel {...props} />);
     expect(await screen.findByText("Không đủ quyền phân công.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Phân công người đánh giá" })).toBeDisabled();
   });
@@ -117,7 +126,7 @@ describe("tải dữ liệu", () => {
   it("lỗi khác: hiện thông điệp lỗi", async () => {
     api.loadProposalReviewProgress.mockRejectedValue(new Error("Máy chủ lỗi"));
     proposals.loadResearchProposal.mockResolvedValue(null as never);
-    render(<ProposalEvaluationPanel {...props} />);
+    renderPanel(<ProposalEvaluationPanel {...props} />);
     expect(await screen.findByText("Máy chủ lỗi")).toBeInTheDocument();
   });
 
@@ -133,7 +142,7 @@ describe("tải dữ liệu", () => {
     api.loadProposalReviewProgress.mockResolvedValue(progress());
     api.loadCouncilCandidates.mockResolvedValue({ candidates: [] } as never);
     proposals.loadResearchProposal.mockResolvedValue({ id: "p1", councilMetadata: null } as never);
-    render(<ProposalEvaluationPanel {...props} canAssignReviewers={false} />);
+    renderPanel(<ProposalEvaluationPanel {...props} canAssignReviewers={false} />);
     await screen.findByText("PGS. Lê Phản Biện");
     expect(api.loadReviewerCandidates).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Xác nhận phân công" })).not.toBeInTheDocument();
@@ -151,6 +160,7 @@ describe("phân công người đánh giá", () => {
     await user.selectOptions(screen.getByLabelText(/Hồ sơ nhà khoa học đã liên kết tài khoản/), "rp9");
     await user.selectOptions(screen.getByLabelText("Vai trò trong vòng đánh giá"), "committee_member");
     await user.click(screen.getByRole("button", { name: "Xác nhận phân công" }));
+    await answerDialog(user, "Phân công");
 
     await waitFor(() => expect(api.assignProposalReviewer).toHaveBeenCalledTimes(1));
     expect(api.assignProposalReviewer).toHaveBeenCalledWith("p1", {
@@ -163,12 +173,13 @@ describe("phân công người đánh giá", () => {
   });
 
   it("không phân công khi người dùng không xác nhận", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     const user = userEvent.setup();
     setup();
     await screen.findByText("PGS. Lê Phản Biện");
     await user.selectOptions(screen.getByLabelText(/Hồ sơ nhà khoa học đã liên kết tài khoản/), "rp9");
     await user.click(screen.getByRole("button", { name: "Xác nhận phân công" }));
+    await answerDialog(user, "Hủy");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(api.assignProposalReviewer).not.toHaveBeenCalled();
   });
 
@@ -179,29 +190,34 @@ describe("phân công người đánh giá", () => {
     await screen.findByText("PGS. Lê Phản Biện");
     await user.selectOptions(screen.getByLabelText(/Hồ sơ nhà khoa học đã liên kết tài khoản/), "rp9");
     await user.click(screen.getByRole("button", { name: "Xác nhận phân công" }));
+    await answerDialog(user, "Phân công");
     expect(await screen.findByText("Người này đang xung đột lợi ích.")).toBeInTheDocument();
     expect(api.loadProposalReviewProgress).toHaveBeenCalledTimes(1);
     expect(props.onWorkflowChange).not.toHaveBeenCalled();
   });
 
   it("thu hồi phân công kèm lý do", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Phân công nhầm");
     api.revokeProposalReviewAssignment.mockResolvedValue({} as never);
     const user = userEvent.setup();
     setup();
     await screen.findByText("PGS. Lê Phản Biện");
     await user.click(screen.getByRole("button", { name: "Thu hồi phân công của PGS. Lê Phản Biện" }));
+    await answerDialog(user, "Thu hồi", "  Phân công nhầm ");
     await waitFor(() => expect(api.revokeProposalReviewAssignment).toHaveBeenCalledWith("p1", "a1", "Phân công nhầm", contextVersion));
     expect(await screen.findByText("Đã thu hồi phân công đánh giá.")).toBeInTheDocument();
     expect(props.onWorkflowChange).toHaveBeenCalledTimes(1);
   });
 
-  it("không thu hồi khi bỏ trống lý do", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("  ");
+  it("không cho thu hồi khi bỏ trống lý do", async () => {
     const user = userEvent.setup();
     setup();
     await screen.findByText("PGS. Lê Phản Biện");
     await user.click(screen.getByRole("button", { name: /Thu hồi phân công của/ }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByRole("textbox"), "  ");
+    expect(within(dialog).getByRole("button", { name: "Thu hồi" })).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(api.revokeProposalReviewAssignment).not.toHaveBeenCalled();
   });
 
@@ -247,12 +263,12 @@ describe("tổng hợp kết quả", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Chốt bản tổng hợp" })).toBeEnabled());
 
     await user.click(screen.getByRole("button", { name: "Chốt bản tổng hợp" }));
+    await answerDialog(user, "Chốt bản tổng hợp");
     await waitFor(() => expect(api.finalizeProposalEvaluationSummary).toHaveBeenCalledWith("p1", { revision: 2 }));
     expect(await screen.findByText("Đã chốt bản tổng hợp.")).toBeInTheDocument();
   });
 
   it("bản đã chốt: khoá ô nhập, cho mở lại kèm lý do", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("Bổ sung phiếu");
     api.reopenProposalEvaluationSummary.mockResolvedValue({} as never);
     const user = userEvent.setup();
     setup({ progress: progress({ allReviewsSubmitted: true, evaluationSummary: { status: "finalized", statusLabel: "Đã chốt", revision: 4, summary: "Nội dung cũ", recommendation: "approve", reopenReason: "" } }) });
@@ -260,6 +276,7 @@ describe("tổng hợp kết quả", () => {
     await waitFor(() => expect(screen.getByLabelText("Nội dung tổng hợp kết quả")).toHaveValue("Nội dung cũ"));
     expect(screen.getByLabelText("Nội dung tổng hợp kết quả")).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Mở lại để sửa" }));
+    await answerDialog(user, "Mở lại", "Bổ sung phiếu");
     await waitFor(() => expect(api.reopenProposalEvaluationSummary).toHaveBeenCalledWith("p1", { reason: "Bổ sung phiếu", revision: 4 }));
   });
 
@@ -270,6 +287,7 @@ describe("tổng hợp kết quả", () => {
     await screen.findByText("PGS. Lê Phản Biện");
     const summarySection = screen.getByText("Tổng hợp kết quả đánh giá").closest("section") as HTMLElement;
     await user.click(within(summarySection).getByRole("button", { name: "Trình Trưởng ban rà soát" }));
+    await answerDialog(user, "Trình gói đánh giá");
     expect(await screen.findByText("Còn phiếu chưa gửi.")).toBeInTheDocument();
     expect(screen.getByText(/Chờ phiếu của: PGS\. Lê Phản Biện\./)).toBeInTheDocument();
   });
@@ -317,9 +335,9 @@ describe("hội đồng: lập tờ trình (bản nháp)", () => {
     setup({ roster });
     await screen.findByText("PGS. Lê Phản Biện");
     await user.click(screen.getByRole("button", { name: /Thêm Phản biện/ }));
-    expect(window.alert).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Thêm Phản biện/ }));
-    expect(window.alert).toHaveBeenCalledWith("Hội đồng có tối đa 3 Ủy viên Phản biện.");
+    expect(await screen.findByRole("dialog", { name: "Thành phần Hội đồng" })).toHaveTextContent("Hội đồng có tối đa 3 Ủy viên Phản biện.");
   });
 
   it("không tự điền người có xung đột lợi ích làm chủ tịch", async () => {

@@ -16,6 +16,7 @@ import {
   newCouncilMember
 } from "./council-roster";
 import { COUNCIL_ROLE_LABELS, type DynamicCouncilMember } from "./evaluation-format";
+import { useNotice } from "@/components/ui/confirm-dialog";
 
 /** Trường hợp C: chưa trình hoặc bản nháp; lập, lưu, mời và trình tờ trình đề xuất Hội đồng (Giai đoạn 1). */
 export function CouncilDraftForm({
@@ -36,6 +37,7 @@ export function CouncilDraftForm({
   /** Tải lại dữ liệu và báo cho trang cha sau khi lưu hoặc trình. */
   onChanged: () => Promise<void>;
 }) {
+  const notice = useNotice();
   const [roster, dispatch] = useReducer(councilRosterReducer, undefined, createInitialRoster);
   const [isSubmittingCouncil, setIsSubmittingCouncil] = useState(false);
   const [councilError, setCouncilError] = useState("");
@@ -68,7 +70,7 @@ export function CouncilDraftForm({
   // (Chủ tịch + các Ủy viên Hội đồng), đúng 1 thư ký.
   function addReviewer() {
     if (councilReviewers.length >= MAX_COUNCIL_REVIEWERS) {
-      alert("Hội đồng có tối đa 3 Ủy viên Phản biện.");
+      void notice("Hội đồng có tối đa 3 Ủy viên Phản biện.", "Thành phần Hội đồng");
       return;
     }
     dispatch({ type: "reviewers/add", member: newCouncilMember("rev") });
@@ -76,7 +78,7 @@ export function CouncilDraftForm({
 
   function removeReviewer(id: string) {
     if (councilReviewers.length <= MIN_COUNCIL_REVIEWERS) {
-      alert("Hội đồng cần có ít nhất 2 Ủy viên Phản biện.");
+      void notice("Hội đồng cần có ít nhất 2 Ủy viên Phản biện.", "Thành phần Hội đồng");
       return;
     }
     dispatch({ type: "reviewers/remove", id });
@@ -88,7 +90,7 @@ export function CouncilDraftForm({
 
   function addCouncilMember() {
     if (1 + councilMembers.length >= MAX_COUNCIL_COMMITTEE) {
-      alert("Hội đồng có tối đa 5 thành viên (gồm Chủ tịch Hội đồng).");
+      void notice("Hội đồng có tối đa 5 thành viên (gồm Chủ tịch Hội đồng).", "Thành phần Hội đồng");
       return;
     }
     dispatch({ type: "members/add", member: newCouncilMember("mem") });

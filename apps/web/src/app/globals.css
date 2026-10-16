@@ -2690,6 +2690,28 @@ button.hbar-row:focus-visible {
   padding: 12px 18px;
 }
 
+/* Hộp xác nhận / thông báo (components/ui/confirm-dialog.tsx): luôn nằm trên các hộp thoại khác. */
+.modal-backdrop:has(.confirm-message) {
+  z-index: 10000;
+}
+
+.modal-panel:has(.confirm-message) {
+  width: min(480px, 100%);
+}
+
+.confirm-message {
+  margin: 0;
+  color: var(--text-primary);
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.modal-footer .button.danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #ffffff;
+}
+
 /* Trang Văn bản & Biểu mẫu. */
 .doc-toolbar {
   display: flex;

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { IRBApprovalModal } from "@/components/research-proposals/irb-approval-modal";
 import { loadPendingSubmissions } from "@/lib/approval-routing-api";
 import { useSession } from "@/components/auth/session-provider";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useModalBehavior } from "@/components/ui/modal-dialog";
 import {
   CheckCircle2,
   Coins,
@@ -42,6 +43,7 @@ import {
 import { formatVndNumber } from "@/lib/vietnamese-currency";
 import { OfficialDecisionModal } from "@/components/research-proposals/official-decision-modal";
 import { OfficialCouncilDecisionModal } from "@/components/research-proposals/official-council-decision-modal";
+import { useAskReason } from "@/components/ui/confirm-dialog";
 
 const DECIDED_STATUSES = ["approved", "rejected"];
 
@@ -91,6 +93,9 @@ export function ApprovalQueuePanel() {
   const [councilApprovalNote, setCouncilApprovalNote] = useState("");
   const [councilDecisionNumber, setCouncilDecisionNumber] = useState("");
   const [councilActionLoading, setCouncilActionLoading] = useState(false);
+  const askReason = useAskReason();
+  const councilPanelRef = useRef<HTMLDivElement>(null);
+  useModalBehavior(councilPanelRef, () => { if (!councilActionLoading) setReviewingCouncilProposal(null); }, Boolean(reviewingCouncilProposal));
   const [notRouted, setNotRouted] = useState<Set<string>>(new Set());
   const [councilActionError, setCouncilActionError] = useState("");
   const [councilActionSuccess, setCouncilActionSuccess] = useState("");
@@ -299,8 +304,8 @@ export function ApprovalQueuePanel() {
 
   async function handleRejectCouncil() {
     if (!reviewingCouncilProposal) return;
-    const reason = prompt("Nhập ý kiến chỉ đạo điều chỉnh nhân sự Hội đồng gửi lại Trưởng phòng KHQS:");
-    if (!reason || !reason.trim()) return;
+    const reason = await askReason("Trả lại tờ trình Hội đồng cho Trưởng phòng KHQS điều chỉnh nhân sự.", { label: "Ý kiến chỉ đạo", confirmLabel: "Trả lại", tone: "danger" });
+    if (!reason) return;
 
     setCouncilActionLoading(true);
     setCouncilActionError("");
@@ -1078,6 +1083,10 @@ export function ApprovalQueuePanel() {
           }}
         >
           <div
+            ref={councilPanelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Tờ trình đề xuất Hội đồng"
             style={{
               background: "#ffffff",
               color: "#1e293b",

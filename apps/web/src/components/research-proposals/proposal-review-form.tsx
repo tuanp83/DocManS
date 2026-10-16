@@ -12,6 +12,7 @@ import {
   type EvaluationApiError,
   type MyProposalReview
 } from "@/lib/proposal-evaluations-api";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 function formatDate(value: string) {
   return value ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "";
@@ -25,6 +26,7 @@ function formatDate(value: string) {
  * than disappearing, so the reviewer can still see what they sent.
  */
 export function ProposalReviewForm({ proposalId, onReviewSubmitted, canSubmitReview, blockedReason, contextVersion }: { proposalId: string; onReviewSubmitted: () => void; canSubmitReview: boolean; blockedReason: string; contextVersion?: ViewerAuthorizationV1["contextVersion"] }) {
+  const confirm = useConfirm();
   const [review, setReview] = useState<MyProposalReview | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
   const [loadError, setLoadError] = useState("");
@@ -134,7 +136,7 @@ export function ProposalReviewForm({ proposalId, onReviewSubmitted, canSubmitRev
     setFormError("");
     setMessage("");
 
-    if (!window.confirm("Gửi phiếu đánh giá? Sau khi gửi, phiếu không còn được chỉnh sửa.")) {
+    if (!(await confirm("Gửi phiếu đánh giá? Sau khi gửi, phiếu không còn được chỉnh sửa.", { confirmLabel: "Gửi phiếu" }))) {
       return;
     }
 

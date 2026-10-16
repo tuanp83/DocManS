@@ -15,6 +15,7 @@ import {
 import type { ResearchProposal } from "@/lib/research-proposals-api";
 import { exportEvaluationSummaryWord } from "@/lib/word-export";
 import { formatDate } from "./evaluation-format";
+import { useConfirm, useAskReason } from "@/components/ui/confirm-dialog";
 
 /** Nội dung tổng hợp điền sẵn từ kết luận của Hội đồng sau khi ghi biên bản họp. */
 export type SummaryPrefill = { id: number; text: string; recommendation: string };
@@ -45,6 +46,8 @@ export function EvaluationSummarySection({
   /** Tải lại dữ liệu và báo cho trang cha sau khi lưu, chốt, mở lại hoặc trình. */
   onChanged: () => Promise<void>;
 }) {
+  const confirm = useConfirm();
+  const askReason = useAskReason();
   const [summaryText, setSummaryText] = useState(() => progress.evaluationSummary?.summary ?? "");
   const [recommendation, setRecommendation] = useState(() => progress.evaluationSummary?.recommendation ?? "");
   const [summaryError, setSummaryError] = useState("");
@@ -95,11 +98,11 @@ export function EvaluationSummarySection({
         return;
       }
     }
-    if (mode === "finalize" && !window.confirm("Chốt bản tổng hợp? Nội dung và danh sách phiếu sẽ được khoá; muốn sửa phải mở lại.")) return;
-    if (mode === "submit" && !window.confirm("Trình gói đánh giá? Gói đi qua Trưởng ban QLKH, Trưởng phòng KHQS rồi tới Giám đốc phê duyệt; vòng đánh giá được đóng lại.")) return;
+    if (mode === "finalize" && !(await confirm("Chốt bản tổng hợp? Nội dung và danh sách phiếu sẽ được khoá; muốn sửa phải mở lại.", { confirmLabel: "Chốt bản tổng hợp" }))) return;
+    if (mode === "submit" && !(await confirm("Trình gói đánh giá? Gói đi qua Trưởng ban QLKH, Trưởng phòng KHQS rồi tới Giám đốc phê duyệt; vòng đánh giá được đóng lại.", { confirmLabel: "Trình gói đánh giá" }))) return;
     let reason = "";
     if (mode === "reopen") {
-      reason = window.prompt("Lý do mở lại bản tổng hợp đã chốt:")?.trim() ?? "";
+      reason = (await askReason("Mở lại bản tổng hợp đã chốt để sửa.", { label: "Lý do mở lại", confirmLabel: "Mở lại" })) ?? "";
       if (!reason) return;
     }
 
