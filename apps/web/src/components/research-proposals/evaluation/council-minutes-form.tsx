@@ -142,7 +142,7 @@ export function CouncilMinutesForm({
                     <span style={{ fontSize: "12px" }}>Kết luận Hội đồng:</span>
                     <select
                       value={minutesConclusion}
-                      onChange={(e) => setMinutesConclusion(e.target.value as any)}
+                      onChange={(e) => setMinutesConclusion(e.target.value as MinutesConclusion)}
                       style={{ padding: "6px 10px", fontSize: "13px" }}
                     >
                       <option value="approved">Đạt yêu cầu (Đề nghị phê duyệt)</option>

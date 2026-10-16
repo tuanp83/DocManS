@@ -307,7 +307,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
     }
     await perform(async () => {
       const { managementOrganizationUnitId, profileType, provisionAccount, username: nextUsername, ...personal } = form;
-      const unitText = (form.externalAffiliation?.trim() || organizationUnitName.trim() || (form.curriculumVitae?.personalInfo as any)?.organization?.trim() || "");
+      const unitText = (form.externalAffiliation?.trim() || organizationUnitName.trim() || (form.curriculumVitae?.personalInfo)?.organization?.trim() || "");
       const effectiveOrgUnitId = matchOrganizationUnit(organizations, unitText)?.id || managementOrganizationUnitId || organizations[0]?.id || "";
       const effectiveAffiliation = unitText || undefined;
       const input = {
@@ -706,7 +706,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                       <td>
                         {profile.profileType === "EXTERNAL" ? "Nước ngoài" : "Trong nước"}
                         <br />
-                        <small className="text-secondary">{profile.externalAffiliation || (profile as any).curriculumVitae?.personalInfo?.organization || profile.managementOrganization.name}</small>
+                        <small className="text-secondary">{profile.externalAffiliation || profile.managementOrganization.name}</small>
                       </td>
                       <td>
                         <span className={`status-badge ${profile.status === "ACTIVE" ? "success" : "neutral"}`}>
@@ -1788,7 +1788,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                               <div className="cv-field-row">
                                 <span className="cv-field-label">6. Cơ quan công tác:</span>
                                 <span className="cv-field-value">
-                                   {form.externalAffiliation || (form.curriculumVitae?.personalInfo as any)?.organization || organizationUnitName || editing?.managementOrganization.name || "Học viện Quân y"}
+                                   {form.externalAffiliation || (form.curriculumVitae?.personalInfo)?.organization || organizationUnitName || editing?.managementOrganization.name || "Học viện Quân y"}
                                 </span>
                               </div>
                               <div className="cv-field-row">

@@ -1,3 +1,4 @@
+import type { CouncilMember } from "@/lib/research-proposals-api";
 
 /**
  * Word Document (.doc / .docx compatible) Export Utility
@@ -153,7 +154,7 @@ export function exportCouncilDecisionWord(proposal: {
 
   const memberRows = members
     .map(
-      (m: any, idx: number) => `
+      (m: CouncilMember, idx: number) => `
       <tr>
         <td style="text-align: center;">${idx + 1}</td>
         <td><b>${esc(m.displayName)}</b></td>
@@ -270,7 +271,7 @@ export function exportProposalApprovalDecisionWord(proposal: {
   title: string;
   ownerDisplayName?: string | null;
   hostOrganizationUnitName?: string | null;
-  budgetMetadata?: any;
+  budgetMetadata?: { amount?: number | string | null; currency?: string | null; note?: string | null; approvedAmount?: number | null; approvedNote?: string | null } | null;
   startDate?: string | null;
   endDate?: string | null;
   /** Giám đốc đã ký quyết định phê duyệt; chưa có thì để trống chỗ ký. */
@@ -284,7 +285,7 @@ export function exportProposalApprovalDecisionWord(proposal: {
   const code = proposal.code || BLANK;
   // Số quyết định do văn thư cấp khi ban hành; hệ thống chưa lưu nên để trống.
   const decisionNumber = BLANK;
-  const amount = proposal.budgetMetadata?.approvedAmount || proposal.budgetMetadata?.amount || 0;
+  const amount = Number(proposal.budgetMetadata?.approvedAmount || proposal.budgetMetadata?.amount || 0);
   const formattedAmount = new Intl.NumberFormat("vi-VN").format(amount);
 
   const contentHtml = `
@@ -386,12 +387,12 @@ export function exportCouncilMinutesWord(proposal: {
 
   const code = proposal.code || BLANK;
   const members = Array.isArray(council.members) ? council.members : [];
-  const chair = members.find((m: any) => m.role === "chair")?.displayName || BLANK;
-  const secretary = minutes.recordedByName || members.find((m: any) => m.role === "secretary")?.displayName || BLANK;
+  const chair = members.find((m: CouncilMember) => m.role === "chair")?.displayName || BLANK;
+  const secretary = minutes.recordedByName || members.find((m: CouncilMember) => m.role === "secretary")?.displayName || BLANK;
 
   const memberRows = members
     .map(
-      (m: any, idx: number) => `
+      (m: CouncilMember, idx: number) => `
       <tr>
         <td style="text-align: center;">${idx + 1}</td>
         <td><b>${esc(m.displayName)}</b></td>
@@ -500,7 +501,7 @@ export function exportEvaluationSummaryWord(proposal: {
   code?: string | null;
   title: string;
   ownerDisplayName?: string | null;
-  evaluationSummary?: any;
+  evaluationSummary?: { summary?: string; recommendation?: string } | null;
   /** Trưởng phòng KHQS ký báo cáo; chưa biết thì để trống chỗ ký. */
   signerName?: string | null;
 }) {
