@@ -60,7 +60,7 @@ export function closureFacts(project: AnyRecord) {
   return { acceptanceStatus: latest?.status ?? null, liquidationStatus: project.liquidation?.status ?? null, superiorStatus: project.superiorAcceptance?.status ?? null, latestAcceptance: latest };
 }
 
-export function openAcceptanceRound(project: AnyRecord) {
+export function openAcceptanceRound(project: LoadedProject) {
   const latest = closureFacts(project).latestAcceptance;
   return latest && !CLOSED_ACCEPTANCE_ROUND_STATUSES.includes(latest.status) ? latest : null;
 }
@@ -105,12 +105,12 @@ export class ApprovedProjectsService {
   }
 
   /** Người nhận theo vai trò trên đề tài (đọc trong giao dịch, trước khi commit). */
-  projectRecipients(project: AnyRecord, officer?: { officerUserId: string } | null) {
+  projectRecipients(project: LoadedProject, officer?: { officerUserId: string } | null) {
     const now = new Date();
-    const active = (project.members ?? []).filter((member: AnyRecord) => member.userId && isRelationshipActiveAt(member, now));
+    const active = (project.members ?? []).filter((member) => member.userId && isRelationshipActiveAt(member, now));
     return {
-      pi: active.filter((member: AnyRecord) => member.participationRole === "TOPIC_PI").map((member: AnyRecord) => member.userId as string),
-      team: active.map((member: AnyRecord) => member.userId as string),
+      pi: active.filter((member) => member.participationRole === "TOPIC_PI").map((member) => member.userId as string),
+      team: active.map((member) => member.userId as string),
       officer: officer?.officerUserId ? [officer.officerUserId] : []
     };
   }
@@ -139,7 +139,7 @@ export class ApprovedProjectsService {
     return active[0] ?? null;
   }
 
-  async assertOfficer(tx: Prisma.TransactionClient, actor: SafeUserContext, project: AnyRecord) {
+  async assertOfficer(tx: Prisma.TransactionClient, actor: SafeUserContext, project: LoadedProject) {
     this.assertScope(actor, project);
     if (this.activeMember(project, actor.id)) throw new ForbiddenException({ code: "CONFLICT_DENIED" });
     await this.assertNoEvaluationConflict(tx, actor.id, project.proposalId);
@@ -280,12 +280,12 @@ export class ApprovedProjectsService {
   }
 
   /** Mốc mà người xem được cập nhật tiến độ: chủ nhiệm mọi mốc đang mở, thành viên mốc mình phụ trách. */
-  private updatableMilestoneIds(project: AnyRecord, capability: AnyRecord, actor: SafeUserContext) {
+  private updatableMilestoneIds(project: LoadedProject, capability: AnyRecord, actor: SafeUserContext) {
     if (!capability.allowedActions?.includes("project.progress.update")) return [];
     const now = new Date();
-    const member = (project.members ?? []).find((item: AnyRecord) => item.userId === actor.id && isRelationshipActiveAt(item, now));
+    const member = (project.members ?? []).find((item) => item.userId === actor.id && isRelationshipActiveAt(item, now));
     if (!member) return [];
-    return (project.milestones ?? []).filter((item: AnyRecord) => item.status !== "completed" && (member.participationRole === "TOPIC_PI" || item.responsibleMemberId === member.id)).map((item: AnyRecord) => item.id);
+    return (project.milestones ?? []).filter((item) => item.status !== "completed" && (member.participationRole === "TOPIC_PI" || item.responsibleMemberId === member.id)).map((item) => item.id);
   }
 
   async getProgress(actor: SafeUserContext, projectId: string) {
@@ -359,7 +359,7 @@ export class ApprovedProjectsService {
     return tx.projectPlanBaseline.create({ data: { projectId, version: (latest?.version ?? 0) + 1, source, sourceRequestId, startDate: project?.startDate ?? null, endDate: project?.endDate ?? null, milestones: baselineFromMilestones(milestones), createdById: actorId, createdAt: now } });
   }
 
-  async createFromApprovedProposal(actor: SafeUserContext, proposalId: string, input: AnyRecord = {}) {
+  async createFromApprovedProposal(actor: SafeUserContext, proposalId: string, input: Record<string, unknown> = {}) {
     return this.prisma.$transaction(async (tx: any) => {
       await tx.$queryRaw`SELECT id FROM research_proposals WHERE id = ${proposalId} FOR UPDATE`;
       const currentActor = await this.readCurrentActor(tx, actor.id);
@@ -418,7 +418,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async confirmSetup(actor: SafeUserContext, projectId: string, input: AnyRecord = {}) {
+  async confirmSetup(actor: SafeUserContext, projectId: string, input: Record<string, unknown> = {}) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       if (project.status !== PREPARING) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Đề tài không còn ở trạng thái chuẩn bị triển khai." });
       await this.assertOfficer(tx, currentActor, project);
@@ -442,7 +442,7 @@ export class ApprovedProjectsService {
     });
   }
 
-  async configureSetup(actor: SafeUserContext, projectId: string, input: AnyRecord) {
+  async configureSetup(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project) => {
       if (project.status !== PREPARING) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED" });
       await this.assertOfficer(tx, currentActor, project);
@@ -523,9 +523,9 @@ export class ApprovedProjectsService {
     });
   }
 
-  private assertProjectPi(actor: SafeUserContext, project: AnyRecord, requireExecution = true) {
+  private assertProjectPi(actor: SafeUserContext, project: LoadedProject, requireExecution = true) {
     this.assertScope(actor, project);
-    const member = (project.members ?? []).find((item: AnyRecord) => item.userId === actor.id && item.participationRole === "TOPIC_PI" && isRelationshipActiveAt(item, new Date()));
+    const member = (project.members ?? []).find((item) => item.userId === actor.id && item.participationRole === "TOPIC_PI" && isRelationshipActiveAt(item, new Date()));
     if (!member) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chỉ PI hiện hành của đề tài được thực hiện thao tác này." });
     if (requireExecution && project.status !== EXECUTING) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Đề tài chưa ở trạng thái thực hiện." });
   }
@@ -535,15 +535,15 @@ export class ApprovedProjectsService {
     return (latest?.revision ?? 0) + 1;
   }
 
-  private async findReport(tx: Prisma.TransactionClient, project: AnyRecord, reportId: string) {
+  private async findReport(tx: Prisma.TransactionClient, project: LoadedProject, reportId: string) {
     const report = await tx.projectReportRevision.findUnique({ where: { id: reportId }, include: { evidence: { include: { fileRecord: true } }, checkpoint: true } });
     if (!report || report.projectId !== project.id) throw new NotFoundException({ message: "Không tìm thấy phiên bản báo cáo của đề tài." });
     return report;
   }
 
-  private assertReportPeriod(project: AnyRecord, checkpointId: string | null, start: Date | null, end: Date | null, currentId?: string) {
+  private assertReportPeriod(project: LoadedProject, checkpointId: string | null, start: Date | null, end: Date | null, currentId?: string) {
     if (!(start instanceof Date) || !(end instanceof Date) || end < start || (project.startDate && start < project.startDate) || (project.endDate && end > project.endDate)) throw new BadRequestException({ code: "REPORT_PERIOD_INVALID", message: "Kỳ báo cáo phải nằm trong thời gian đề tài." });
-    if (project.reports.some((item: AnyRecord) => item.id !== currentId && item.checkpointId === checkpointId && ![REPORT_SUPPLEMENT].includes(item.status) && item.reportingPeriodStart && item.reportingPeriodEnd && start <= item.reportingPeriodEnd && end >= item.reportingPeriodStart)) throw new ConflictException({ code: "REPORT_PERIOD_OVERLAP", message: "Kỳ báo cáo trùng với phiên bản đang xử lý." });
+    if (project.reports.some((item) => item.id !== currentId && item.checkpointId === checkpointId && ![REPORT_SUPPLEMENT].includes(item.status) && item.reportingPeriodStart && item.reportingPeriodEnd && start <= item.reportingPeriodEnd && end >= item.reportingPeriodStart)) throw new ConflictException({ code: "REPORT_PERIOD_OVERLAP", message: "Kỳ báo cáo trùng với phiên bản đang xử lý." });
   }
 
   private async assertUsableEvidence(tx: Prisma.TransactionClient, projectId: string, fileIds: string[] | undefined, expectedEntityId?: string) {
@@ -698,15 +698,15 @@ export class ApprovedProjectsService {
   }
 
   /** Trọng số sau điều chỉnh phải hợp lệ (để trống tất cả, hoặc đủ mọi mốc với tổng 100) — kiểm tra sớm cho PI. */
-  private assertAdjustmentWeights(project: AnyRecord, values: AnyRecord) {
+  private assertAdjustmentWeights(project: LoadedProject, values: AnyRecord) {
     const changes = (values.milestoneChanges ?? []).filter((change: AnyRecord) => change?.weightPercent !== undefined);
     if (!changes.length) return;
-    const next = (project.milestones ?? []).map((item: AnyRecord) => { const change = changes.find((entry: AnyRecord) => entry.id === item.id); return change ? change.weightPercent : item.weightPercent; });
+    const next = (project.milestones ?? []).map((item) => { const change = changes.find((entry: AnyRecord) => entry.id === item.id); return change ? change.weightPercent : item.weightPercent; });
     const result = validateDeclaredWeights(next);
     if (!result.ok) throw new BadRequestException({ code: "WEIGHTS_INVALID", message: result.message });
   }
 
-  private assertExtensionValues(project: AnyRecord, values: AnyRecord) {
+  private assertExtensionValues(project: LoadedProject, values: AnyRecord) {
     if (!values || typeof values !== "object" || Array.isArray(values) || Object.keys(values).some((key) => key !== "requestedEndDate") || !project.endDate) throw new BadRequestException({ code: "EXTENSION_DATE_INVALID" });
     const raw = values.requestedEndDate ?? values.requested_end_date ?? values.endDate ?? values.end_date;
     const requested = projectDay(raw);
@@ -733,10 +733,10 @@ export class ApprovedProjectsService {
     });
   }
 
-  async createAdjustment(actor: SafeUserContext, projectId: string, input: AnyRecord) { return this.createRequest(actor, projectId, ADJUSTMENT, input); }
-  async createExtension(actor: SafeUserContext, projectId: string, input: AnyRecord) { return this.createRequest(actor, projectId, EXTENSION, input); }
+  async createAdjustment(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) { return this.createRequest(actor, projectId, ADJUSTMENT, input); }
+  async createExtension(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) { return this.createRequest(actor, projectId, EXTENSION, input); }
 
-  private async findRequest(tx: any, project: AnyRecord, requestId: string) {
+  private async findRequest(tx: any, project: LoadedProject, requestId: string) {
     const request = await tx.projectRequest.findUnique({ where: { id: requestId }, include: { revisions: { orderBy: { revision: "desc" } }, evidence: true } });
     if (!request || request.projectId !== project.id) throw new NotFoundException({ message: "Không tìm thấy yêu cầu của đề tài." });
     return request;
@@ -910,17 +910,17 @@ export class ApprovedProjectsService {
     return update;
   }
 
-  private async applyAdjustmentChanges(tx: Prisma.TransactionClient, actor: SafeUserContext, project: AnyRecord, values: AnyRecord, now: Date) {
+  private async applyAdjustmentChanges(tx: Prisma.TransactionClient, actor: SafeUserContext, project: LoadedProject, values: AnyRecord, now: Date) {
     for (const change of values.milestoneChanges ?? []) {
       if (!change || typeof change !== "object" || Array.isArray(change) || !change.id || Object.keys(change).some((key) => !MILESTONE_CHANGE_KEYS.includes(key))) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
       const weightOnly = Object.keys(change).every((key) => key === "id" || key === "weightPercent");
-      const milestone = project.milestones.find((item: AnyRecord) => item.id === change.id && (item.isImportant || weightOnly));
+      const milestone = project.milestones.find((item) => item.id === change.id && (item.isImportant || weightOnly));
       if (!milestone) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED", message: "Mốc quan trọng không thuộc đề tài." });
       const data: AnyRecord = {};
       if (change.title !== undefined) data.title = requiredText(change.title, "title");
       if (change.description !== undefined) data.description = optionalText(change.description);
       if (change.responsibleMemberId !== undefined) {
-        const member = project.members.find((item: AnyRecord) => item.id === change.responsibleMemberId && isRelationshipActiveAt(item, now));
+        const member = project.members.find((item) => item.id === change.responsibleMemberId && isRelationshipActiveAt(item, now));
         if (!member) throw new BadRequestException({ code: "MEMBER_INELIGIBLE" });
         data.responsibleMemberId = member.id;
       }
@@ -942,15 +942,15 @@ export class ApprovedProjectsService {
     for (const change of values.membershipChanges ?? []) {
       if (!change || typeof change !== "object" || Array.isArray(change)) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
       if (change.action === "end" && Object.keys(change).every((key) => ["action", "memberId"].includes(key))) {
-        const member = project.members.find((item: AnyRecord) => item.id === change.memberId && item.participationRole !== "TOPIC_PI" && isRelationshipActiveAt(item, now));
+        const member = project.members.find((item) => item.id === change.memberId && item.participationRole !== "TOPIC_PI" && isRelationshipActiveAt(item, now));
         if (!member) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
-        if (project.milestones.some((item: AnyRecord) => item.responsibleMemberId === member.id && item.status !== "completed")) throw new BadRequestException({ code: "MEMBER_RESPONSIBILITY_ACTIVE", message: "Cần chuyển trách nhiệm mốc trước khi kết thúc thành viên." });
+        if (project.milestones.some((item) => item.responsibleMemberId === member.id && item.status !== "completed")) throw new BadRequestException({ code: "MEMBER_RESPONSIBILITY_ACTIVE", message: "Cần chuyển trách nhiệm mốc trước khi kết thúc thành viên." });
         await tx.approvedProjectMember.update({ where: { id: member.id }, data: { status: "ENDED", effectiveUntil: now } });
       } else if (change.action === "add" && Object.keys(change).every((key) => ["action", "userId", "name", "participationRole"].includes(key))) {
         if (!["TOPIC_MEMBER", "TOPIC_SECRETARY"].includes(change.participationRole)) throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
         const user = await tx.user.findUnique({ where: { id: change.userId }, include: { organizationScopes: true } });
         if (!user || user.status !== "active" || !user.organizationScopes.some((scope) => scope.organizationUnitId === project.hostOrganizationUnitId)) throw new BadRequestException({ code: "MEMBER_INELIGIBLE" });
-        if (project.members.some((item: AnyRecord) => item.userId === user.id && isRelationshipActiveAt(item, now)) || (await this.currentOfficer(tx, project.id, now))?.officerUserId === user.id) throw new ForbiddenException({ code: "CONFLICT_DENIED" });
+        if (project.members.some((item) => item.userId === user.id && isRelationshipActiveAt(item, now)) || (await this.currentOfficer(tx, project.id, now))?.officerUserId === user.id) throw new ForbiddenException({ code: "CONFLICT_DENIED" });
         await this.assertNoEvaluationConflict(tx, user.id, project.proposalId);
         await tx.approvedProjectMember.create({ data: { projectId: project.id, userId: user.id, name: requiredText(change.name, "name"), role: change.participationRole, participationRole: change.participationRole, status: "ACTIVE", effectiveFrom: now, createdById: actor.id } });
       } else throw new BadRequestException({ code: "ADJUSTMENT_SCOPE_DENIED" });
@@ -958,22 +958,22 @@ export class ApprovedProjectsService {
   }
 
   /** Giao / thu hồi chuyên viên phụ trách: Trưởng phòng hoặc Trưởng ban QLKH trong phạm vi, không tham gia đề tài. */
-  private assertOfficerAssigner(actor: SafeUserContext, project: AnyRecord) {
+  private assertOfficerAssigner(actor: SafeUserContext, project: LoadedProject) {
     this.assertScope(actor, project);
     if (!canAssignProjectOfficer(actor) || this.activeMember(project, actor.id)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
   }
 
   /** Quyết định gia hạn (và yêu cầu bổ sung ở bước chờ quyết định): lãnh đạo, không tham gia đề tài. */
-  private assertExtensionDecider(actor: SafeUserContext, project: AnyRecord) {
+  private assertExtensionDecider(actor: SafeUserContext, project: LoadedProject) {
     this.assertScope(actor, project);
     if (!canDecideProjectExtension(actor) || this.activeMember(project, actor.id)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
   }
 
-  activeMember(project: AnyRecord, actorId: string) {
-    return (project.members ?? []).some((member: AnyRecord) => member.userId === actorId && isRelationshipActiveAt(member, new Date()));
+  activeMember(project: LoadedProject, actorId: string) {
+    return (project.members ?? []).some((member) => member.userId === actorId && isRelationshipActiveAt(member, new Date()));
   }
 
-  private async recordRequestAction(tx: any, actor: SafeUserContext, project: AnyRecord, request: AnyRecord, action: string, toStatus: string, facts: AnyRecord) {
+  private async recordRequestAction(tx: any, actor: SafeUserContext, project: LoadedProject, request: AnyRecord, action: string, toStatus: string, facts: AnyRecord) {
     const name = `project.${request.requestType}.${action}`;
     await tx.projectRequestHistory.create({ data: { requestId: request.id, actorId: actor.id, action: name, fromStatus: request.status, toStatus, reason: facts.reason ?? facts.note ?? null, beforeFacts: { status: request.status }, afterFacts: facts } });
     await tx.projectHistory.create({ data: { projectId: project.id, actorId: actor.id, action: name, requestId: request.id, fromStatus: request.status, toStatus, reason: facts.reason ?? facts.note ?? null, beforeFacts: facts.before ?? null, afterFacts: facts.after ?? facts } });
@@ -983,7 +983,7 @@ export class ApprovedProjectsService {
 
 const MILESTONE_CHANGE_KEYS = ["id", "title", "description", "dueDate", "responsibleMemberId", "weightPercent"];
 
-function assertProjectContext(expected: unknown, project: AnyRecord) {
+function assertProjectContext(expected: unknown, project: LoadedProject) {
   const current = projectContextVersion(project);
   if (!expected || typeof expected !== "object" || Object.entries(current).some(([key, value]) => (expected as AnyRecord)[key] !== value)) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
 }
