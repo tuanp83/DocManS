@@ -10,6 +10,8 @@ export type ScopeSnapshot = {
   /** Cấp đề tài (cấp Học viện, cấp Bộ...): quyết định có nghiệm thu cấp trên hay không. */
   proposalTypeCode?: unknown;
   budgetMetadata?: unknown;
+  /** Không ghi khi tạo đề tài; dashboard đọc thử rồi lấy từ hồ sơ đề xuất gốc nếu thiếu. */
+  militaryScope?: unknown;
 };
 
 /** Đọc ảnh chụp phạm vi; giá trị không phải object coi như rỗng. */
