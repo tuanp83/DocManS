@@ -91,7 +91,7 @@ export const createResearchProposalDraftPipe: PipeTransform<unknown, CreateResea
     readBudgetMetadata(input.budgetMetadata);
     readMembers(input.members);
 
-    return input as unknown as CreateResearchProposalDraftDto;
+    return input as CreateResearchProposalDraftDto;
   }
 };
 
@@ -163,7 +163,7 @@ export const assignProposalManagementOfficerPipe: PipeTransform<unknown, AssignP
     const input = assertRecord(value);
     readText(input.officerUserId, "officerUserId", 120);
     readText(input.reason, "reason", 2000);
-    return input as unknown as AssignProposalManagementOfficerDto;
+    return input as AssignProposalManagementOfficerDto;
   }
 };
 
@@ -171,6 +171,6 @@ export const revokeProposalManagementOfficerPipe: PipeTransform<unknown, RevokeP
   transform(value: unknown) {
     const input = assertRecord(value);
     readText(input.reason, "reason", 2000);
-    return input as unknown as RevokeProposalManagementOfficerDto;
+    return input as RevokeProposalManagementOfficerDto;
   }
 };

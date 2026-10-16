@@ -75,7 +75,7 @@ export class EvaluationCoordinationService {
       },
       orderBy: { submittedAt: "desc" },
       take: MAX_ROWS
-    })) as unknown as OverviewProposal[];
+    })) as OverviewProposal[];
     const ids = proposals.map((proposal) => proposal.id);
 
     const [officers, events, assignments, reviews, summaries, levels] = await Promise.all([
@@ -177,7 +177,7 @@ export class EvaluationCoordinationService {
   /** Thay toàn bộ mảng phụ trách của một chuyên viên. Không ảnh hưởng hồ sơ đã giao trước đó. */
   async setPortfolio(actor: SafeUserContext, officerUserId: string, input: Record<string, unknown>) {
     this.assertHead(actor);
-    const officer = (await this.prisma.user.findUnique({ where: { id: officerUserId }, include: { organizationScopes: true } })) as unknown as {
+    const officer = (await this.prisma.user.findUnique({ where: { id: officerUserId }, include: { organizationScopes: true } })) as {
       id: string; status: string; systemRole: string | null; organizationScopes: Array<{ organizationUnitId: string }>;
     } | null;
     if (!officer || officer.status !== "active" || officer.systemRole !== "RESEARCH_MANAGEMENT_STAFF") throw new NotFoundException({ message: "Không tìm thấy chuyên viên quản lý khoa học đang hoạt động." });
@@ -218,7 +218,7 @@ export class EvaluationCoordinationService {
     const proposals = (await this.prisma.researchProposal.findMany({
       where: { status: { in: ["submitted", "resubmitted", "supplement_requested", "under_review", "ready_for_approval"] }, hostOrganizationUnitId: { in: scopeIds } },
       select: { id: true, ownerId: true, hostOrganizationUnitId: true, proposalTypeCode: true, researchFieldCode: true, militaryScope: true }
-    })) as unknown as Array<{ id: string; ownerId: string; hostOrganizationUnitId: string; proposalTypeCode: string | null; researchFieldCode: string | null; militaryScope: string | null }>;
+    })) as Array<{ id: string; ownerId: string; hostOrganizationUnitId: string; proposalTypeCode: string | null; researchFieldCode: string | null; militaryScope: string | null }>;
     const officers = await new ProposalManagementOfficerService(this.prisma).resolveForProposals(proposals.map((proposal) => proposal.id));
     let assigned = 0;
     let unmatched = 0;

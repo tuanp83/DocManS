@@ -134,7 +134,7 @@ export class ProposalReviewAssignmentsService {
       },
       orderBy: { fullName: "asc" },
       take: 50
-    })) as unknown as ReviewerProfileCandidate[];
+    })) as ReviewerProfileCandidate[];
     const candidates: Array<{ id: string; fullName: string; linkedUserId: string; linkedAccountUsername: string; linkedAccountDisplayName: string }> = [];
     for (const profile of profiles) {
       const account = profile.linkedUser;
@@ -170,7 +170,7 @@ export class ProposalReviewAssignmentsService {
       // Lời mời (trong ứng dụng + email) chỉ gửi khi phân công đã commit.
       if (this.notifications && result?.reviewerUserId) {
         try {
-          const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { code: true, title: true } })) as unknown as { code: string | null; title: string } | null;
+          const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { code: true, title: true } })) as { code: string | null; title: string } | null;
           await this.notifications.dispatch([{ ...reviewInvitationEvent(proposalId, proposal ?? { title: "" }, result.reviewerUserId, result.assignmentRole, result.dueDate ? new Date(result.dueDate) : null), metadata: { proposalId, assignmentId: result.id, assignmentRole: result.assignmentRole, dueDate: result.dueDate ?? null } }]);
         } catch {
           // Thông báo là phụ trợ.
@@ -321,7 +321,7 @@ export class ProposalReviewAssignmentsService {
 
         return assignment;
       })
-    )) as unknown as ReviewAssignmentRecord;
+    )) as ReviewAssignmentRecord;
 
     return this.toAssignmentResponse(created, []);
   }
@@ -385,7 +385,7 @@ export class ProposalReviewAssignmentsService {
       });
 
       return record;
-    })) as unknown as ReviewAssignmentRecord;
+    })) as ReviewAssignmentRecord;
 
     return this.toAssignmentResponse(updated, []);
   }
@@ -781,7 +781,7 @@ export class ProposalReviewAssignmentsService {
     await this.prisma.$queryRaw`SELECT id FROM users WHERE id = ${candidate.id} FOR SHARE`;
     // Hồ sơ nhà khoa học liên kết với tài khoản (nếu có). Trước đây gán nhầm ID tài khoản vào trường này,
     // vi phạm khoá ngoại tới researcher_profiles nên mọi phân công cho người có hồ sơ đều thất bại.
-    const profiles = (this.prisma as unknown as { researcherProfile?: { findFirst: (args: unknown) => Promise<{ id: string } | null> } }).researcherProfile;
+    const profiles = (this.prisma as { researcherProfile?: { findFirst: (args: unknown) => Promise<{ id: string } | null> } }).researcherProfile;
     const profile = profiles ? await profiles.findFirst({ where: { linkedUserId: candidate.id }, select: { id: true } }) : null;
 
     return {

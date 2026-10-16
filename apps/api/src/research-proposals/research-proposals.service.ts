@@ -189,7 +189,7 @@ export class ResearchProposalsService {
   }
 
   private async submissionEvents(proposalId: string, resubmitted: boolean): Promise<WorkflowEvent[]> {
-    const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { id: true, code: true, title: true, ownerId: true, hostOrganizationUnitId: true, submittedById: true } })) as unknown as { id: string; code: string | null; title: string; ownerId: string; hostOrganizationUnitId: string; submittedById: string | null } | null;
+    const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { id: true, code: true, title: true, ownerId: true, hostOrganizationUnitId: true, submittedById: true } })) as { id: string; code: string | null; title: string; ownerId: string; hostOrganizationUnitId: string; submittedById: string | null } | null;
     if (!proposal) return [];
     const managers = await researchManagersInScope(this.prisma, proposal.hostOrganizationUnitId);
     const name = label(proposal);
@@ -338,7 +338,7 @@ export class ResearchProposalsService {
    * đề xuất chưa lập đề tài giữ dữ liệu cũ (sẽ được chuyển sang khi tạo đề tài).
    */
   private async attachProjectClosure<T extends { id: string }>(results: T[], actor?: SafeUserContext): Promise<T[]> {
-    const client = this.prisma as unknown as { approvedProject?: { findMany: (args: unknown) => Promise<any[]> } };
+    const client = this.prisma as { approvedProject?: { findMany: (args: unknown) => Promise<any[]> } };
     if (!results.length || typeof client.approvedProject?.findMany !== "function") return results;
     const projects = await client.approvedProject.findMany({
       where: { proposalId: { in: results.map((item) => item.id) } },
@@ -586,7 +586,7 @@ export class ResearchProposalsService {
       await autoAssignPortfolioOfficer(tx, updated, actor.id, submittedAt, await this.participantUserIds(proposalId));
 
       return updated;
-    })) as unknown as ResearchProposalRecord;
+    })) as ResearchProposalRecord;
 
     return this.toProposalDetailResponse(submitted, actor);
   }
@@ -596,8 +596,8 @@ export class ResearchProposalsService {
     if (!this.transactional) {
       const result = await this.mutate(actor, proposalId, input.contextVersion, (service, a) => service.requestSupplement(a, proposalId, input));
       await this.notifyAfterCommit(async () => {
-        const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { id: true, code: true, title: true, ownerId: true } })) as unknown as { id: string; code: string | null; title: string; ownerId: string } | null;
-        const request = (await this.prisma.proposalSupplementRequest.findFirst({ where: { proposalId, status: "open" }, orderBy: { requestedAt: "desc" } })) as unknown as { id: string; reason: string; dueDate: Date } | null;
+        const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { id: true, code: true, title: true, ownerId: true } })) as { id: string; code: string | null; title: string; ownerId: string } | null;
+        const request = (await this.prisma.proposalSupplementRequest.findFirst({ where: { proposalId, status: "open" }, orderBy: { requestedAt: "desc" } })) as { id: string; reason: string; dueDate: Date } | null;
         if (!proposal) return [];
         return [{
           type: NOTIFICATION_TYPES.supplementRequested,
@@ -669,7 +669,7 @@ export class ResearchProposalsService {
       });
 
       return record;
-    })) as unknown as ResearchProposalRecord;
+    })) as ResearchProposalRecord;
 
     return this.toProposalDetailResponse(updated, actor);
   }
@@ -751,7 +751,7 @@ export class ResearchProposalsService {
       await autoAssignPortfolioOfficer(tx, record, pi.id, new Date(), await this.participantUserIds(proposalId));
 
       return record;
-    })) as unknown as ResearchProposalRecord;
+    })) as ResearchProposalRecord;
 
     return this.toProposalDetailResponse(updated, pi);
   }
@@ -864,7 +864,7 @@ export class ResearchProposalsService {
       reason: JSON.stringify({ proposalId, officerUserId, replacedOfficerUserId: current.officer?.officerUserId ?? null, effectiveFrom: now.toISOString(), effectiveUntil: null, reason, contextVersion: input.contextVersion })
     });
 
-    return this.toManagementOfficerResponse({ resolved: true, officer: record as unknown as ProposalManagementOfficer });
+    return this.toManagementOfficerResponse({ resolved: true, officer: record as ProposalManagementOfficer });
   }
 
   async revokeManagementOfficer(actor: SafeUserContext, proposalId: string, input: Record<string, unknown>): Promise<any> {
@@ -1236,7 +1236,7 @@ export class ResearchProposalsService {
   }
 
   private async findPlannedDeliverables(proposalId: string) {
-    const client = this.prisma as unknown as { proposalDeliverable?: { findMany: (args: unknown) => Promise<Array<Record<string, unknown>>> } };
+    const client = this.prisma as { proposalDeliverable?: { findMany: (args: unknown) => Promise<Array<Record<string, unknown>>> } };
     if (typeof client.proposalDeliverable?.findMany !== "function") return [];
     return client.proposalDeliverable.findMany({ where: { proposalId }, orderBy: { createdAt: "asc" }, select: { id: true, type: true, title: true, description: true } });
   }

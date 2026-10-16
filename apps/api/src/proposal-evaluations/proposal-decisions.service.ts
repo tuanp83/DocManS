@@ -272,7 +272,7 @@ export class ProposalDecisionsService {
     const created = (await this.prisma.$transaction(async (tx) => {
       // Khoá hồ sơ rồi đối chiếu gói trong cùng giao dịch: không ai sửa, mở lại hay trình lại gói giữa lúc kiểm tra và ghi.
       await tx.$queryRaw`SELECT id FROM research_proposals WHERE id = ${proposalId} FOR UPDATE`;
-      const packageSnapshot = await this.assertDecidablePackage(tx as unknown as PrismaService, proposal, packageRevision);
+      const packageSnapshot = await this.assertDecidablePackage(tx as PrismaService, proposal, packageRevision);
       // Gói phê duyệt phải đã qua Trưởng ban QLKH và Trưởng phòng KHQS (trừ gói trình trước khi có luồng này).
       await assertReadyForLeadership(tx, actor, { kind: APPROVAL_KINDS.decisionPackage, subjectType: "proposal", subjectId: proposalId });
 
@@ -338,10 +338,10 @@ export class ProposalDecisionsService {
       });
 
       return record;
-    })) as unknown as ProposalDecisionRecord;
+    })) as ProposalDecisionRecord;
 
     await this.notifyAfterCommit(async () => {
-      const members = (await this.prisma.proposalMember.findMany({ where: { proposalId, status: "ACTIVE" }, select: { userId: true } }).catch(() => [])) as unknown as Array<{ userId: string | null }>;
+      const members = (await this.prisma.proposalMember.findMany({ where: { proposalId, status: "ACTIVE" }, select: { userId: true } }).catch(() => [])) as Array<{ userId: string | null }>;
       const approved = decision === PROPOSAL_DECISIONS.approved;
       const managers = approved ? await researchManagersInScope(this.prisma, proposal.hostOrganizationUnitId) : [];
       const name = label(proposal);
@@ -386,8 +386,8 @@ export class ProposalDecisionsService {
     const snapshot = summary.evidenceSnapshot as Record<string, unknown> | null | undefined;
     const assignments = await client.proposalReviewAssignment.findMany({ where: { proposalId: proposal.id } });
     const reviews = await client.proposalReview.findMany({ where: { proposalId: proposal.id } });
-    const roundAssignments = currentRoundAssignments(assignments as never[], evidence.eventId) as unknown as Parameters<ProposalEvaluationSummaryService["summarizeProgress"]>[0];
-    const roundReviews = currentRoundReviews(reviews as never[], roundAssignments as never[], evidence.eventId) as unknown as Parameters<ProposalEvaluationSummaryService["summarizeProgress"]>[1];
+    const roundAssignments = currentRoundAssignments(assignments as never[], evidence.eventId) as Parameters<ProposalEvaluationSummaryService["summarizeProgress"]>[0];
+    const roundReviews = currentRoundReviews(reviews as never[], roundAssignments as never[], evidence.eventId) as Parameters<ProposalEvaluationSummaryService["summarizeProgress"]>[1];
     if (!snapshot || snapshot.lifecycle !== "finalized" || snapshot.submissionEventId !== evidence.eventId || !sameEvidenceIds(snapshot, roundAssignments, roundReviews)) throw mismatch();
     // Gói được migration tạo cho hồ sơ đã trình theo quy định cũ (backfilled) không bị chặn bởi quy tắc thành phần
     // hội đồng mới; gói mới luôn đã qua kiểm tra này khi chốt và khi trình.
@@ -423,7 +423,7 @@ export class ProposalDecisionsService {
       if (proposal.status === PROPOSAL_STATUS.readyForApproval) {
         await assertReadyForLeadership(tx, actor, { kind: APPROVAL_KINDS.decisionPackage, subjectType: "proposal", subjectId: proposalId });
       }
-      const projects = (tx as unknown as { approvedProject?: { findFirst: (args: unknown) => Promise<unknown> } }).approvedProject;
+      const projects = (tx as { approvedProject?: { findFirst: (args: unknown) => Promise<unknown> } }).approvedProject;
       if (proposal.status === PROPOSAL_STATUS.approved && projects && (await projects.findFirst({ where: { proposalId }, select: { id: true } }))) {
         throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Đề tài đã được lập; kinh phí được quản lý trong mục Kinh phí của đề tài." });
       }
@@ -581,7 +581,7 @@ export class ProposalDecisionsService {
       },
       orderBy: { fullName: "asc" },
       take: 1000
-    })) as unknown as Array<{
+    })) as Array<{
       id: string; linkedUserId: string | null; fullName: string; title?: string | null; militaryRank?: string | null; position?: string | null; profileType?: string | null;
       managementOrganizationUnitId?: string | null; managementOrganizationUnit?: { name: string } | null;
       academicRankCatalogItem?: { name: string } | null; academicDegreeCatalogItem?: { name: string } | null;
@@ -946,7 +946,7 @@ export class ProposalDecisionsService {
 
   /** Lời mời và tư cách thành viên IRB của người xem: chỉ tên đề tài, vai trò, trạng thái (không lộ nội dung hồ sơ). */
   async listMyIrbInvitations(actor: SafeUserContext) {
-    const table = (this.prisma as unknown as { proposalIrbMember?: { findMany(args: unknown): Promise<unknown[]> } }).proposalIrbMember;
+    const table = (this.prisma as { proposalIrbMember?: { findMany(args: unknown): Promise<unknown[]> } }).proposalIrbMember;
     if (!table?.findMany) return [];
     const rows = (await table.findMany({
       where: { userId: actor.id, status: { in: [IRB_MEMBER_STATUS.invited, IRB_MEMBER_STATUS.accepted, IRB_MEMBER_STATUS.active] } },

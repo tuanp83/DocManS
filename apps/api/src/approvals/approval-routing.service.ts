@@ -46,7 +46,7 @@ export class ApprovalRoutingService {
       include: { submittedBy: { select: { displayName: true } }, steps: { include: { actor: { select: { displayName: true } } }, orderBy: { createdAt: "asc" } } },
       orderBy: { updatedAt: "desc" },
       take: INBOX_LIMIT
-    })) as unknown as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
+    })) as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
     return {
       role: isResearchBoardHead(actor) ? "board_head" : isResearchManagementHead(actor) ? "head" : isLeadership(actor) || isScienceDeputyDirector(actor) ? "leadership" : "staff",
       submissions: rows.map((row) => this.toResponse(row))
@@ -61,7 +61,7 @@ export class ApprovalRoutingService {
     if (!["proposal", "project"].includes(subjectType)) throw new BadRequestException({ message: "Loại đối tượng không hợp lệ." });
     const academyWide = isLeadership(actor) || isScienceDeputyDirector(actor);
     const where: Record<string, unknown> = { subjectType, status: "PENDING", ...(academyWide ? {} : { hostOrganizationUnitId: { in: getOrganizationScopeIds(actor) } }) };
-    const rows = (await this.prisma.approvalSubmission.findMany({ where, select: { id: true, kind: true, subjectId: true, subjectRef: true, stage: true, signer: true } })) as unknown as Array<{ id: string; kind: string; subjectId: string; subjectRef: string; stage: ApprovalStage; signer: string }>;
+    const rows = (await this.prisma.approvalSubmission.findMany({ where, select: { id: true, kind: true, subjectId: true, subjectRef: true, stage: true, signer: true } })) as Array<{ id: string; kind: string; subjectId: string; subjectRef: string; stage: ApprovalStage; signer: string }>;
     return { pending: rows.map((row) => ({ ...row, stageLabel: APPROVAL_STAGE_LABELS[row.stage] })) };
   }
 
@@ -73,7 +73,7 @@ export class ApprovalRoutingService {
       include: { submittedBy: { select: { displayName: true } }, steps: { include: { actor: { select: { displayName: true } } }, orderBy: { createdAt: "asc" } } },
       orderBy: { createdAt: "desc" },
       take: 50
-    })) as unknown as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
+    })) as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
     // Đọc theo phạm vi đơn vị (Ban giám đốc toàn Học viện); chủ nhiệm và người ngoài Phòng không xem hồ sơ trình nội bộ.
     const academyWide = isLeadership(actor) || isScienceDeputyDirector(actor);
     const scopeIds = getOrganizationScopeIds(actor);
@@ -89,7 +89,7 @@ export class ApprovalRoutingService {
       const submission = await this.lockPending(tx, submissionId);
       this.assertStageActor(actor, submission);
       const next: ApprovalStage = submission.stage === "BOARD_REVIEW" ? "HEAD_REVIEW" : "LEADERSHIP";
-      const updated = (await tx.approvalSubmission.update({ where: { id: submission.id }, data: { stage: next, lastNote: note ?? submission.lastNote } })) as unknown as ApprovalSubmissionRow;
+      const updated = (await tx.approvalSubmission.update({ where: { id: submission.id }, data: { stage: next, lastNote: note ?? submission.lastNote } })) as ApprovalSubmissionRow;
       await tx.approvalStep.create({ data: { submissionId: submission.id, stage: submission.stage, action: submission.stage === "BOARD_REVIEW" ? "FORWARD" : "APPROVE", actorId: actor.id, note } });
       await tx.auditLog.create({ data: { action: submission.stage === "BOARD_REVIEW" ? "forward-approval-submission" : "approve-approval-submission", result: "success", actorId: actor.id, targetEntity: "approval-submission", targetEntityId: submission.id, username: actor.username, reason: JSON.stringify({ kind: submission.kind, subjectId: submission.subjectId, toStage: next, note }) } });
       const recipients = next === "HEAD_REVIEW" ? await this.usersInScope(tx, "RESEARCH_MANAGEMENT_HEAD", submission.hostOrganizationUnitId) : await this.signers(tx, submission.signer);
@@ -105,7 +105,7 @@ export class ApprovalRoutingService {
     const { submission, event } = await this.prisma.$transaction(async (tx) => {
       const submission = await this.lockPending(tx, submissionId);
       this.assertStageActor(actor, submission);
-      const updated = (await tx.approvalSubmission.update({ where: { id: submission.id }, data: { status: "RETURNED", stage: "CLOSED", closedAt: new Date(), lastNote: note } })) as unknown as ApprovalSubmissionRow;
+      const updated = (await tx.approvalSubmission.update({ where: { id: submission.id }, data: { status: "RETURNED", stage: "CLOSED", closedAt: new Date(), lastNote: note } })) as ApprovalSubmissionRow;
       await tx.approvalStep.create({ data: { submissionId: submission.id, stage: submission.stage, action: "RETURN", actorId: actor.id, note } });
       await revertOnReturn(tx, submission, actor, note);
       await tx.auditLog.create({ data: { action: "return-approval-submission", result: "success", actorId: actor.id, targetEntity: "approval-submission", targetEntityId: submission.id, username: actor.username, reason: JSON.stringify({ kind: submission.kind, subjectId: submission.subjectId, fromStage: submission.stage, note }) } });

@@ -231,7 +231,7 @@ export class ProposalReviewsService {
       });
 
       return review;
-    })) as unknown as ProposalReviewRecord;
+    })) as ProposalReviewRecord;
 
     return {
       ...this.toReviewResponse(submitted, assignmentId, actor.id),
