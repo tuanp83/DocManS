@@ -60,8 +60,10 @@ type ProjectRequestWithRevisions = Prisma.ProjectRequestGetPayload<{ include: { 
 export type NotifyFn = (event: WorkflowEvent) => void;
 
 /** Vòng nghiệm thu gần nhất (số vòng lớn nhất) và trạng thái thanh lý: dữ kiện cho capability. */
-export function closureFacts(project: AnyRecord) {
-  const latest = (project.acceptances ?? []).reduce((best: AnyRecord | null, row: AnyRecord) => (!best || row.round > best.round ? row : best), null);
+type AcceptanceRow = LoadedProject["acceptances"][number];
+
+export function closureFacts(project: Pick<LoadedProject, "acceptances" | "liquidation" | "superiorAcceptance">) {
+  const latest = (project.acceptances ?? []).reduce<AcceptanceRow | null>((best, row) => (!best || row.round > best.round ? row : best), null);
   return { acceptanceStatus: latest?.status ?? null, liquidationStatus: project.liquidation?.status ?? null, superiorStatus: project.superiorAcceptance?.status ?? null, latestAcceptance: latest };
 }
 
@@ -439,7 +441,7 @@ export class ApprovedProjectsService {
       const legacyStatus = !legacyRound ? null : openAcceptanceRound(project) ? PROJECT_STATUSES.pendingAcceptance : legacyRound.status === "PASSED" ? PROJECT_STATUSES.accepted : legacyRound.status === "FAILED" ? PROJECT_STATUSES.failed : null;
       if (legacyStatus) {
         await tx.approvedProject.update({ where: { id: project.id }, data: { status: legacyStatus, aggregateVersion: { increment: 1 } } });
-        await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.acceptance.backfill", fromStatus: EXECUTING, toStatus: legacyStatus, reason: "Áp dụng kết quả nghiệm thu chuyển từ dữ liệu cũ của đề xuất", beforeFacts: { status: EXECUTING }, afterFacts: { status: legacyStatus, acceptanceStatus: legacyRound.status } } });
+        await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.acceptance.backfill", fromStatus: EXECUTING, toStatus: legacyStatus, reason: "Áp dụng kết quả nghiệm thu chuyển từ dữ liệu cũ của đề xuất", beforeFacts: { status: EXECUTING }, afterFacts: { status: legacyStatus, acceptanceStatus: legacyRound?.status } } });
       }
       await new AuditLogService(tx).record({ action: "confirm-approved-project-setup", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, beforeFacts: { status: PREPARING }, afterFacts: { status: EXECUTING } });
       const loaded = await this.loadAuthorized(tx, currentActor, updated.id);

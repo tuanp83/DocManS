@@ -12,6 +12,7 @@ import { ApprovedProjectsService, closureFacts, openAcceptanceRound, type Loaded
 import { ACCEPTANCE_ROUND_STATUSES as R, LIQUIDATION_STATUSES, PROJECT_STATUSES, SUPERIOR_ACCEPTANCE_LEVELS, SUPERIOR_STATUSES } from "./project-capability-v1.js";
 import { money, readDay, readFileIds, readMoney, readRequiredText, toDisbursementRecord } from "./project-closure-model.js";
 import { readScopeSnapshot } from "./project-snapshots.js";
+import { readChecklist as readStoredChecklist, readCouncilMembers, readRevisionDossier, readStoredFileIds, type AcceptanceCouncilMember, type AcceptanceDossier, type SuperiorChecklistItem } from "./project-closure-json.js";
 
 type AnyRecord = Record<string, any>;
 
@@ -239,7 +240,7 @@ export class ProjectClosureService {
         await closeApprovalSubmission(tx, currentActor, { kind: APPROVAL_KINDS.acceptanceCouncil, subjectType: "project", subjectId: projectId, subjectRef: round.id }, "APPROVED", `Quyết định số ${decisionNumber}`);
         await this.record(tx, currentActor, project, "project.acceptance.council.establish", `Quyết định thành lập hội đồng nghiệm thu số ${decisionNumber}`, { acceptanceId: round.id, decisionNumber }, now);
         const recipients = this.projects.projectRecipients(project, loaded.officer);
-        const councilUserIds = (Array.isArray(round.councilMembers) ? round.councilMembers : []).map((member: AnyRecord) => member.userId).filter(Boolean);
+        const councilUserIds = readCouncilMembers(round.councilMembers).map((member) => member.userId).filter((id): id is string => Boolean(id));
         notify({ type: NOTIFICATION_TYPES.acceptanceCouncilEstablished, userIds: [...recipients.pi, ...recipients.officer], excludeUserIds: [currentActor.id], title: `Đã thành lập hội đồng nghiệm thu: ${project.title}`, message: `Quyết định số ${decisionNumber} thành lập hội đồng nghiệm thu đề tài ${label(project)}. Ngày họp dự kiến: ${vnDate(round.meetingDate)}.`, link: projectLink(projectId), metadata: { projectId, acceptanceId: round.id, decisionNumber } });
         notify({ type: NOTIFICATION_TYPES.reviewInvitation, userIds: councilUserIds, excludeUserIds: [currentActor.id], title: `Mời tham gia hội đồng nghiệm thu: ${project.title}`, message: `Bạn có tên trong hội đồng nghiệm thu đề tài ${label(project)} (quyết định số ${decisionNumber}). Ngày họp dự kiến: ${vnDate(round.meetingDate)}${round.meetingLocation ? `, tại ${round.meetingLocation}` : ""}. Phòng Quản lý khoa học sẽ gửi hồ sơ nghiệm thu tới thành viên hội đồng.`, metadata: { projectId, acceptanceId: round.id, decisionNumber } });
         return this.reload(tx, currentActor, projectId);
@@ -294,7 +295,7 @@ export class ProjectClosureService {
       const dossier = await this.readDossier(tx, projectId, input, false);
       const now = await readTransactionClockV1(tx);
       // Giữ mọi lần nộp bản hoàn thiện: lần trước chuyển vào `previous`, tệp của mọi lần nằm trong `allEvidenceFileIds` (bị khoá).
-      const prior = (round.revisionDossier ?? null);
+      const prior = readRevisionDossier(round.revisionDossier);
       const previous = prior ? [...(Array.isArray(prior.previous) ? prior.previous : []), { finalReportSummary: prior.finalReportSummary, evidenceFileIds: prior.evidenceFileIds ?? [], submittedAt: prior.submittedAt ?? null, returnNote: round.revisionNote ?? null }] : [];
       const allEvidenceFileIds = [...new Set([...(Array.isArray(prior?.allEvidenceFileIds) ? prior!.allEvidenceFileIds : prior?.evidenceFileIds ?? []), ...dossier.evidenceFileIds])];
       await tx.projectAcceptance.update({ where: { id: round.id }, data: { status: R.revisionSubmitted, revisionDossier: { ...dossier, submittedAt: now.toISOString(), previous, allEvidenceFileIds } } });
@@ -552,13 +553,15 @@ export class ProjectClosureService {
   async sendSuperiorRequest(actor: SafeUserContext, projectId: string, input: Record<string, unknown>) {
     return this.projects.mutate(actor, projectId, input.contextVersion, async (tx, currentActor, project, notify) => {
       const loaded = await this.authorizeOperator(tx, currentActor, project, "project.superior.send");
-      const superior = project.superiorAcceptance as AnyRecord;
-      const checklist = Array.isArray(superior.checklist) ? superior.checklist : [];
+      const superior = project.superiorAcceptance;
+      if (!superior) throw new BadRequestException({ code: "SUPERIOR_NOT_READY", message: "Chưa có danh mục hồ sơ theo yêu cầu của cấp trên." });
+      const checklist = readStoredChecklist(superior.checklist);
+      const letterFileIds = readStoredFileIds(superior.letterFileIds);
       if (!checklist.length) throw new BadRequestException({ code: "SUPERIOR_NOT_READY", message: "Chưa có danh mục hồ sơ theo yêu cầu của cấp trên." });
       const missing = checklist.filter((item) => !item.done || !Array.isArray(item.fileIds) || !item.fileIds.length);
       if (missing.length) throw new BadRequestException({ code: "SUPERIOR_NOT_READY", message: `Còn ${missing.length} mục hồ sơ chưa hoàn thành hoặc chưa có tệp: ${missing.slice(0, 3).map((item) => item.title).join("; ")}.` });
-      if (!superior.letterNumber || !superior.letterDate || !Array.isArray(superior.letterFileIds) || !superior.letterFileIds.length) throw new BadRequestException({ code: "SUPERIOR_NOT_READY", message: "Cần số, ngày và tệp công văn đề nghị nghiệm thu." });
-      await this.assertProjectFiles(tx, projectId, [...superior.letterFileIds, ...checklist.flatMap((item) => item.fileIds)], SUPERIOR_DOSSIER_PURPOSE);
+      if (!superior.letterNumber || !superior.letterDate || !letterFileIds.length) throw new BadRequestException({ code: "SUPERIOR_NOT_READY", message: "Cần số, ngày và tệp công văn đề nghị nghiệm thu." });
+      await this.assertProjectFiles(tx, projectId, [...letterFileIds, ...checklist.flatMap((item) => item.fileIds)], SUPERIOR_DOSSIER_PURPOSE);
       const now = await readTransactionClockV1(tx);
       await tx.projectSuperiorAcceptance.update({ where: { projectId }, data: { status: SUPERIOR_STATUSES.sent, sentAt: now, sentById: currentActor.id } });
       const late = localDay(now) > (superior.dueDate as Date).toISOString().slice(0, 10);
@@ -614,7 +617,7 @@ export class ProjectClosureService {
     notify({ type: NOTIFICATION_TYPES.superiorRequestDue, userIds: [...(officer ? [officer.officerUserId] : []), ...(await leadershipUserIds(tx))], excludeUserIds: [actor.id], title: `Cần đề nghị cấp trên nghiệm thu: ${project.title}`, message: `Đề tài ${label(project)} (${level === "national-level" ? "cấp Nhà nước" : "cấp Bộ"}) đã nghiệm thu cơ sở ngày ${vnDate(facilityAcceptedOn)}. Học viện phải gửi công văn đề nghị nghiệm thu và hoàn thành hồ sơ cấp trên yêu cầu trước ${vnDate(dueDate)}.`, link: projectLink(project.id), metadata: { projectId: project.id, dueDate: dueDate.toISOString().slice(0, 10) } });
   }
 
-  private readChecklist(value: unknown) {
+  private readChecklist(value: unknown): SuperiorChecklistItem[] {
     if (!Array.isArray(value) || value.length > 100) throw new BadRequestException({ message: "Danh mục hồ sơ không hợp lệ (tối đa 100 mục)." });
     const ids = new Set<string>();
     return value.map((item, index) => {
@@ -665,7 +668,7 @@ export class ProjectClosureService {
     return readApprovedBudget(project.proposal?.budgetMetadata) || readApprovedBudget(readScopeSnapshot(project.scopeSnapshot).budgetMetadata) || money(finance?.totalBudget);
   }
 
-  private async readDossier(tx: Prisma.TransactionClient, projectId: string, input: Record<string, unknown>, initial: boolean) {
+  private async readDossier(tx: Prisma.TransactionClient, projectId: string, input: Record<string, unknown>, initial: boolean): Promise<AcceptanceDossier> {
     const evidenceFileIds = readFileIds(input.evidenceFileIds, "Tệp hồ sơ nghiệm thu");
     if (!evidenceFileIds.length) throw new BadRequestException({ message: "Cần đính kèm ít nhất một tệp (báo cáo tổng kết hoặc bản hoàn thiện)." });
     await this.assertProjectFiles(tx, projectId, evidenceFileIds, ACCEPTANCE_DOSSIER_PURPOSE);
@@ -687,7 +690,7 @@ export class ProjectClosureService {
 
   /** Thành viên hội đồng lấy từ hồ sơ nhà khoa học; chủ nhiệm và thành viên đề tài (kể cả đã kết thúc) không được tham gia. */
   private async resolveCouncilMembers(tx: Prisma.TransactionClient, project: LoadedProject, requested: AcceptanceMemberInput[]) {
-    return this.resolveProfiles(tx, project, requested, "hội đồng nghiệm thu") as Promise<Array<{ profileId: string; fullName: string; academicTitle?: string; unit?: string; userId?: string; role: AcceptanceMemberInput["role"] }>>;
+    return this.resolveProfiles(tx, project, requested, "hội đồng nghiệm thu") as Promise<AcceptanceCouncilMember[]>;
   }
 
   private async resolveProfiles(tx: Prisma.TransactionClient, project: LoadedProject, requested: Array<{ profileId: string; role: string }>, body: string) {
