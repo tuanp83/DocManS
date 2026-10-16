@@ -14,6 +14,7 @@ import {
 } from "@/lib/proposal-evaluations-api";
 import { OfficialDecisionModal } from "@/components/research-proposals/official-decision-modal";
 import { formatVndNumber, numberToVietnameseWords } from "@/lib/vietnamese-currency";
+import type { ResearchProposal } from "@/lib/research-proposals-api";
 import { exportProposalApprovalDecisionWord } from "@/lib/word-export";
 
 function formatDate(value: string) {
@@ -33,7 +34,8 @@ export function ProposalDecisionPanel({
   blockedReason
 }: {
   proposalId: string;
-  proposal?: any;
+  /** Hồ sơ đã tải ở trang chi tiết; `decisions` chỉ dùng dự phòng khi gói quyết định chưa có. */
+  proposal?: (ResearchProposal & { decisions?: Array<{ id: string; decision: string; decisionLabel: string; decidedAt: string; decidedByDisplayName?: string | null; note?: string | null }> }) | null;
   onDecision: () => void;
   canDecide: boolean;
   blockedReason: string;
@@ -53,8 +55,8 @@ export function ProposalDecisionPanel({
   const requestedBudget = proposal?.budgetMetadata?.amount ?? decisionPackage?.budgetMetadata?.amount ?? 0;
   const requestedNote = proposal?.budgetMetadata?.note ?? decisionPackage?.budgetMetadata?.note ?? "";
   const existingApprovedBudget =
-    (proposal?.budgetMetadata as any)?.approvedAmount ??
-    (decisionPackage?.budgetMetadata as any)?.approvedAmount ??
+    (proposal?.budgetMetadata)?.approvedAmount ??
+    (decisionPackage?.budgetMetadata)?.approvedAmount ??
     null;
 
   const [approvedAmount, setApprovedAmount] = useState<number | string>("");

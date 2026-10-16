@@ -1,5 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { type DisbursementCostItem, type DisbursementMilestone, type DisbursementRecord } from "../proposal-evaluations/disbursement.js";
+import type { LoadedProject } from "./approved-projects.service.js";
 
 /**
  * Chuyển dữ liệu nghiệm thu / kinh phí / thanh lý từ bản ghi CSDL sang dạng trả về cho giao diện.
@@ -7,6 +8,8 @@ import { type DisbursementCostItem, type DisbursementMilestone, type Disbursemen
  */
 
 type AnyRecord = Record<string, any>;
+type AcceptanceRow = LoadedProject["acceptances"][number];
+type ProductRow = LoadedProject["products"][number];
 
 export function money(value: unknown): number {
   if (typeof value === "bigint") return Number(value);
@@ -37,7 +40,7 @@ export const ACCEPTANCE_ROUND_STATUS_LABELS: Record<string, string> = {
   FAILED: "Nghiệm thu không đạt"
 };
 
-export function toAcceptanceResponse(row: AnyRecord) {
+export function toAcceptanceResponse(row: AcceptanceRow) {
   return {
     id: row.id,
     round: row.round,
@@ -69,7 +72,7 @@ export function toAcceptanceResponse(row: AnyRecord) {
   };
 }
 
-export function toFinanceSummary(finance: AnyRecord | null | undefined) {
+export function toFinanceSummary(finance: LoadedProject["finance"] | undefined) {
   if (!finance) return null;
   return {
     totalBudget: money(finance.totalBudget),
@@ -81,7 +84,7 @@ export function toFinanceSummary(finance: AnyRecord | null | undefined) {
   };
 }
 
-export function toLiquidationResponse(row: AnyRecord) {
+export function toLiquidationResponse(row: NonNullable<LoadedProject["liquidation"]>) {
   const totalDisbursed = money(row.totalDisbursed);
   const totalSettled = money(row.totalSettled);
   const recoveredAmount = money(row.recoveredAmount);
@@ -192,7 +195,7 @@ export const PRODUCT_STATUS_LABELS: Record<string, string> = {
   FAILED: "Không đạt — cần hoàn thiện và nộp lại"
 };
 
-export function toProductResponse(row: AnyRecord) {
+export function toProductResponse(row: ProductRow) {
   return {
     id: row.id,
     position: row.position,
@@ -203,7 +206,7 @@ export function toProductResponse(row: AnyRecord) {
     status: row.status,
     statusLabel: PRODUCT_STATUS_LABELS[row.status] ?? row.status,
     submission: row.submission ?? null,
-    reviews: (row.reviews ?? []).map((review: AnyRecord) => ({
+    reviews: (row.reviews ?? []).map((review) => ({
       id: review.id,
       round: review.round,
       status: review.status,
@@ -230,7 +233,7 @@ export function daysUntil(date: Date, now: Date) {
   return Math.floor(date.getTime() / DAY_MS) - Math.floor((now.getTime() + VIETNAM_OFFSET_MS) / DAY_MS);
 }
 
-export function toSuperiorResponse(row: AnyRecord, now = new Date()) {
+export function toSuperiorResponse(row: NonNullable<LoadedProject["superiorAcceptance"]>, now = new Date()) {
   const dueDate = row.dueDate instanceof Date ? row.dueDate : new Date(row.dueDate);
   return {
     level: row.level,

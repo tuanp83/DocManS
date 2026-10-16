@@ -47,7 +47,7 @@ export class NotificationsService {
   }
 
   private async persist(inputs: NotificationInput[]) {
-    const prisma = this.prisma as any;
+    const prisma = this.prisma;
     const userIds = [...new Set(inputs.map((input) => input.userId))];
     const users = typeof prisma.user?.findMany === "function"
       ? ((await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, status: true, credentialEmail: true } })) as Array<{ id: string; status: string; credentialEmail: string | null }>)
@@ -95,12 +95,12 @@ export class NotificationsService {
     };
 
     const [notifications, unreadCount] = await Promise.all([
-      (this.prisma as any).userNotification.findMany({
+      this.prisma.userNotification.findMany({
         where,
         orderBy: { createdAt: "desc" },
         take
       }),
-      (this.prisma as any).userNotification.count({
+      this.prisma.userNotification.count({
         where: {
           userId: actor.id,
           isRead: false
@@ -115,7 +115,7 @@ export class NotificationsService {
   }
 
   async markAsRead(actor: SafeUserContext, id: string) {
-    const notification = await (this.prisma as any).userNotification.findFirst({
+    const notification = await this.prisma.userNotification.findFirst({
       where: {
         id,
         userId: actor.id
@@ -126,12 +126,12 @@ export class NotificationsService {
       throw new NotFoundException({ message: "Không tìm thấy thông báo." });
     }
 
-    const updated = await (this.prisma as any).userNotification.update({
+    const updated = await this.prisma.userNotification.update({
       where: { id },
       data: { isRead: true }
     });
 
-    const unreadCount = await (this.prisma as any).userNotification.count({
+    const unreadCount = await this.prisma.userNotification.count({
       where: {
         userId: actor.id,
         isRead: false
@@ -145,7 +145,7 @@ export class NotificationsService {
   }
 
   async markAllAsRead(actor: SafeUserContext) {
-    await (this.prisma as any).userNotification.updateMany({
+    await this.prisma.userNotification.updateMany({
       where: {
         userId: actor.id,
         isRead: false

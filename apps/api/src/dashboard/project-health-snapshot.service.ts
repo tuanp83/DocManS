@@ -1,8 +1,10 @@
+import type { Prisma } from "@prisma/client";
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { summarizeProjectProgress } from "../approved-projects/project-progress-summary.js";
 import { HEALTH_APPLICABLE_STATUSES, localDayIndex } from "../approved-projects/project-progress.js";
+import { readScopeSnapshot } from "../approved-projects/project-snapshots.js";
 
 type AnyRecord = Record<string, any>;
 
@@ -30,9 +32,9 @@ const nonNegativeBigInt = (value: unknown): bigint | null => {
 };
 
 /** Một dòng ảnh chụp từ đề tài đã tải kèm mốc, kế hoạch gốc, kỳ báo cáo, báo cáo, đánh giá sức khoẻ, kinh phí. */
-export function snapshotRow(project: AnyRecord, snapshotDate: Date, now: Date) {
+export function snapshotRow(project: SnapshotProject, snapshotDate: Date, now: Date) {
   const summary = summarizeProjectProgress(project, now);
-  const scope = (project.scopeSnapshot ?? {}) as AnyRecord;
+  const scope = readScopeSnapshot(project.scopeSnapshot);
   const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim().slice(0, 80) : null);
   // Mốc / kỳ báo cáo không được đóng khi nghiệm thu: chỉ tính trễ cho đề tài còn thực hiện, tạm dừng.
   const tracked = HEALTH_APPLICABLE_STATUSES.includes(project.status);
@@ -65,7 +67,10 @@ const SNAPSHOT_INCLUDE = {
   baselines: { orderBy: { version: "asc" } },
   healthAssessments: { orderBy: { createdAt: "desc" }, take: 1 },
   finance: true
-};
+} satisfies Prisma.ApprovedProjectInclude;
+
+/** Đề tài tải kèm mốc, kế hoạch gốc, kỳ báo cáo, báo cáo, đánh giá sức khoẻ gần nhất và kinh phí để chụp sức khoẻ. */
+type SnapshotProject = Prisma.ApprovedProjectGetPayload<{ include: typeof SNAPSHOT_INCLUDE }>;
 
 /**
  * Chụp sức khoẻ mọi đề tài mỗi tối Chủ nhật (23:55 giờ Việt Nam) để vẽ xu hướng theo tuần; tác vụ chạy 23:55
@@ -99,7 +104,7 @@ export class ProjectHealthSnapshotService {
   async isDue(now: Date) {
     const today = localDayIndex(now);
     if (new Date(today * DAY).getUTCDay() === 0) return true;
-    const latest = await (this.prisma as any).projectHealthSnapshot.findFirst({ orderBy: { snapshotDate: "desc" }, select: { snapshotDate: true } });
+    const latest = await this.prisma.projectHealthSnapshot.findFirst({ orderBy: { snapshotDate: "desc" }, select: { snapshotDate: true } });
     if (!latest) return true;
     const latestIndex = Math.floor(new Date(latest.snapshotDate).getTime() / DAY);
     return today - latestIndex >= 7;
@@ -112,7 +117,7 @@ export class ProjectHealthSnapshotService {
     let created = 0;
     let cursor: string | null = null;
     for (;;) {
-      const projects: AnyRecord[] = await prisma.approvedProject.findMany({
+      const projects: SnapshotProject[] = await prisma.approvedProject.findMany({
         include: SNAPSHOT_INCLUDE,
         orderBy: { id: "asc" },
         take: BATCH,

@@ -28,7 +28,7 @@ export class DeadlineReminderService {
 
   async run(now: Date): Promise<number> {
     const events: WorkflowEvent[] = [];
-    const prisma = this.prisma as any;
+    const prisma = this.prisma;
     const projects = await prisma.approvedProject.findMany({
       where: { status: { in: ["executing", "paused"] } },
       select: {

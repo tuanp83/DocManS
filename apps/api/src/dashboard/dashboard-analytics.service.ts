@@ -72,9 +72,9 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 
 /** Chuyển bản trả về của danh sách đề tài (đã qua capability project.read và che trường) sang dạng thống kê. */
 export function toDashboardProject(response: AnyRecord, now = new Date()): DashboardProject {
-  const scope = (response.scope ?? {}) as AnyRecord;
+  const scope = (response.scope ?? {});
   const pi = (response.members ?? []).find((member: AnyRecord) => member.participationRole === "TOPIC_PI" && isRelationshipActiveAt({ ...member, effectiveFrom: member.effectiveFrom ? new Date(member.effectiveFrom) : member.effectiveFrom, effectiveUntil: member.effectiveUntil ? new Date(member.effectiveUntil) : null }, now));
-  const summary = (response.progressSummary ?? {}) as AnyRecord;
+  const summary = (response.progressSummary ?? {});
   // Mốc / kỳ báo cáo không được đóng khi nghiệm thu: số ngày trễ chỉ có nghĩa với đề tài còn thực hiện, tạm dừng.
   const tracked = HEALTH_APPLICABLE_STATUSES.includes(response.status);
   return {
@@ -198,11 +198,11 @@ export class DashboardAnalyticsService {
     this.assertActor(actor);
     // Đề tài có phân công chuyên viên mâu thuẫn (409) bị bỏ qua thay vì làm hỏng toàn bộ dashboard.
     const responses = await this.projects.listProjects(actor, { skipUnresolved: true });
-    const projects = await this.withMilitaryScope(responses.map((response: AnyRecord) => toDashboardProject(response, now)));
+    const projects = await this.withMilitaryScope(responses.map((response) => toDashboardProject(response, now)));
     if (!isResearchOversightAuthority(actor) || !projects.length) return projects;
     // Các Phó Giám đốc chỉ theo dõi không đọc kinh phí từng đề tài (project.finance.read), nhưng được xem báo cáo
     // kinh phí tổng hợp: nạp kinh phí để cộng vào số tổng, còn các dòng chi tiết để trống (drillDown).
-    const finances = (await (this.prisma as any).approvedProject.findMany({ where: { id: { in: projects.map((project) => project.id) } }, select: { id: true, finance: true } })) as Array<{ id: string; finance: AnyRecord | null }>;
+    const finances = (await this.prisma.approvedProject.findMany({ where: { id: { in: projects.map((project) => project.id) } }, select: { id: true, finance: true } })) as Array<{ id: string; finance: AnyRecord | null }>;
     const byId = new Map(finances.map((row) => [row.id, row.finance]));
     return projects.map((project) => {
       const finance = byId.get(project.id);
@@ -305,11 +305,11 @@ export class DashboardAnalyticsService {
     const proposals = (await this.readableProposals(actor, now)).filter((proposal) => canReadProposalDeliverables(actor, proposal) && matchesProposal(proposal, { unitId: filters.unitId, level: filters.level, field: filters.field, year: filters.year, scope: filters.scope }, now));
     if (!proposals.length) return [];
     const byId = new Map(proposals.map((proposal) => [proposal.id, proposal]));
-    const rows = await (this.prisma as any).proposalDeliverable.findMany({
+    const rows = await this.prisma.proposalDeliverable.findMany({
       where: { proposalId: { in: [...byId.keys()] } },
       select: { id: true, proposalId: true, type: true, title: true, status: true, publishedAt: true }
     });
-    return (rows as AnyRecord[]).filter((row) => byId.has(row.proposalId)).map((row) => ({ id: row.id, proposalId: row.proposalId, type: String(row.type), title: row.title, status: String(row.status), publishedAt: row.publishedAt ?? null, proposal: byId.get(row.proposalId)! }));
+    return (rows).filter((row) => byId.has(row.proposalId)).map((row) => ({ id: row.id, proposalId: row.proposalId, type: String(row.type), title: row.title, status: String(row.status), publishedAt: row.publishedAt ?? null, proposal: byId.get(row.proposalId)! }));
   }
 
   async products(actor: SafeUserContext | undefined, rawQuery: unknown) {
@@ -359,7 +359,7 @@ export class DashboardAnalyticsService {
     const readable = new Map(projects.map((project) => [project.id, project]));
     const financeVisible = new Set(projects.filter((project) => project.finance).map((project) => project.id));
     const snapshots: AnyRecord[] = readable.size
-      ? await (this.prisma as any).projectHealthSnapshot.findMany({
+      ? await this.prisma.projectHealthSnapshot.findMany({
           where: { projectId: { in: [...readable.keys()] }, snapshotDate: { gte: new Date(fromIndex * DAY), lte: new Date(toIndex * DAY) } },
           orderBy: { snapshotDate: "asc" }
         })
@@ -421,7 +421,7 @@ export class DashboardAnalyticsService {
     const metric = raw.metric as DrillDownMetric;
     if (typeof metric !== "string" || !DRILL_DOWN_METRICS.includes(metric)) throw new BadRequestException({ code: "DASHBOARD_QUERY_INVALID", field: "metric", message: `metric phải là một trong: ${DRILL_DOWN_METRICS.join(", ")}.` });
     const query = parseDashboardQuery(rawQuery, ["metric", "page", "pageSize", ...DRILL_DOWN_FILTERS[metric]]);
-    const filters: DashboardFilters = Object.fromEntries(DRILL_DOWN_FILTERS[metric].filter((key) => (query as AnyRecord)[key] !== undefined).map((key) => [key, (query as AnyRecord)[key]]));
+    const filters: DashboardFilters = Object.fromEntries(DRILL_DOWN_FILTERS[metric].filter((key) => (query)[key] !== undefined).map((key) => [key, (query)[key]]));
     const now = new Date();
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 50;

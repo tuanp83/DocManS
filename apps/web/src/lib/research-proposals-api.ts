@@ -223,6 +223,9 @@ export type ResearchProposal = {
     amount?: number;
     currency?: string;
     note?: string;
+    /** Kinh phí lãnh đạo phê duyệt (có sau quyết định phê duyệt). */
+    approvedAmount?: number;
+    approvedNote?: string;
   };
   councilMetadata?: CouncilMetadata | null;
   /** Số liệu nghiệm thu / giải ngân lấy từ đề tài thực hiện (khi đã lập đề tài). */
@@ -515,8 +518,8 @@ export type AuditLogRecord = {
   timestamp: string;
   result: string;
   reason?: string;
-  beforeFacts?: any;
-  afterFacts?: any;
+  beforeFacts?: Record<string, unknown>;
+  afterFacts?: Record<string, unknown>;
 };
 
 export async function getProposalAuditLogs(id: string) {

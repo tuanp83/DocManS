@@ -11,7 +11,7 @@ export class WorkQueueService {
   /** Mọi việc đang chờ người dùng: chỉ dựa trên đề tài họ được xem và phiếu phản biện giao cho chính họ. */
   async forUser(actor: SafeUserContext, today = new Date()) {
     const projects = await this.projects.listProjects(actor, { skipUnresolved: true });
-    const assignments = await (this.prisma as any).proposalReviewAssignment.findMany({
+    const assignments = await this.prisma.proposalReviewAssignment.findMany({
       where: { reviewerUserId: actor.id, status: "assigned", revokedAt: null, completedAt: null, effectiveFrom: { lte: today }, OR: [{ effectiveUntil: null }, { effectiveUntil: { gt: today } }] },
       include: { proposal: { select: { id: true, title: true } }, review: { select: { status: true } } },
       orderBy: { dueDate: "asc" }

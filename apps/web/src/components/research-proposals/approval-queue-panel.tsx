@@ -215,7 +215,7 @@ export function ApprovalQueuePanel() {
     () =>
       proposals.filter((p) => {
         if (!matchesFilter(p)) return false;
-        return (p.status === "ready_for_approval" && atLeadership("DECISION_PACKAGE", p.id)) || (p.status === "approved" && !(p.budgetMetadata as any)?.approvedAmount);
+        return (p.status === "ready_for_approval" && atLeadership("DECISION_PACKAGE", p.id)) || (p.status === "approved" && !p.budgetMetadata?.approvedAmount);
       }),
     [proposals, keyword, selectedLevel, selectedMilitaryScope, selectedUnit, notRouted]
   );
@@ -224,7 +224,7 @@ export function ApprovalQueuePanel() {
     () =>
       proposals.filter((p) => {
         if (!matchesFilter(p)) return false;
-        return Boolean((p.budgetMetadata as any)?.approvedAmount) || (p.status === "approved" && Boolean(p.budgetMetadata?.amount));
+        return Boolean(p.budgetMetadata?.approvedAmount) || (p.status === "approved" && Boolean(p.budgetMetadata?.amount));
       }),
     [proposals, keyword, selectedLevel, selectedMilitaryScope, selectedUnit]
   );
@@ -232,12 +232,12 @@ export function ApprovalQueuePanel() {
   const totalWaitingBudgets = useMemo(
     () =>
       proposals.filter(
-        (p) => (p.status === "ready_for_approval" && atLeadership("DECISION_PACKAGE", p.id)) || (p.status === "approved" && !(p.budgetMetadata as any)?.approvedAmount)
+        (p) => (p.status === "ready_for_approval" && atLeadership("DECISION_PACKAGE", p.id)) || (p.status === "approved" && !p.budgetMetadata?.approvedAmount)
       ).length,
     [proposals, notRouted]
   );
   const totalDecidedBudgets = useMemo(
-    () => proposals.filter((p) => Boolean((p.budgetMetadata as any)?.approvedAmount) || (p.status === "approved" && Boolean(p.budgetMetadata?.amount))).length,
+    () => proposals.filter((p) => Boolean(p.budgetMetadata?.approvedAmount) || (p.status === "approved" && Boolean(p.budgetMetadata?.amount))).length,
     [proposals]
   );
 
@@ -1327,8 +1327,8 @@ function ApprovalCardsList({
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
       {proposals.map((proposal) => {
         const amount = Number(proposal.budgetMetadata?.amount ?? 0);
-        const approvedAmount = Number((proposal.budgetMetadata as any)?.approvedAmount ?? 0);
-        const hasApprovedBudget = Boolean((proposal.budgetMetadata as any)?.approvedAmount);
+        const approvedAmount = Number(proposal.budgetMetadata?.approvedAmount ?? 0);
+        const hasApprovedBudget = Boolean(proposal.budgetMetadata?.approvedAmount);
         const levelLabel = getProposalLevelLabel(proposal.proposalTypeCode);
         const scope = getProposalMilitaryScope(proposal);
         const scopeLabel = getProposalMilitaryScopeLabel(scope);

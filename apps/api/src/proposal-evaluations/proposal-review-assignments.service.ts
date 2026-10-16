@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { assertCurrentCompletenessEvidence, currentRoundAssignments, currentRoundReviews, findCurrentSubmission } from "../proposals-shared/submission-evidence.js";
 import { runProposalMutation } from "../proposals-shared/proposal-mutation.js";
 import { assignmentLimitError, EVALUATION_COUNCIL_LIMITS } from "../proposals-shared/evaluation-council-rules.js";
@@ -133,7 +134,7 @@ export class ProposalReviewAssignmentsService {
       },
       orderBy: { fullName: "asc" },
       take: 50
-    } as never)) as unknown as ReviewerProfileCandidate[];
+    })) as unknown as ReviewerProfileCandidate[];
     const candidates: Array<{ id: string; fullName: string; linkedUserId: string; linkedAccountUsername: string; linkedAccountDisplayName: string }> = [];
     for (const profile of profiles) {
       const account = profile.linkedUser;
@@ -169,7 +170,7 @@ export class ProposalReviewAssignmentsService {
       // Lời mời (trong ứng dụng + email) chỉ gửi khi phân công đã commit.
       if (this.notifications && result?.reviewerUserId) {
         try {
-          const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { code: true, title: true } } as never)) as unknown as { code: string | null; title: string } | null;
+          const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { code: true, title: true } })) as unknown as { code: string | null; title: string } | null;
           await this.notifications.dispatch([{ ...reviewInvitationEvent(proposalId, proposal ?? { title: "" }, result.reviewerUserId, result.assignmentRole, result.dueDate ? new Date(result.dueDate) : null), metadata: { proposalId, assignmentId: result.id, assignmentRole: result.assignmentRole, dueDate: result.dueDate ?? null } }]);
         } catch {
           // Thông báo là phụ trợ.
@@ -267,7 +268,7 @@ export class ProposalReviewAssignmentsService {
             effectiveFrom,
             effectiveUntil,
             dueDate
-          } as never,
+          },
           include: ASSIGNMENT_INCLUDE
         })) as ReviewAssignmentRecord;
 
@@ -277,7 +278,7 @@ export class ProposalReviewAssignmentsService {
             authorizationRelationshipVersion: { increment: 1 },
             authorizationDelegationVersion: { increment: 1 },
             authorizationContextUpdatedAt: assignedAt
-          } as never
+          }
         });
 
         // The first assignment is what opens the evaluation phase; later ones join a proposal that is
@@ -293,7 +294,7 @@ export class ProposalReviewAssignmentsService {
               toStatus: PROPOSAL_STATUS.underReview,
               submittedAt: assignedAt,
               note: "Chuyên viên mở vòng đánh giá và phân công người đánh giá"
-            } as never
+            }
           });
         }
 
@@ -349,7 +350,7 @@ export class ProposalReviewAssignmentsService {
       const revokedAt = await readTransactionClockV1(tx);
       const record = (await tx.proposalReviewAssignment.update({
         where: { id: assignmentId },
-        data: { status: REVIEW_ASSIGNMENT_STATUS.revoked, revokedAt, effectiveUntil: revokedAt } as never,
+        data: { status: REVIEW_ASSIGNMENT_STATUS.revoked, revokedAt, effectiveUntil: revokedAt },
         include: ASSIGNMENT_INCLUDE
       })) as ReviewAssignmentRecord;
 
@@ -359,7 +360,7 @@ export class ProposalReviewAssignmentsService {
           authorizationRelationshipVersion: { increment: 1 },
           authorizationDelegationVersion: { increment: 1 },
           authorizationContextUpdatedAt: revokedAt
-        } as never
+        }
       });
 
       await tx.auditLog.create({
@@ -417,12 +418,12 @@ export class ProposalReviewAssignmentsService {
       input.response === "accept"
         ? { acceptedAt: at }
         : { status: REVIEW_ASSIGNMENT_STATUS.declined, declinedAt: at, declineReason: reason, effectiveUntil: at };
-    const updated = (await this.prisma.proposalReviewAssignment.update({ where: { id: assignmentId }, data: data as never, include: ASSIGNMENT_INCLUDE })) as ReviewAssignmentRecord;
+    const updated = (await this.prisma.proposalReviewAssignment.update({ where: { id: assignmentId }, data: data, include: ASSIGNMENT_INCLUDE })) as ReviewAssignmentRecord;
 
     // Quyền xem hồ sơ của người phản biện thay đổi: làm mới phiên bản quan hệ như khi phân công/thu hồi.
     await this.prisma.researchProposal.update({
       where: { id: proposalId },
-      data: { authorizationRelationshipVersion: { increment: 1 }, authorizationDelegationVersion: { increment: 1 }, authorizationContextUpdatedAt: at } as never
+      data: { authorizationRelationshipVersion: { increment: 1 }, authorizationDelegationVersion: { increment: 1 }, authorizationContextUpdatedAt: at }
     });
     await this.auditLog.record({
       action: input.response === "accept" ? "accept-review-invitation" : "decline-review-invitation",
@@ -812,9 +813,9 @@ export class ProposalReviewAssignmentsService {
  * Phân công còn mở của một người ở lần nộp cũ (hoặc chưa gắn lần nộp): thu hồi khi người đó được phân công ở vòng
  * mới. Chỉ mục duy nhất (proposal, reviewer) WHERE status = 'assigned' không cho hai phân công mở cùng lúc.
  */
-export async function retireStaleOpenAssignments(tx: any, proposalId: string, reviewerUserId: string, submissionEventId: string, at: Date) {
+export async function retireStaleOpenAssignments(tx: Prisma.TransactionClient, proposalId: string, reviewerUserId: string, submissionEventId: string, at: Date) {
   const open = (await tx.proposalReviewAssignment.findMany({ where: { proposalId, reviewerUserId, status: REVIEW_ASSIGNMENT_STATUS.assigned } })) as ReviewAssignmentRecord[];
   for (const stale of open.filter((assignment) => assignment.reviewedSubmissionEventId !== submissionEventId)) {
-    await tx.proposalReviewAssignment.update({ where: { id: stale.id }, data: { status: REVIEW_ASSIGNMENT_STATUS.revoked, revokedAt: at } as never });
+    await tx.proposalReviewAssignment.update({ where: { id: stale.id }, data: { status: REVIEW_ASSIGNMENT_STATUS.revoked, revokedAt: at } });
   }
 }
