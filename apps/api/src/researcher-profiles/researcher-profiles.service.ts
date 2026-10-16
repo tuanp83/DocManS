@@ -197,7 +197,7 @@ export class ResearcherProfilesService {
       const created = (await tx.researcherProfile.create({
         data: this.createData(input, actor.id),
         include: profileInclude
-      } as never)) as unknown as ProfileWithRelations;
+      })) as unknown as ProfileWithRelations;
       await this.auditLog.record({
         action: "create-researcher-profile",
         result: "success",
@@ -222,7 +222,7 @@ export class ResearcherProfilesService {
       for (const action of ["provision-researcher-account", "link-researcher-account", "issue-researcher-activation"]) await this.auditLog.record({ action, result: "success", actorId: actor.id, targetEntity: "researcher-profile", targetEntityId: created.id, correlationId, afterFacts: { userId: user.id, systemRole, organizationUnitId: created.managementOrganizationUnitId, deliveryId: delivery.id, expiresAt: activation.expiresAt.toISOString() } }, tx);
       await this.writeProfileHistory(tx, created.id, actor.id, "ACCOUNT_CREATED", { linkedUserId: null }, { linkedUserId: user.id });
       await this.syncLinkedDisplayName(tx, created.id, actor.id, correlationId);
-      const withAccount = (await tx.researcherProfile.findUnique({ where: { id: created.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations;
+      const withAccount = (await tx.researcherProfile.findUnique({ where: { id: created.id }, include: profileInclude })) as unknown as ProfileWithRelations;
       return { profile: withAccount, duplicateCandidates, activation: { deliveryId: delivery.id, email: email!, displayName: user.displayName, token: activation.token, expiresAt: activation.expiresAt } };
     });
     if (result.activation) await this.deliverActivation(result.activation.deliveryId, result.activation.email, result.activation.displayName, result.activation.token, result.activation.expiresAt, actor, correlationId);
@@ -255,11 +255,11 @@ export class ResearcherProfilesService {
       await this.validateCatalogs(tx, input);
       const result = await tx.researcherProfile.updateMany({ where: { id, aggregateVersion: input.contextVersion.aggregateVersion }, data: { ...this.updateData(input), aggregateVersion: { increment: 1 }, updatedById: actor.id } });
       if (result.count !== 1) throw new ConflictException({ message: "Dữ liệu hồ sơ đã thay đổi. Vui lòng tải lại trước khi thử lại.", code: "CONTEXT_VERSION_MISMATCH", correlationId });
-      if (Object.keys(this.childData(input)).length > 0) await tx.researcherProfile.update({ where: { id }, data: this.childData(input) as never });
+      if (Object.keys(this.childData(input)).length > 0) await tx.researcherProfile.update({ where: { id }, data: this.childData(input) });
       await this.syncPublications(tx, id, input.publications, actor.id);
       await this.syncParticipations(tx, id, input.participations, actor.id);
       await this.syncLinkedDisplayName(tx, id, actor.id, correlationId);
-      const withChildren = (await tx.researcherProfile.findUnique({ where: { id }, include: profileInclude } as never)) as unknown as ProfileWithRelations;
+      const withChildren = (await tx.researcherProfile.findUnique({ where: { id }, include: profileInclude })) as unknown as ProfileWithRelations;
       await this.auditLog.record({
         action: "update-researcher-profile",
         result: "success",
@@ -365,7 +365,7 @@ export class ResearcherProfilesService {
         }
       },
       include: profileInclude
-    } as never)) as unknown as ProfileWithRelations;
+    })) as unknown as ProfileWithRelations;
 
     await this.prisma.researcherProfileAccountLink.create({
       data: {
@@ -381,7 +381,7 @@ export class ResearcherProfilesService {
   }
 
   async getMyProfile(actor: SafeUserContext) {
-    let profile = (await this.prisma.researcherProfile.findFirst({ where: { linkedUserId: actor.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations | null;
+    let profile = (await this.prisma.researcherProfile.findFirst({ where: { linkedUserId: actor.id }, include: profileInclude })) as unknown as ProfileWithRelations | null;
     if (!profile && canHoldResearcherProfile(actor.systemRole)) {
       profile = await this.ensureProfileForResearcher(actor);
     }
@@ -390,7 +390,7 @@ export class ResearcherProfilesService {
   }
 
   async updateMyProfile(actor: SafeUserContext, input: UpdateResearcherProfileDto) {
-    let current = (await this.prisma.researcherProfile.findFirst({ where: { linkedUserId: actor.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations | null;
+    let current = (await this.prisma.researcherProfile.findFirst({ where: { linkedUserId: actor.id }, include: profileInclude })) as unknown as ProfileWithRelations | null;
     if (!current && canHoldResearcherProfile(actor.systemRole)) {
       current = await this.ensureProfileForResearcher(actor);
     }
@@ -421,14 +421,14 @@ export class ResearcherProfilesService {
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.id} FOR SHARE`;
       const activeUser = await tx.user.findUnique({ where: { id: actor.id } });
       if (!activeUser || activeUser.status !== "active" || activeUser.mustChangePassword) throw new ForbiddenException();
-      const profile = (await tx.researcherProfile.findUnique({ where: { id: current.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations | null;
+      const profile = (await tx.researcherProfile.findUnique({ where: { id: current.id }, include: profileInclude })) as unknown as ProfileWithRelations | null;
       if (!profile || profile.linkedUserId !== actor.id || profile.status !== "ACTIVE") throw new ForbiddenException({ message: "Hồ sơ liên kết không tồn tại, đã ngừng hoạt động hoặc không còn hợp lệ." });
       this.assertProfileVersion(input.contextVersion, profile);
       await this.validateCatalogs(tx, safeInput);
       if (hasProfileChanges) {
         const result = await tx.researcherProfile.updateMany({ where: { id: profile.id, linkedUserId: actor.id, aggregateVersion: input.contextVersion.aggregateVersion }, data: { ...this.updateData(safeInput), aggregateVersion: { increment: 1 }, updatedById: actor.id } });
         if (result.count !== 1) throw new ConflictException({ message: "Dữ liệu hồ sơ đã thay đổi. Vui lòng tải lại trước khi thử lại.", code: "CONTEXT_VERSION_MISMATCH", correlationId });
-        if (Object.keys(this.childData(safeInput)).length > 0) await tx.researcherProfile.update({ where: { id: profile.id }, data: this.childData(safeInput) as never });
+        if (Object.keys(this.childData(safeInput)).length > 0) await tx.researcherProfile.update({ where: { id: profile.id }, data: this.childData(safeInput) });
         await this.syncPublications(tx, profile.id, safeInput.publications, actor.id);
         await this.syncParticipations(tx, profile.id, safeInput.participations, actor.id);
         await this.syncLinkedDisplayName(tx, profile.id, actor.id, correlationId);
@@ -441,7 +441,7 @@ export class ResearcherProfilesService {
         await tx.user.update({ where: { id: actor.id }, data: { username: input.username, usernameKey: input.username } });
         await this.auditLog.record({ action: "change-username", result: "success", actorId: actor.id, targetEntity: "user", targetEntityId: actor.id, username: input.username ?? undefined, correlationId, beforeFacts: { username: activeUser.username }, afterFacts: { username: input.username } }, tx);
       }
-      const next = (await tx.researcherProfile.findUnique({ where: { id: profile.id }, include: profileInclude } as never)) as unknown as ProfileWithRelations;
+      const next = (await tx.researcherProfile.findUnique({ where: { id: profile.id }, include: profileInclude })) as unknown as ProfileWithRelations;
       if (hasProfileChanges) {
         await this.auditLog.record({ action: "update-my-researcher-profile", result: "success", actorId: actor.id, targetEntity: "researcher-profile", targetEntityId: profile.id, username: actor.username, correlationId, beforeFacts: this.auditFacts(profile), afterFacts: this.auditFacts(next) }, tx);
         await this.writeProfileHistory(tx, profile.id, actor.id, "SELF_UPDATE", this.auditFacts(profile), this.auditFacts(next));
@@ -671,7 +671,7 @@ export class ResearcherProfilesService {
   }
 
   private createData(input: CreateResearcherProfileDto, actorId: string) {
-    const cvOrg = (input.curriculumVitae as any)?.personalInfo?.organization;
+    const cvOrg = (input.curriculumVitae)?.personalInfo?.organization;
     const effectiveAffiliation = input.externalAffiliation || cvOrg || null;
     return {
       managementOrganizationUnitId: input.managementOrganizationUnitId,
@@ -705,7 +705,7 @@ export class ResearcherProfilesService {
     for (const field of ["fullName", "externalAffiliation", "academicRankCatalogItemId", "academicDegreeCatalogItemId", "title", "position", "militaryRank", "contactEmail", "contactPhone", "contactNote", "profileType", "managementOrganizationUnitId"] as const) {
       if (input[field] !== undefined) data[field] = input[field] ?? null;
     }
-    const cvOrg = (input.curriculumVitae as any)?.personalInfo?.organization;
+    const cvOrg = (input.curriculumVitae)?.personalInfo?.organization;
     if (input.externalAffiliation === undefined && cvOrg) {
       data.externalAffiliation = cvOrg;
     }

@@ -286,22 +286,22 @@ export class ProposalEvaluationSummaryService {
     await updateProposalStatusGuarded(this.prisma as unknown as Parameters<typeof updateProposalStatusGuarded>[0], proposalId, PROPOSAL_STATUS.underReview, PROPOSAL_STATUS.readyForApproval);
     const record = (await this.prisma.proposalEvaluationSummary.update({
       where: { id: existing.id },
-      data: { status: EVALUATION_SUMMARY_STATUS.readyForApproval, updatedById: actor.id, markedReadyAt: now } as never,
+      data: { status: EVALUATION_SUMMARY_STATUS.readyForApproval, updatedById: actor.id, markedReadyAt: now },
       include: { updatedBy: { select: { displayName: true } } }
     })) as EvaluationSummaryRecord;
     // Phân công còn mở của vòng được đóng cùng vòng: người được phân công không giữ quyền ghi khi hồ sơ đã rời bước đánh giá.
     // Lời mời chưa được trả lời thì thu hồi, không chuyển thành "đã hoàn thành" (sẽ mở quyền xem hồ sơ cho người chưa nhận lời).
     await this.prisma.proposalReviewAssignment.updateMany({
       where: { proposalId, reviewedSubmissionEventId: round.evidence.eventId, status: REVIEW_ASSIGNMENT_STATUS.assigned, acceptedAt: null },
-      data: { status: REVIEW_ASSIGNMENT_STATUS.revoked, revokedAt: now, effectiveUntil: now } as never
+      data: { status: REVIEW_ASSIGNMENT_STATUS.revoked, revokedAt: now, effectiveUntil: now }
     });
     await this.prisma.proposalReviewAssignment.updateMany({
       where: { proposalId, reviewedSubmissionEventId: round.evidence.eventId, status: REVIEW_ASSIGNMENT_STATUS.assigned },
-      data: { status: REVIEW_ASSIGNMENT_STATUS.completed, completedAt: now } as never
+      data: { status: REVIEW_ASSIGNMENT_STATUS.completed, completedAt: now }
     });
     await this.prisma.researchProposal.update({
       where: { id: proposalId },
-      data: { authorizationRelationshipVersion: { increment: 1 }, authorizationDelegationVersion: { increment: 1 }, authorizationContextUpdatedAt: now } as never
+      data: { authorizationRelationshipVersion: { increment: 1 }, authorizationDelegationVersion: { increment: 1 }, authorizationContextUpdatedAt: now }
     });
     await this.prisma.proposalSubmissionEvent.create({
       data: {
@@ -312,7 +312,7 @@ export class ProposalEvaluationSummaryService {
         submittedAt: now,
         snapshot: { kind: "evaluation_package_submitted", schemaVersion: PACKAGE_SCHEMA, revision: existing.revision ?? 0, submissionEventId: round.evidence.eventId },
         note: "Trình gói đánh giá đã chốt tới lãnh đạo phê duyệt"
-      } as never
+      }
     });
     await this.prisma.auditLog.create({ data: { action: "mark-ready-for-approval", result: "success", actorId: actor.id, targetEntity: "proposal-evaluation-summary", targetEntityId: record.id, username: actor.username, reason: JSON.stringify({ proposalId, revision: existing.revision ?? 0, submittedReviews: progress.submittedCount, fromStatus: PROPOSAL_STATUS.underReview, toStatus: PROPOSAL_STATUS.readyForApproval }) } });
     const submission = await openApprovalSubmission(this.prisma, actor, { kind: APPROVAL_KINDS.decisionPackage, subjectType: "proposal", subjectId: proposalId }, { title: proposal.title, hostOrganizationUnitId: proposal.hostOrganizationUnitId });
@@ -448,7 +448,7 @@ export class ProposalEvaluationSummaryService {
 
   private async recordLifecycleEvent(actor: SafeUserContext, proposal: EvaluationProposalRecord, kind: string, snapshot: Record<string, unknown>, note: string) {
     await this.prisma.proposalSubmissionEvent.create({
-      data: { proposalId: proposal.id, actorId: actor.id, fromStatus: proposal.status, toStatus: proposal.status, submittedAt: new Date(), snapshot: { ...snapshot, kind }, note } as never
+      data: { proposalId: proposal.id, actorId: actor.id, fromStatus: proposal.status, toStatus: proposal.status, submittedAt: new Date(), snapshot: { ...snapshot, kind }, note }
     });
   }
 

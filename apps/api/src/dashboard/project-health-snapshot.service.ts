@@ -99,7 +99,7 @@ export class ProjectHealthSnapshotService {
   async isDue(now: Date) {
     const today = localDayIndex(now);
     if (new Date(today * DAY).getUTCDay() === 0) return true;
-    const latest = await (this.prisma as any).projectHealthSnapshot.findFirst({ orderBy: { snapshotDate: "desc" }, select: { snapshotDate: true } });
+    const latest = await this.prisma.projectHealthSnapshot.findFirst({ orderBy: { snapshotDate: "desc" }, select: { snapshotDate: true } });
     if (!latest) return true;
     const latestIndex = Math.floor(new Date(latest.snapshotDate).getTime() / DAY);
     return today - latestIndex >= 7;

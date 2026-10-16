@@ -45,7 +45,7 @@ export class ProjectClosureService {
   async getFinance(actor: SafeUserContext, projectId: string) {
     const loaded = await this.projects.loadAuthorized(this.prisma, actor, projectId);
     this.assertAllowed(loaded.capability, "project.finance.read");
-    const client = this.prisma as any;
+    const client = this.prisma;
     const [finance, tranches, costItems] = await Promise.all([
       client.projectFinance.findUnique({ where: { projectId }, include: { updatedBy: { select: { displayName: true } } } }),
       client.projectDisbursement.findMany({ where: { projectId }, orderBy: { position: "asc" } }),
@@ -66,7 +66,7 @@ export class ProjectClosureService {
     const loaded = await this.projects.loadAuthorized(this.prisma, actor, projectId);
     if (!loaded.capability.allowedActions.includes("project.product.review")) this.assertAllowed(loaded.capability, "project.acceptance.council.propose");
     const teamUserIds = new Set((loaded.project.members ?? []).map((member: AnyRecord) => member.userId).filter(Boolean));
-    const profiles = (await (this.prisma as any).researcherProfile.findMany({
+    const profiles = (await this.prisma.researcherProfile.findMany({
       where: { status: "ACTIVE" },
       select: { id: true, fullName: true, title: true, linkedUserId: true, managementOrganizationUnitId: true, managementOrganizationUnit: { select: { name: true } } },
       orderBy: { fullName: "asc" }
@@ -214,7 +214,7 @@ export class ProjectClosureService {
       await this.record(tx, currentActor, project, "project.acceptance.council.propose", "Đề xuất hội đồng nghiệm thu", { acceptanceId: round.id, councilType: data.councilType, members: members.map((member) => ({ profileId: member.profileId, role: member.role })) }, now);
       // Mỗi lần đề xuất (kể cả sửa lại) là một tờ trình mới qua Trưởng ban QLKH và Trưởng phòng KHQS.
       const submission = await openApprovalSubmission(tx, currentActor, { kind: APPROVAL_KINDS.acceptanceCouncil, subjectType: "project", subjectId: projectId, subjectRef: round.id }, { title: project.title, hostOrganizationUnitId: project.hostOrganizationUnitId });
-      notify((await boardReviewEvent(tx, submission)) as never);
+      notify(await boardReviewEvent(tx, submission));
       return this.reload(tx, currentActor, projectId);
     });
   }
@@ -349,7 +349,7 @@ export class ProjectClosureService {
       await this.record(tx, currentActor, project, "project.liquidation.prepare", existed ? "Cập nhật dự thảo biên bản thanh lý" : "Lập biên bản thanh lý", { ...totals, recoveredAmount, outstanding: totals.totalDisbursed - totals.totalSettled - recoveredAmount }, now);
       // Dự thảo thanh lý (lập mới hoặc sửa) trình qua Trưởng ban QLKH và Trưởng phòng KHQS lên Giám đốc.
       const submission = await openApprovalSubmission(tx, currentActor, { kind: APPROVAL_KINDS.liquidation, subjectType: "project", subjectId: projectId }, { title: project.title, hostOrganizationUnitId: project.hostOrganizationUnitId });
-      notify((await boardReviewEvent(tx, submission)) as never);
+      notify(await boardReviewEvent(tx, submission));
       return this.reload(tx, currentActor, projectId);
     });
   }

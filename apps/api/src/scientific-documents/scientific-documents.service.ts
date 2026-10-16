@@ -215,7 +215,7 @@ export class ScientificDocumentsService {
 
     const updated = await this.withObjectCleanup(newObjectKey, () => this.prisma.scientificDocument.update({
       where: { id },
-      data: data as never,
+      data: data,
       include: {
         createdBy: {
           select: {

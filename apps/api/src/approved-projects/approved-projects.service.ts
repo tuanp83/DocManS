@@ -290,7 +290,7 @@ export class ApprovedProjectsService {
     const now = new Date();
     const progress = this.computeProgress(project, now);
     const effective = resolveEffectiveHealth(progress.level, (project.healthAssessments ?? [])[0]);
-    const updates = await (this.prisma as any).projectMilestoneProgressUpdate.findMany({ where: { projectId }, include: { author: { select: { displayName: true } }, milestone: { select: { title: true } } }, orderBy: { createdAt: "desc" }, take: 20 });
+    const updates = await this.prisma.projectMilestoneProgressUpdate.findMany({ where: { projectId }, include: { author: { select: { displayName: true } }, milestone: { select: { title: true } } }, orderBy: { createdAt: "desc" }, take: 20 });
     // Cùng quy tắc che như lịch sử đề tài (toProjectResponse): lý do đánh giá và ghi chú chỉ cho chủ nhiệm,
     // chuyên viên phụ trách và lãnh đạo; người cập nhật luôn thấy ghi chú của chính mình.
     const viewerMember = (project.members ?? []).find((item: AnyRecord) => item.userId === actor.id && isRelationshipActiveAt(item, now));
@@ -478,7 +478,7 @@ export class ApprovedProjectsService {
     const loaded = await this.loadAuthorized(this.prisma, actor, projectId);
     this.assertScope(actor, loaded.project);
     this.assertOfficerAssigner(actor, loaded.project);
-    const users = await (this.prisma as any).user.findMany({ where: { status: "active", systemRole: "RESEARCH_MANAGEMENT_STAFF" }, include: { organizationScopes: { include: { organizationUnit: true } } }, orderBy: { displayName: "asc" } });
+    const users = await this.prisma.user.findMany({ where: { status: "active", systemRole: "RESEARCH_MANAGEMENT_STAFF" }, include: { organizationScopes: { include: { organizationUnit: true } } }, orderBy: { displayName: "asc" } });
     const eligible = users.filter((user: any) => user.organizationScopes?.some((scope: any) => scope.organizationUnitId === loaded.project.hostOrganizationUnitId && scope.organizationUnit?.status === "active") && !(loaded.project.members ?? []).some((member: any) => member.userId === user.id && isRelationshipActiveAt(member, new Date())));
     const reviewAccess = new ProposalReviewAccessService(this.prisma);
     const checks = await Promise.all(eligible.map((user: AnyRecord) => reviewAccess.resolveConflictForProposal(user.id, loaded.project.proposalId)));
@@ -980,7 +980,7 @@ export class ApprovedProjectsService {
 const MILESTONE_CHANGE_KEYS = ["id", "title", "description", "dueDate", "responsibleMemberId", "weightPercent"];
 
 function assertProjectContext(expected: unknown, project: AnyRecord) {
-  const current = projectContextVersion(project as any);
+  const current = projectContextVersion(project);
   if (!expected || typeof expected !== "object" || Object.entries(current).some(([key, value]) => (expected as AnyRecord)[key] !== value)) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH" });
 }
 

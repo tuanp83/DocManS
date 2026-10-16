@@ -202,7 +202,7 @@ export class DashboardAnalyticsService {
     if (!isResearchOversightAuthority(actor) || !projects.length) return projects;
     // Các Phó Giám đốc chỉ theo dõi không đọc kinh phí từng đề tài (project.finance.read), nhưng được xem báo cáo
     // kinh phí tổng hợp: nạp kinh phí để cộng vào số tổng, còn các dòng chi tiết để trống (drillDown).
-    const finances = (await (this.prisma as any).approvedProject.findMany({ where: { id: { in: projects.map((project) => project.id) } }, select: { id: true, finance: true } })) as Array<{ id: string; finance: AnyRecord | null }>;
+    const finances = (await this.prisma.approvedProject.findMany({ where: { id: { in: projects.map((project) => project.id) } }, select: { id: true, finance: true } })) as Array<{ id: string; finance: AnyRecord | null }>;
     const byId = new Map(finances.map((row) => [row.id, row.finance]));
     return projects.map((project) => {
       const finance = byId.get(project.id);
@@ -305,7 +305,7 @@ export class DashboardAnalyticsService {
     const proposals = (await this.readableProposals(actor, now)).filter((proposal) => canReadProposalDeliverables(actor, proposal) && matchesProposal(proposal, { unitId: filters.unitId, level: filters.level, field: filters.field, year: filters.year, scope: filters.scope }, now));
     if (!proposals.length) return [];
     const byId = new Map(proposals.map((proposal) => [proposal.id, proposal]));
-    const rows = await (this.prisma as any).proposalDeliverable.findMany({
+    const rows = await this.prisma.proposalDeliverable.findMany({
       where: { proposalId: { in: [...byId.keys()] } },
       select: { id: true, proposalId: true, type: true, title: true, status: true, publishedAt: true }
     });
@@ -359,7 +359,7 @@ export class DashboardAnalyticsService {
     const readable = new Map(projects.map((project) => [project.id, project]));
     const financeVisible = new Set(projects.filter((project) => project.finance).map((project) => project.id));
     const snapshots: AnyRecord[] = readable.size
-      ? await (this.prisma as any).projectHealthSnapshot.findMany({
+      ? await this.prisma.projectHealthSnapshot.findMany({
           where: { projectId: { in: [...readable.keys()] }, snapshotDate: { gte: new Date(fromIndex * DAY), lte: new Date(toIndex * DAY) } },
           orderBy: { snapshotDate: "asc" }
         })

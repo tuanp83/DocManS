@@ -45,7 +45,7 @@ export class ApprovalRoutingService {
       include: { submittedBy: { select: { displayName: true } }, steps: { include: { actor: { select: { displayName: true } } }, orderBy: { createdAt: "asc" } } },
       orderBy: { updatedAt: "desc" },
       take: INBOX_LIMIT
-    } as never)) as unknown as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
+    })) as unknown as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
     return {
       role: isResearchBoardHead(actor) ? "board_head" : isResearchManagementHead(actor) ? "head" : isLeadership(actor) || isScienceDeputyDirector(actor) ? "leadership" : "staff",
       submissions: rows.map((row) => this.toResponse(row))
@@ -60,7 +60,7 @@ export class ApprovalRoutingService {
     if (!["proposal", "project"].includes(subjectType)) throw new BadRequestException({ message: "Loại đối tượng không hợp lệ." });
     const academyWide = isLeadership(actor) || isScienceDeputyDirector(actor);
     const where: Record<string, unknown> = { subjectType, status: "PENDING", ...(academyWide ? {} : { hostOrganizationUnitId: { in: getOrganizationScopeIds(actor) } }) };
-    const rows = (await this.prisma.approvalSubmission.findMany({ where, select: { id: true, kind: true, subjectId: true, subjectRef: true, stage: true, signer: true } } as never)) as unknown as Array<{ id: string; kind: string; subjectId: string; subjectRef: string; stage: ApprovalStage; signer: string }>;
+    const rows = (await this.prisma.approvalSubmission.findMany({ where, select: { id: true, kind: true, subjectId: true, subjectRef: true, stage: true, signer: true } })) as unknown as Array<{ id: string; kind: string; subjectId: string; subjectRef: string; stage: ApprovalStage; signer: string }>;
     return { pending: rows.map((row) => ({ ...row, stageLabel: APPROVAL_STAGE_LABELS[row.stage] })) };
   }
 
@@ -72,7 +72,7 @@ export class ApprovalRoutingService {
       include: { submittedBy: { select: { displayName: true } }, steps: { include: { actor: { select: { displayName: true } } }, orderBy: { createdAt: "asc" } } },
       orderBy: { createdAt: "desc" },
       take: 50
-    } as never)) as unknown as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
+    })) as unknown as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
     // Đọc theo phạm vi đơn vị (Ban giám đốc toàn Học viện); chủ nhiệm và người ngoài Phòng không xem hồ sơ trình nội bộ.
     const academyWide = isLeadership(actor) || isScienceDeputyDirector(actor);
     const scopeIds = getOrganizationScopeIds(actor);
@@ -95,7 +95,7 @@ export class ApprovalRoutingService {
       return { submission: updated, event: this.event(updated, recipients, next === "HEAD_REVIEW" ? `Trưởng ban QLKH đã trình: ${APPROVAL_KIND_LABELS[updated.kind]}` : `Trưởng phòng KHQS trình Ban giám đốc: ${APPROVAL_KIND_LABELS[updated.kind]}`, note) };
     });
     await this.dispatch(event);
-    return this.toResponse(submission as never);
+    return this.toResponse(submission);
   }
 
   /** Trả lại chuyên viên lập (bắt buộc lý do); thủ tục quay về trạng thái sửa được. */
@@ -111,7 +111,7 @@ export class ApprovalRoutingService {
       return { submission: updated, event: this.event(updated, [submission.submittedById], `Tờ trình bị trả lại: ${APPROVAL_KIND_LABELS[updated.kind]}`, note) };
     });
     await this.dispatch(event);
-    return this.toResponse(submission as never);
+    return this.toResponse(submission);
   }
 
   private async lockPending(tx: any, submissionId: string) {

@@ -102,7 +102,7 @@ export class ProposalDeliverablesService {
 
   private audit(tx: PrismaService, actor: SafeUserContext, action: string, proposalId: string, facts: { before?: unknown; after?: unknown }) {
     const auditLog = this.auditLog instanceof AuditLogService ? new AuditLogService(tx) : this.auditLog;
-    return auditLog.record({ action: action as never, result: "success", actorId: actor.id, targetEntity: "research-proposal", targetEntityId: proposalId, username: actor.username, reason: JSON.stringify(facts) });
+    return auditLog.record({ action: action, result: "success", actorId: actor.id, targetEntity: "research-proposal", targetEntityId: proposalId, username: actor.username, reason: JSON.stringify(facts) });
   }
 }
 

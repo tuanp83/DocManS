@@ -214,7 +214,7 @@ export class FilesService {
         storageObjectKey: prepared.objectKey,
         uploadedById: actor.id,
         status: "active"
-      } as never,
+      },
       include: {
         uploadedBy: {
           select: { displayName: true }
@@ -317,7 +317,7 @@ export class FilesService {
       where: { id: fileId },
       data: {
         description: this.readDescription(input.description)
-      } as never,
+      },
       include: {
         uploadedBy: {
           select: { displayName: true }
@@ -351,7 +351,7 @@ export class FilesService {
       data: {
         status: "deleted",
         deletedAt: new Date()
-      } as never,
+      },
       include: {
         uploadedBy: {
           select: { displayName: true }
