@@ -29,7 +29,10 @@ describe("workspace smoke checks", () => {
   });
 
   it("keeps temporary UI data isolated from production lib paths", () => {
-    assert.equal(existsSync("apps/web/src/fixtures/showcase-data.ts"), true);
+    // Trang mẫu và dữ liệu mẫu đã gỡ khỏi bản chạy thật.
+    assert.equal(existsSync("apps/web/src/fixtures/showcase-data.ts"), false);
+    assert.equal(existsSync("apps/web/src/app/ui-workspaces/page.tsx"), false);
+    assert.equal(existsSync("apps/web/src/app/[...segments]/page.tsx"), false);
     assert.equal(existsSync("apps/web/src/fixtures/shell-context.ts"), true);
     assert.equal(existsSync("apps/web/src/lib/app-data.ts"), false);
     assert.equal(existsSync("apps/web/src/lib/accounts.ts"), false);

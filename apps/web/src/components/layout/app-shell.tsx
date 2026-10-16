@@ -9,7 +9,7 @@ import { useSession } from "@/components/auth/session-provider";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { NavLink } from "@/components/layout/nav-link";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { getNavigationItems } from "@/lib/navigation";
+import { getHomeRoute, getNavigationItems } from "@/lib/navigation";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -43,7 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="app-shell">
       <header className="topbar">
         <div className="topbar-row topbar-row-main">
-          <Link className="topbar-brand" href="/dashboard" aria-label="Hệ thống quản lý nghiên cứu khoa học">
+          <Link className="topbar-brand" href={getHomeRoute(account.systemRole)} aria-label="Hệ thống quản lý nghiên cứu khoa học">
             <BrandMark />
             <div>
               <strong>HỆ THỐNG QUẢN LÝ NGHIÊN CỨU KHOA HỌC, CÔNG NGHỆ VÀ ĐỔI MỚI SÁNG TẠO</strong>

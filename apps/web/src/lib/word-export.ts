@@ -5,8 +5,18 @@
  * and Military Science Regulations (Thông tư 57/2021/TT-BQP).
  */
 
-/** Chỗ trống trên văn bản khi chưa có dữ liệu thật — không điền nội dung, điểm số hay số quyết định giả. */
+/** Chỗ trống trên văn bản khi chưa có dữ liệu thật — không điền tên, nội dung, điểm số hay số quyết định giả. */
 const BLANK = "…………………………";
+
+/** Dữ liệu người dùng nhập được escape trước khi chèn vào HTML của văn bản. */
+function esc(value: unknown) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
+}
+
+/** Chức danh ký thay Giám đốc: Phó GĐ phụ trách Khoa học ký "KT. GIÁM ĐỐC / PHÓ GIÁM ĐỐC". */
+export function directorSignatureTitle(signerRole?: string | null) {
+  return signerRole === "SCIENCE_DEPUTY_DIRECTOR" ? ["KT. GIÁM ĐỐC", "PHÓ GIÁM ĐỐC"] : ["GIÁM ĐỐC"];
+}
 
 export interface ExportWordOptions {
   filename: string;
@@ -31,7 +41,7 @@ export function exportHtmlToWord({ filename, title, contentHtml }: ExportWordOpt
     <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
     <head>
       <meta charset='utf-8'>
-      <title>${title}</title>
+      <title>${esc(title)}</title>
       <!--[if gte mso 9]>
       <xml>
         <w:WordDocument>
@@ -136,8 +146,9 @@ export function exportCouncilDecisionWord(proposal: {
   const year = dateObj.getFullYear();
 
   const code = proposal.code || BLANK;
-  const decisionNumber = council.decisionNumber || `QĐ-TLHĐ-${code.replace(/[^a-zA-Z0-9]/g, "")}/HVQY`;
-  const signatory = council.decidedByName || "GS. TS. Trần Viết Tiến";
+  const decisionNumber = council.decisionNumber || BLANK;
+  const signatory = council.decidedByName || BLANK;
+  const signatoryTitle = directorSignatureTitle(council.decidedByRole);
   const members = Array.isArray(council.members) ? council.members : [];
 
   const memberRows = members
@@ -145,10 +156,10 @@ export function exportCouncilDecisionWord(proposal: {
       (m: any, idx: number) => `
       <tr>
         <td style="text-align: center;">${idx + 1}</td>
-        <td><b>${m.displayName}</b></td>
-        <td>${m.academicTitle || "—"}</td>
-        <td>${m.unit || m.organization || "Học viện Quân y"}</td>
-        <td style="text-align: center; font-weight: bold;">${m.roleLabel || m.role}</td>
+        <td><b>${esc(m.displayName)}</b></td>
+        <td>${esc(m.academicTitle || "—")}</td>
+        <td>${esc(m.unit || m.organization || "Học viện Quân y")}</td>
+        <td style="text-align: center; font-weight: bold;">${esc(m.roleLabel || m.role)}</td>
       </tr>
     `
     )
@@ -165,7 +176,7 @@ export function exportCouncilDecisionWord(proposal: {
         <td style="width: 45%; text-align: center;">
           <p style="margin: 0; font-size: 12pt;">BỘ QUỐC PHÒNG</p>
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">HỌC VIỆN QUÂN Y</p>
-          <p style="margin: 0; font-size: 11pt;">Số: <b>${decisionNumber}</b></p>
+          <p style="margin: 0; font-size: 11pt;">Số: <b>${esc(decisionNumber)}</b></p>
         </td>
         <td style="width: 55%; text-align: center;">
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
@@ -197,8 +208,8 @@ export function exportCouncilDecisionWord(proposal: {
 
     <div>
       <p><b>Điều 1.</b> Thành lập Hội đồng tư vấn xét duyệt thuyết minh đề tài nghiên cứu khoa học cấp Học viện/Bộ Quốc phòng:</p>
-      <p style="padding-left: 18pt;">- Tên đề tài: <b>${proposal.title}</b></p>
-      <p style="padding-left: 18pt;">- Mã số hồ sơ: <b>${code}</b></p>
+      <p style="padding-left: 18pt;">- Tên đề tài: <b>${esc(proposal.title)}</b></p>
+      <p style="padding-left: 18pt;">- Mã số hồ sơ: <b>${esc(code)}</b></p>
       <p style="padding-left: 18pt;">- Hội đồng gồm các đồng chí có tên trong danh sách sau:</p>
 
       <table class="border-table" style="margin: 10pt 0;">
@@ -236,10 +247,9 @@ export function exportCouncilDecisionWord(proposal: {
           <p style="margin: 0; font-size: 10pt; font-style: italic;">- Lưu: VT, KHQS.</p>
         </td>
         <td style="width: 55%; text-align: center; vertical-align: top;">
-          <p style="margin: 0; font-size: 12pt; font-weight: bold;">KT. GIÁM ĐỐC</p>
-          <p style="margin: 0; font-size: 12pt; font-weight: bold;">PHÓ GIÁM ĐỐC</p>
+          ${signatoryTitle.map((line) => `<p style="margin: 0; font-size: 12pt; font-weight: bold;">${line}</p>`).join("\n          ")}
           <p style="margin: 4pt 0 40pt 0; font-size: 10pt; font-style: italic;">(Đã ký và đóng dấu)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${signatory}</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(signatory)}</p>
         </td>
       </tr>
     </table>
@@ -247,7 +257,7 @@ export function exportCouncilDecisionWord(proposal: {
 
   exportHtmlToWord({
     filename: `Quyet_dinh_thanh_lap_Hoi_dong_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
-    title: `Quyết định thành lập Hội đồng - ${code}`,
+    title: `Quyết định thành lập Hội đồng - ${esc(code)}`,
     contentHtml
   });
 }
@@ -263,6 +273,8 @@ export function exportProposalApprovalDecisionWord(proposal: {
   budgetMetadata?: any;
   startDate?: string | null;
   endDate?: string | null;
+  /** Giám đốc đã ký quyết định phê duyệt; chưa có thì để trống chỗ ký. */
+  signerName?: string | null;
 }) {
   const dateObj = new Date();
   const day = dateObj.getDate().toString().padStart(2, "0");
@@ -270,7 +282,8 @@ export function exportProposalApprovalDecisionWord(proposal: {
   const year = dateObj.getFullYear();
 
   const code = proposal.code || BLANK;
-  const decisionNumber = `QĐ-HVQY/${code.replace(/[^a-zA-Z0-9]/g, "")}`;
+  // Số quyết định do văn thư cấp khi ban hành; hệ thống chưa lưu nên để trống.
+  const decisionNumber = BLANK;
   const amount = proposal.budgetMetadata?.approvedAmount || proposal.budgetMetadata?.amount || 0;
   const formattedAmount = new Intl.NumberFormat("vi-VN").format(amount);
 
@@ -281,7 +294,7 @@ export function exportProposalApprovalDecisionWord(proposal: {
         <td style="width: 45%; text-align: center;">
           <p style="margin: 0; font-size: 12pt;">BỘ QUỐC PHÒNG</p>
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">HỌC VIỆN QUÂN Y</p>
-          <p style="margin: 0; font-size: 11pt;">Số: <b>${decisionNumber}</b></p>
+          <p style="margin: 0; font-size: 11pt;">Số: <b>${esc(decisionNumber)}</b></p>
         </td>
         <td style="width: 55%; text-align: center;">
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
@@ -313,11 +326,11 @@ export function exportProposalApprovalDecisionWord(proposal: {
 
     <div>
       <p><b>Điều 1.</b> Phê duyệt chính thức đề tài nghiên cứu khoa học với các nội dung sau:</p>
-      <p style="padding-left: 18pt;">- Tên đề tài: <b>${proposal.title}</b></p>
-      <p style="padding-left: 18pt;">- Mã số đề tài: <b>${code}</b></p>
-      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
-      <p style="padding-left: 18pt;">- Đơn vị chủ trì: <b>${proposal.hostOrganizationUnitName || "Học viện Quân y"}</b></p>
-      <p style="padding-left: 18pt;">- Thời gian thực hiện: từ <b>${proposal.startDate ? new Intl.DateTimeFormat("vi-VN").format(new Date(proposal.startDate)) : "2026"}</b> đến <b>${proposal.endDate ? new Intl.DateTimeFormat("vi-VN").format(new Date(proposal.endDate)) : "2027"}</b>.</p>
+      <p style="padding-left: 18pt;">- Tên đề tài: <b>${esc(proposal.title)}</b></p>
+      <p style="padding-left: 18pt;">- Mã số đề tài: <b>${esc(code)}</b></p>
+      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${esc(proposal.ownerDisplayName || BLANK)}</b></p>
+      <p style="padding-left: 18pt;">- Đơn vị chủ trì: <b>${esc(proposal.hostOrganizationUnitName || "Học viện Quân y")}</b></p>
+      <p style="padding-left: 18pt;">- Thời gian thực hiện: từ <b>${esc(proposal.startDate ? new Intl.DateTimeFormat("vi-VN").format(new Date(proposal.startDate)) : BLANK)}</b> đến <b>${esc(proposal.endDate ? new Intl.DateTimeFormat("vi-VN").format(new Date(proposal.endDate)) : BLANK)}</b>.</p>
 
       <p><b>Điều 2.</b> Kinh phí thực hiện đề tài:</p>
       <p style="padding-left: 18pt;">- Tổng kinh phí được phê duyệt: <b>${formattedAmount} VNĐ</b></p>
@@ -342,7 +355,7 @@ export function exportProposalApprovalDecisionWord(proposal: {
         <td style="width: 55%; text-align: center; vertical-align: top;">
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">GIÁM ĐỐC</p>
           <p style="margin: 4pt 0 40pt 0; font-size: 10pt; font-style: italic;">(Đã ký và đóng dấu)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">GS. TS. Trần Viết Tiến</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(proposal.signerName || BLANK)}</p>
         </td>
       </tr>
     </table>
@@ -350,7 +363,7 @@ export function exportProposalApprovalDecisionWord(proposal: {
 
   exportHtmlToWord({
     filename: `Quyet_dinh_phe_duyet_de_tai_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
-    title: `Quyết định phê duyệt đề tài - ${code}`,
+    title: `Quyết định phê duyệt đề tài - ${esc(code)}`,
     contentHtml
   });
 }
@@ -373,18 +386,18 @@ export function exportCouncilMinutesWord(proposal: {
 
   const code = proposal.code || BLANK;
   const members = Array.isArray(council.members) ? council.members : [];
-  const chair = members.find((m: any) => m.role === "chair")?.displayName || "GS. TS. Trần Viết Tiến";
-  const secretary = minutes.recordedByName || members.find((m: any) => m.role === "secretary")?.displayName || "TS. Nguyễn Minh Phương";
+  const chair = members.find((m: any) => m.role === "chair")?.displayName || BLANK;
+  const secretary = minutes.recordedByName || members.find((m: any) => m.role === "secretary")?.displayName || BLANK;
 
   const memberRows = members
     .map(
       (m: any, idx: number) => `
       <tr>
         <td style="text-align: center;">${idx + 1}</td>
-        <td><b>${m.displayName}</b></td>
-        <td>${m.academicTitle || "—"}</td>
-        <td>${m.unit || m.organization || "Học viện Quân y"}</td>
-        <td style="text-align: center; font-weight: bold;">${m.roleLabel || m.role}</td>
+        <td><b>${esc(m.displayName)}</b></td>
+        <td>${esc(m.academicTitle || "—")}</td>
+        <td>${esc(m.unit || m.organization || "Học viện Quân y")}</td>
+        <td style="text-align: center; font-weight: bold;">${esc(m.roleLabel || m.role)}</td>
         <td style="text-align: center;">Có mặt</td>
       </tr>
     `
@@ -417,12 +430,12 @@ export function exportCouncilMinutesWord(proposal: {
 
     <div>
       <p><b>I. THÔNG TIN CHUNG</b></p>
-      <p style="padding-left: 18pt;">- Tên đề tài: <b>${proposal.title}</b></p>
-      <p style="padding-left: 18pt;">- Mã số: <b>${code}</b></p>
-      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
+      <p style="padding-left: 18pt;">- Tên đề tài: <b>${esc(proposal.title)}</b></p>
+      <p style="padding-left: 18pt;">- Mã số: <b>${esc(code)}</b></p>
+      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${esc(proposal.ownerDisplayName || BLANK)}</b></p>
       <p style="padding-left: 18pt;">- Thời gian họp: Ngày ${day} tháng ${month} năm ${year}</p>
-      <p style="padding-left: 18pt;">- Địa điểm họp: ${council.meetingLocation || "Phòng họp 1 - Tòa nhà Trung tâm - Học viện Quân y"}</p>
-      <p style="padding-left: 18pt;">- Quyết định thành lập Hội đồng số: <b>${council.decisionNumber || BLANK}</b></p>
+      <p style="padding-left: 18pt;">- Địa điểm họp: ${esc(council.meetingLocation || BLANK)}</p>
+      <p style="padding-left: 18pt;">- Quyết định thành lập Hội đồng số: <b>${esc(council.decisionNumber || BLANK)}</b></p>
 
       <p style="margin-top: 10pt;"><b>II. THÀNH PHẦN HỘI ĐỒNG VÀ ĐẠI BIỂU THAM DỰ</b></p>
       <table class="border-table">
@@ -446,12 +459,12 @@ export function exportCouncilMinutesWord(proposal: {
       <p style="padding-left: 18pt;">2. Đồng chí Chủ nhiệm báo cáo tóm tắt thuyết minh đề tài nghiên cứu.</p>
       <p style="padding-left: 18pt;">3. Các đồng chí Ủy viên Phản biện 1 và Phản biện 2 trình bày bản nhận xét đánh giá chi tiết.</p>
       <p style="padding-left: 18pt;">4. Các thành viên Hội đồng thảo luận, chất vấn và cho ý kiến đóng góp hoàn thiện thuyết minh.</p>
-      <p style="padding-left: 18pt;">5. Kết quả chấm điểm trung bình của Hội đồng: <b>${minutes.averageScore ?? BLANK}/100 điểm</b>.</p>
+      <p style="padding-left: 18pt;">5. Kết quả chấm điểm trung bình của Hội đồng: <b>${esc(minutes.averageScore ?? BLANK)}/100 điểm</b>.</p>
 
       <p style="margin-top: 10pt;"><b>IV. KẾT LUẬN CỦA HỘI ĐỒNG</b></p>
-      <p style="padding-left: 18pt;">- Đánh giá chung: <i>${minutes.summaryComments || BLANK}</i></p>
+      <p style="padding-left: 18pt;">- Đánh giá chung: <i>${esc(minutes.summaryComments || BLANK)}</i></p>
       <p style="padding-left: 18pt;">- Kết luận xếp loại: <b>${conclusionLabel}</b></p>
-      <p style="padding-left: 18pt;">- Nội dung yêu cầu hoàn thiện, bổ sung: <i>${minutes.modificationsRequired || BLANK}</i></p>
+      <p style="padding-left: 18pt;">- Nội dung yêu cầu hoàn thiện, bổ sung: <i>${esc(minutes.modificationsRequired || BLANK)}</i></p>
 
       <p style="margin-top: 10pt;">Phiên họp kết thúc hồi 11 giờ 30 phút cùng ngày. Biên bản đã được thông qua toàn thể Hội đồng nhất trí 100%.</p>
     </div>
@@ -462,12 +475,12 @@ export function exportCouncilMinutesWord(proposal: {
         <td style="width: 50%; text-align: center;">
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">THƯ KÝ KHOA HỌC</p>
           <p style="margin: 4pt 0 45pt 0; font-size: 10pt; font-style: italic;">(Ký và ghi rõ họ tên)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${secretary}</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(secretary)}</p>
         </td>
         <td style="width: 50%; text-align: center;">
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">CHỦ TỊCH HỘI ĐỒNG</p>
           <p style="margin: 4pt 0 45pt 0; font-size: 10pt; font-style: italic;">(Ký và ghi rõ họ tên)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${chair}</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(chair)}</p>
         </td>
       </tr>
     </table>
@@ -475,7 +488,7 @@ export function exportCouncilMinutesWord(proposal: {
 
   exportHtmlToWord({
     filename: `Bien_ban_hop_Hoi_dong_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
-    title: `Biên bản họp Hội đồng - ${code}`,
+    title: `Biên bản họp Hội đồng - ${esc(code)}`,
     contentHtml
   });
 }
@@ -488,6 +501,8 @@ export function exportEvaluationSummaryWord(proposal: {
   title: string;
   ownerDisplayName?: string | null;
   evaluationSummary?: any;
+  /** Trưởng phòng KHQS ký báo cáo; chưa biết thì để trống chỗ ký. */
+  signerName?: string | null;
 }) {
   const code = proposal.code || BLANK;
   const summary = proposal.evaluationSummary || {};
@@ -519,15 +534,15 @@ export function exportEvaluationSummaryWord(proposal: {
 
     <div>
       <p><b>1. THÔNG TIN ĐỀ TÀI:</b></p>
-      <p style="padding-left: 18pt;">- Tên đề tài: <b>${proposal.title}</b></p>
-      <p style="padding-left: 18pt;">- Mã số hồ sơ: <b>${code}</b></p>
-      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
+      <p style="padding-left: 18pt;">- Tên đề tài: <b>${esc(proposal.title)}</b></p>
+      <p style="padding-left: 18pt;">- Mã số hồ sơ: <b>${esc(code)}</b></p>
+      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${esc(proposal.ownerDisplayName || BLANK)}</b></p>
 
       <p style="margin-top: 10pt;"><b>2. TỔNG HỢP Ý KIẾN HỘI ĐỒNG VÀ PHẢN BIỆN:</b></p>
-      <p style="padding-left: 18pt; text-align: justify;">${summary.summary || BLANK}</p>
+      <p style="padding-left: 18pt; text-align: justify;">${esc(summary.summary || BLANK)}</p>
 
       <p style="margin-top: 10pt;"><b>3. KIẾN NGHỊ CỦA CƠ QUAN QUẢN LÝ KHOA HỌC:</b></p>
-      <p style="padding-left: 18pt; text-align: justify;">${summary.recommendation || BLANK}</p>
+      <p style="padding-left: 18pt; text-align: justify;">${esc(summary.recommendation || BLANK)}</p>
     </div>
 
     <!-- FOOTER SIGNATURE -->
@@ -537,7 +552,7 @@ export function exportEvaluationSummaryWord(proposal: {
         <td style="width: 50%; text-align: center;">
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">TRƯỞNG PHÒNG KHQS</p>
           <p style="margin: 4pt 0 45pt 0; font-size: 10pt; font-style: italic;">(Ký và ghi rõ họ tên)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">TS. Nguyễn Minh Phương</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(proposal.signerName || BLANK)}</p>
         </td>
       </tr>
     </table>
@@ -545,7 +560,7 @@ export function exportEvaluationSummaryWord(proposal: {
 
   exportHtmlToWord({
     filename: `Tong_hop_danh_gia_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
-    title: `Báo cáo tổng hợp đánh giá - ${code}`,
+    title: `Báo cáo tổng hợp đánh giá - ${esc(code)}`,
     contentHtml
   });
 }
@@ -597,23 +612,23 @@ export function exportIndividualReviewWord(
 
     <div>
       <p><b>I. THÔNG TIN CHUNG</b></p>
-      <p style="padding-left: 18pt;">- Tên đề tài: <b>${proposal.title}</b></p>
-      <p style="padding-left: 18pt;">- Mã số đề tài: <b>${code}</b></p>
-      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
-      <p style="padding-left: 18pt;">- Họ và tên người đánh giá: <b>${review.reviewerDisplayName}</b></p>
-      <p style="padding-left: 18pt;">- Đơn vị công tác: <b>${review.reviewerUnit || "Học viện Quân y"}</b></p>
-      <p style="padding-left: 18pt;">- Trách nhiệm trong Hội đồng: <b>${review.assignmentRoleLabel || "Ủy viên Phản biện"}</b></p>
+      <p style="padding-left: 18pt;">- Tên đề tài: <b>${esc(proposal.title)}</b></p>
+      <p style="padding-left: 18pt;">- Mã số đề tài: <b>${esc(code)}</b></p>
+      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${esc(proposal.ownerDisplayName || BLANK)}</b></p>
+      <p style="padding-left: 18pt;">- Họ và tên người đánh giá: <b>${esc(review.reviewerDisplayName)}</b></p>
+      <p style="padding-left: 18pt;">- Đơn vị công tác: <b>${esc(review.reviewerUnit || "Học viện Quân y")}</b></p>
+      <p style="padding-left: 18pt;">- Trách nhiệm trong Hội đồng: <b>${esc(review.assignmentRoleLabel || "Ủy viên Phản biện")}</b></p>
 
       <p style="margin-top: 10pt;"><b>II. Ý KIẾN NHẬN XÉT, ĐÁNH GIÁ CHUYÊN MÔN</b></p>
       <p style="padding-left: 18pt;"><b>1. Tính cấp thiết và ý nghĩa thực tiễn:</b> Thuyết minh đề tài thể hiện rõ tính cấp thiết phục vụ công tác huấn luyện, điều trị và sẵn sàng chiến đấu quân y.</p>
       <p style="padding-left: 18pt;"><b>2. Mục tiêu, nội dung và phương pháp nghiên cứu:</b> Thiết kế nghiên cứu khoa học, cỡ mẫu và phương pháp xử lý số liệu phù hợp với điều kiện thực tế.</p>
       <p style="padding-left: 18pt;"><b>3. Tính khả thi và sản phẩm dự kiến:</b> Sản phẩm đáp ứng yêu cầu đặt hàng của đề tài nghiên cứu cấp cơ sở/ngành.</p>
       <p style="padding-left: 18pt;"><b>4. Nhận xét chi tiết:</b></p>
-      <p style="padding-left: 28pt; font-style: italic;">"${review.comment || BLANK}"</p>
+      <p style="padding-left: 28pt; font-style: italic;">"${esc(review.comment || BLANK)}"</p>
 
       <p style="margin-top: 10pt;"><b>III. KẾT QUẢ ĐÁNH GIÁ VÀ ĐỀ NGHỊ</b></p>
-      <p style="padding-left: 18pt;">- Tổng điểm đánh giá: <b>${review.reviewTotalScore ?? 88}/100 điểm</b>.</p>
-      <p style="padding-left: 18pt;">- Đề nghị của chuyên gia: <b>${review.reviewRecommendationLabel || BLANK}</b>.</p>
+      <p style="padding-left: 18pt;">- Tổng điểm đánh giá: <b>${esc(review.reviewTotalScore ?? BLANK)}/100 điểm</b>.</p>
+      <p style="padding-left: 18pt;">- Đề nghị của chuyên gia: <b>${esc(review.reviewRecommendationLabel || BLANK)}</b>.</p>
     </div>
 
     <!-- FOOTER SIGNATURE -->
@@ -623,7 +638,7 @@ export function exportIndividualReviewWord(
         <td style="width: 50%; text-align: center;">
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">NGƯỜI ĐÁNH GIÁ</p>
           <p style="margin: 4pt 0 45pt 0; font-size: 10pt; font-style: italic;">(Ký và ghi rõ họ tên)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${review.reviewerDisplayName}</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(review.reviewerDisplayName)}</p>
         </td>
       </tr>
     </table>
@@ -631,7 +646,7 @@ export function exportIndividualReviewWord(
 
   exportHtmlToWord({
     filename: `Phieu_danh_gia_${review.reviewerDisplayName.replace(/[^a-zA-Z0-9]/g, "_")}_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
-    title: `Phiếu đánh giá - ${review.reviewerDisplayName} - ${code}`,
+    title: `Phiếu đánh giá - ${esc(review.reviewerDisplayName)} - ${esc(code)}`,
     contentHtml
   });
 }
@@ -685,9 +700,9 @@ export function exportAcceptanceMinutesWord(
   const memberRows = acceptance.members.map((m, idx) => `
     <tr>
       <td style="text-align: center; border: 1px solid #000; padding: 5pt;">${idx + 1}</td>
-      <td style="border: 1px solid #000; padding: 5pt;"><b>${m.fullName}</b></td>
-      <td style="border: 1px solid #000; padding: 5pt;">${m.academicTitle || "TS"} - ${m.unit || "Học viện Quân y"}</td>
-      <td style="text-align: center; border: 1px solid #000; padding: 5pt;">${m.role}</td>
+      <td style="border: 1px solid #000; padding: 5pt;"><b>${esc(m.fullName)}</b></td>
+      <td style="border: 1px solid #000; padding: 5pt;">${esc(m.academicTitle || "TS")} - ${esc(m.unit || "Học viện Quân y")}</td>
+      <td style="text-align: center; border: 1px solid #000; padding: 5pt;">${esc(m.role)}</td>
     </tr>
   `).join("");
 
@@ -717,12 +732,12 @@ export function exportAcceptanceMinutesWord(
 
     <div>
       <p><b>I. THÔNG TIN CHUNG</b></p>
-      <p style="padding-left: 18pt;">- Tên đề tài/nhiệm vụ: <b>${proposal.title}</b></p>
-      <p style="padding-left: 18pt;">- Mã số đề tài: <b>${code}</b></p>
-      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
-      <p style="padding-left: 18pt;">- Cơ quan chủ trì: <b>${proposal.hostOrganizationUnit || "Học viện Quân y"}</b></p>
-      <p style="padding-left: 18pt;">- Quyết định thành lập Hội đồng số: <b>${acceptance.decisionNumber || acceptance.establishmentDecisionNumber || BLANK}</b></p>
-      <p style="padding-left: 18pt;">- Thời gian họp: <b>${acceptance.meetingDate || new Date().toLocaleDateString("vi-VN")}</b>. Địa điểm: <b>${acceptance.meetingLocation || "Phòng họp Ban Quản lý Khoa học - Học viện Quân y"}</b></p>
+      <p style="padding-left: 18pt;">- Tên đề tài/nhiệm vụ: <b>${esc(proposal.title)}</b></p>
+      <p style="padding-left: 18pt;">- Mã số đề tài: <b>${esc(code)}</b></p>
+      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${esc(proposal.ownerDisplayName || BLANK)}</b></p>
+      <p style="padding-left: 18pt;">- Cơ quan chủ trì: <b>${esc(proposal.hostOrganizationUnit || "Học viện Quân y")}</b></p>
+      <p style="padding-left: 18pt;">- Quyết định thành lập Hội đồng số: <b>${esc(acceptance.decisionNumber || acceptance.establishmentDecisionNumber || BLANK)}</b></p>
+      <p style="padding-left: 18pt;">- Thời gian họp: <b>${esc(acceptance.meetingDate || BLANK)}</b>. Địa điểm: <b>${esc(acceptance.meetingLocation || BLANK)}</b></p>
 
       <p style="margin-top: 10pt;"><b>II. THÀNH PHẦN HỘI ĐỒNG</b></p>
       <table style="width: 100%; border: 1px solid #000; margin: 8pt 0;">
@@ -785,7 +800,7 @@ export function exportAcceptanceMinutesWord(
       <p style="margin-top: 10pt;"><b>IV. KẾT LUẬN VÀ KIẾN NGHỊ CỦA HỘI ĐỒNG</b></p>
       <p style="padding-left: 18pt;">- Đánh giá xếp loại: <b style="font-size: 14pt; color: #1e3a8a;">${classificationText}</b></p>
       <p style="padding-left: 18pt;">- Nhận xét chung của Hội đồng:</p>
-      <p style="padding-left: 28pt; font-style: italic;">"${scores.assessmentComments}"</p>
+      <p style="padding-left: 28pt; font-style: italic;">"${esc(scores.assessmentComments)}"</p>
       <p style="padding-left: 18pt;">- Hội đồng thống nhất thông qua kết quả nghiệm thu và đề nghị Thủ trưởng Học viện ra Quyết định công nhận kết quả nghiên cứu.</p>
     </div>
 
@@ -795,12 +810,12 @@ export function exportAcceptanceMinutesWord(
         <td style="width: 50%; text-align: center;">
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">THƯ KÝ HỘI ĐỒNG</p>
           <p style="margin: 4pt 0 45pt 0; font-size: 10pt; font-style: italic;">(Ký và ghi rõ họ tên)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${acceptance.members.find(m => m.role.includes("SECRETARY"))?.fullName || "Thư ký HĐ"}</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(acceptance.members.find(m => m.role.includes("SECRETARY"))?.fullName || "Thư ký HĐ")}</p>
         </td>
         <td style="width: 50%; text-align: center;">
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">CHỦ TỊCH HỘI ĐỒNG</p>
           <p style="margin: 4pt 0 45pt 0; font-size: 10pt; font-style: italic;">(Ký và ghi rõ họ tên)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${acceptance.members.find(m => m.role.includes("CHAIRMAN"))?.fullName || "Chủ tịch HĐ"}</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(acceptance.members.find(m => m.role.includes("CHAIRMAN"))?.fullName || "Chủ tịch HĐ")}</p>
         </td>
       </tr>
     </table>
@@ -808,7 +823,7 @@ export function exportAcceptanceMinutesWord(
 
   exportHtmlToWord({
     filename: `Bien_ban_nghiem_thu_${councilTypeLabel}_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
-    title: `Biên bản nghiệm thu ${councilTypeLabel} - ${code}`,
+    title: `Biên bản nghiệm thu ${councilTypeLabel} - ${esc(code)}`,
     contentHtml
   });
 }
@@ -828,9 +843,9 @@ export function exportIrbCertificateWord(
   }
 ) {
   const code = proposal.code || BLANK;
-  const certNumber = irb.certificateNumber || `IRB-HVQY-2026-${code.slice(-3)}`;
+  const certNumber = irb.certificateNumber || BLANK;
   const approvalDate = irb.approvalDate || new Date().toLocaleDateString("vi-VN");
-  const validUntil = irb.validUntil || "31/12/2027";
+  const validUntil = irb.validUntil || BLANK;
   const riskLevelLabel =
     irb.riskLevel === "MINIMAL"
       ? "Rủi ro tối thiểu (Minimal Risk)"
@@ -847,7 +862,7 @@ export function exportIrbCertificateWord(
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">HỌC VIỆN QUÂN Y</p>
           <p style="margin: 0; font-size: 10pt; font-weight: bold;">HỘI ĐỒNG ĐẠO ĐỨC TRONG NGHIÊN CỨU Y SINH HỌC</p>
           <div style="border-bottom: 1.5pt solid #000; width: 140pt; margin: 3pt auto 0 auto;"></div>
-          <p style="margin: 4pt 0 0 0; font-size: 10pt;">Số: <b>${certNumber}</b></p>
+          <p style="margin: 4pt 0 0 0; font-size: 10pt;">Số: <b>${esc(certNumber)}</b></p>
         </td>
         <td style="width: 50%; text-align: center;">
           <p style="margin: 0; font-size: 11pt; font-weight: bold;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
@@ -866,17 +881,17 @@ export function exportIrbCertificateWord(
 
     <div>
       <p style="text-indent: 20pt;">Hội đồng Đạo đức trong Nghiên cứu Y sinh học - Học viện Quân y đã xem xét, đánh giá hồ sơ nghiên cứu:</p>
-      <p style="padding-left: 20pt;">- Tên đề tài/nghiên cứu: <b>${proposal.title}</b></p>
-      <p style="padding-left: 20pt;">- Mã số đề tài: <b>${code}</b></p>
-      <p style="padding-left: 20pt;">- Chủ nhiệm đề tài: <b>${proposal.ownerDisplayName || "TS. Phạm Anh Tuấn"}</b></p>
-      <p style="padding-left: 20pt;">- Cơ quan chủ trì: <b>${proposal.hostOrganizationUnit || "Học viện Quân y"}</b></p>
+      <p style="padding-left: 20pt;">- Tên đề tài/nghiên cứu: <b>${esc(proposal.title)}</b></p>
+      <p style="padding-left: 20pt;">- Mã số đề tài: <b>${esc(code)}</b></p>
+      <p style="padding-left: 20pt;">- Chủ nhiệm đề tài: <b>${esc(proposal.ownerDisplayName || BLANK)}</b></p>
+      <p style="padding-left: 20pt;">- Cơ quan chủ trì: <b>${esc(proposal.hostOrganizationUnit || "Học viện Quân y")}</b></p>
       <p style="padding-left: 20pt;">- Phân loại mức độ rủi ro: <b>${riskLevelLabel}</b></p>
 
       <p style="margin-top: 12pt; text-indent: 20pt;"><b>QUYẾT NGHỊ:</b></p>
       <p style="padding-left: 20pt;">1. <b>CHẤP THUẬN</b> về khía cạnh đạo đức đối với quy trình nghiên cứu, mẫu bệnh phẩm, đối tượng tình nguyện tham gia và phương án bảo đảm an toàn sinh học.</p>
-      <p style="padding-left: 20pt;">2. Giấy chứng nhận này có hiệu lực từ ngày <b>${approvalDate}</b> đến ngày <b>${validUntil}</b>.</p>
+      <p style="padding-left: 20pt;">2. Giấy chứng nhận này có hiệu lực từ ngày <b>${esc(approvalDate)}</b> đến ngày <b>${esc(validUntil)}</b>.</p>
       <p style="padding-left: 20pt;">3. Chủ nhiệm đề tài có trách nhiệm báo cáo định kỳ cho Hội đồng và báo cáo ngay lập tức các biến cố bất lợi nghiêm trọng (SAE) nếu phát sinh.</p>
-      <p style="padding-left: 20pt; font-style: italic;">Ghi chú của Hội đồng: "${irb.ethicsNotes || "Nghiên cứu tuân thủ nghiêm ngặt Hướng dẫn Thực hành tốt lâm sàng (GCP) và Tuyên ngôn Helsinki."}"</p>
+      <p style="padding-left: 20pt; font-style: italic;">Ghi chú của Hội đồng: "${esc(irb.ethicsNotes || BLANK)}"</p>
     </div>
 
     <!-- SIGNATURE -->
@@ -890,7 +905,7 @@ export function exportIrbCertificateWord(
           <p style="margin: 0; font-size: 12pt; font-weight: bold;">TM. HỘI ĐỒNG ĐẠO ĐỨC Y SINH HỌC</p>
           <p style="margin: 2pt 0 0 0; font-size: 11pt; font-weight: bold;">CHỦ TỊCH HỘI ĐỒNG</p>
           <p style="margin: 4pt 0 45pt 0; font-size: 10pt; font-style: italic;">(Ký, ghi rõ họ tên và đóng dấu)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${irb.councilPresident || "GS. TS. Nguyễn Minh Phương"}</p>
+          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(irb.councilPresident || BLANK)}</p>
         </td>
       </tr>
     </table>
@@ -898,7 +913,7 @@ export function exportIrbCertificateWord(
 
   exportHtmlToWord({
     filename: `Giay_chung_nhan_IRB_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
-    title: `Giấy chứng nhận IRB - ${code}`,
+    title: `Giấy chứng nhận IRB - ${esc(code)}`,
     contentHtml
   });
 }

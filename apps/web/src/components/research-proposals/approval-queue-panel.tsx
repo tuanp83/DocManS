@@ -280,7 +280,9 @@ export function ApprovalQueuePanel() {
             status: "approved" as const,
             decisionNumber: councilDecisionNumber,
             decidedAt: new Date().toISOString(),
-            decidedByName: "GS. TS. Trần Viết Tiến",
+            // Người vừa ký là người đang đăng nhập (Giám đốc hoặc Phó GĐ phụ trách Khoa học).
+            decidedByName: account?.name ?? "",
+            decidedByRole: account?.systemRole,
             approvalNote: councilApprovalNote,
             members: reviewingCouncilProposal.councilMetadata?.members || []
           }

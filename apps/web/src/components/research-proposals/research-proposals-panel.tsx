@@ -455,7 +455,7 @@ export function ResearchProposalsPanel({ allowCreate }: { allowCreate: boolean }
       </SectionCard>
 
       {allowCreate && intakes.some((intake) => intake.capabilities?.canCreateProposal) ? (
-        <SectionCard title="Tạo hồ sơ nháp" subtitle="Lưu nhiều lần, sau đó hoàn thiện tài liệu và readiness ở màn hình chi tiết">
+        <SectionCard title="Tạo hồ sơ nháp" subtitle="Lưu nhiều lần, sau đó hoàn thiện tài liệu và kiểm tra mức sẵn sàng nộp ở màn hình chi tiết">
           <form className="admin-form" onSubmit={(event) => void handleCreateDraft(event)}>
             <div className="form-section-inline">
               <div className="section-mini-heading">

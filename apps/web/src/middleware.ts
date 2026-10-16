@@ -38,6 +38,8 @@ export async function middleware(request: NextRequest) {
     const user = await hasValidSession(request);
     if (!user) return NextResponse.redirect(new URL("/login", request.url));
     if (user.mustChangePassword && pathname !== "/change-password") return NextResponse.redirect(new URL("/change-password", request.url));
+    // Quản trị hệ thống không có dashboard nghiệp vụ: trang chủ và /dashboard chuyển sang trang Người dùng.
+    if (user.systemRole === "SYSTEM_ADMIN" && (pathname === "/" || pathname === "/dashboard")) return NextResponse.redirect(new URL("/users", request.url));
   }
 
   return NextResponse.next();

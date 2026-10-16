@@ -18,6 +18,11 @@ export function getNavigationItems(role: UserRole, account?: { unit?: string }) 
   return items;
 }
 
+/** Trang đầu của từng vai trò: Quản trị hệ thống không có dashboard nghiệp vụ nên vào trang Người dùng. */
+export function getHomeRoute(role?: string | null) {
+  return role === "SYSTEM_ADMIN" ? "/users" : "/dashboard";
+}
+
 export function getPageTitle(pathname: string) {
   return getRouteDefinition(pathname)?.title ?? "Dashboard";
 }

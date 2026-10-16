@@ -188,6 +188,8 @@ export type CouncilMetadata = {
   decidedAt?: string;
   decidedById?: string;
   decidedByName?: string;
+  /** Vai trò người ký (Giám đốc hoặc Phó GĐ phụ trách Khoa học) để in đúng chức danh ký. */
+  decidedByRole?: string;
   approvalNote?: string;
   rejectionReason?: string;
   proposedAt?: string;

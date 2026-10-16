@@ -8,7 +8,7 @@ import {
   getProposalMilitaryScope,
   getProposalMilitaryScopeLabel
 } from "@/lib/proposal-classification";
-import { exportCouncilDecisionWord } from "@/lib/word-export";
+import { directorSignatureTitle, exportCouncilDecisionWord } from "@/lib/word-export";
 
 export interface OfficialCouncilDecisionModalProps {
   isOpen: boolean;
@@ -63,9 +63,10 @@ export function OfficialCouncilDecisionModal({ isOpen, onClose, proposal }: Offi
 
   const council = proposal.councilMetadata;
   const decisionDate = council?.decidedAt ? new Date(council.decidedAt) : new Date();
-  const signatoryName = council?.decidedByName || "GS. TS. Trần Viết Tiến";
-  const proposalCode = proposal.code || "HVQY-2026/ĐTTN";
-  const decisionNumber = council?.decisionNumber || `QĐ-TLHĐ-${proposalCode.replace(/[^a-zA-Z0-9]/g, "")}/HVQY`;
+  // Không điền tên, số quyết định giả: chưa có dữ liệu thì để trống cho văn thư, người ký.
+  const signatoryName = council?.decidedByName || "…………………………";
+  const signatoryTitle = directorSignatureTitle(council?.decidedByRole);
+  const decisionNumber = council?.decisionNumber || "…………………………";
   const members = council?.members || [];
 
   function handlePrint() {
@@ -433,7 +434,7 @@ export function OfficialCouncilDecisionModal({ isOpen, onClose, proposal }: Offi
                   textTransform: "uppercase"
                 }}
               >
-                GIÁM ĐỐC
+                {signatoryTitle.map((line) => <span key={line} style={{ display: "block" }}>{line}</span>)}
               </p>
               <p style={{ margin: 0, fontSize: "11pt", fontStyle: "italic" }}>
                 (Đã ký và đóng dấu)

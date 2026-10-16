@@ -89,15 +89,15 @@ export function ProposalReviewsWorkspace() {
   // trách, giao theo mảng). Kiểm tra ở component bọc ngoài, trước mọi hook của màn hình chính.
   if (account && !["RESEARCH_MANAGEMENT_HEAD", "RESEARCH_MANAGEMENT_DEPUTY_HEAD", "RESEARCH_BOARD_HEAD", "RESEARCH_MANAGEMENT_STAFF"].includes(account.systemRole)) {
     return (
-      <div className="card p-8 border border-amber-200 bg-amber-50/60 rounded-xl max-w-2xl mx-auto my-12 text-center shadow-sm">
-        <div className="inline-flex p-3 bg-amber-100 text-amber-800 rounded-full mb-4">
-          <AlertCircle size={32} />
-        </div>
-        <h3 className="text-xl font-bold text-gray-900 mb-2">Trang dành cho Phòng Quản lý khoa học</h3>
-        <p className="text-gray-700 mb-6 leading-relaxed">
-          Trang điều phối đánh giá dành cho Trưởng phòng và chuyên viên quản lý khoa học. Lãnh đạo xem và quyết định hồ sơ ở trang Phê duyệt.
+      <div className="callout warning" role="status" style={{ maxWidth: 640, margin: "48px auto", display: "grid", gap: 12, justifyItems: "start" }}>
+        <h3 style={{ margin: 0, display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <AlertCircle size={20} aria-hidden="true" />
+          Trang dành cho Phòng Khoa học quân sự
+        </h3>
+        <p style={{ margin: 0 }}>
+          Trang điều phối đánh giá dành cho Trưởng phòng, Phó phòng, Trưởng ban và chuyên viên quản lý khoa học. Lãnh đạo xem và quyết định hồ sơ ở trang Phê duyệt.
         </p>
-        <Link href="/dashboard" className="button button-primary">
+        <Link href="/dashboard" className="button primary">
           Quay về Dashboard
         </Link>
       </div>

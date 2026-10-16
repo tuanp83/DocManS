@@ -1,0 +1,1874 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cẩm nang Hướng dẫn Từng Bước — Trưởng phòng KHQS (DocManS)</title>
+  <style>
+    :root {
+      --primary: #1e3a8a;
+      --primary-light: #eff6ff;
+      --primary-border: #bfdbfe;
+      --accent: #0284c7;
+      --success: #15803d;
+      --success-bg: #f0fdf4;
+      --success-border: #bbf7d0;
+      --warning: #b45309;
+      --warning-bg: #fffbeb;
+      --warning-border: #fde68a;
+      --danger: #b91c1c;
+      --danger-bg: #fef2f2;
+      --danger-border: #fecaca;
+      --purple: #6d28d9;
+      --purple-bg: #f5f3ff;
+      --slate-50: #f8fafc;
+      --slate-100: #f1f5f9;
+      --slate-200: #e2e8f0;
+      --slate-300: #cbd5e1;
+      --slate-600: #475569;
+      --slate-700: #334155;
+      --slate-800: #1e293b;
+      --slate-900: #0f172a;
+      --sidebar-width: 320px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--slate-800);
+      background-color: var(--slate-50);
+      line-height: 1.65;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--slate-900);
+      color: #fff;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      overflow-y: auto;
+      padding: 22px 16px;
+      z-index: 100;
+      border-right: 1px solid var(--slate-800);
+    }
+
+    .sidebar-brand {
+      padding-bottom: 14px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid #334155;
+    }
+
+    .sidebar-brand .badge-role {
+      display: inline-block;
+      background: #2563eb;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+
+    .sidebar-brand h1 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #f8fafc;
+      line-height: 1.35;
+    }
+
+    .sidebar-brand p {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+
+    .sidebar-search {
+      margin-bottom: 14px;
+    }
+
+    .sidebar-search input {
+      width: 100%;
+      padding: 8px 11px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #f8fafc;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .sidebar-search input:focus {
+      border-color: #38bdf8;
+    }
+
+    .nav-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      margin: 14px 0 6px 8px;
+    }
+
+    .nav-list {
+      list-style: none;
+    }
+
+    .nav-list li a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 13px;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .nav-list li a:hover {
+      background: #1e293b;
+      color: #fff;
+    }
+
+    .nav-list li a .nav-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 5px;
+      border-radius: 4px;
+      background: #1e293b;
+      color: #38bdf8;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* Main Content */
+    .main-content {
+      margin-left: var(--sidebar-width);
+      flex: 1;
+      padding: 36px 48px 80px;
+      max-width: 1180px;
+    }
+
+    /* Header Banner */
+    .hero-banner {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #0284c7 100%);
+      color: #fff;
+      padding: 32px 36px;
+      border-radius: 14px;
+      margin-bottom: 32px;
+      box-shadow: 0 10px 25px -5px rgba(30, 58, 138, 0.25);
+    }
+
+    .hero-banner .doc-type {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.16);
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .hero-banner h1 {
+      font-size: 27px;
+      font-weight: 800;
+      margin-bottom: 10px;
+      line-height: 1.25;
+    }
+
+    .hero-banner p {
+      font-size: 14.5px;
+      color: #e0f2fe;
+      max-width: 850px;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+      font-size: 13px;
+      color: #bae6fd;
+    }
+
+    .hero-meta span strong {
+      color: #fff;
+    }
+
+    /* Section Styling */
+    .section-card {
+      background: #fff;
+      border: 1px solid var(--slate-200);
+      border-radius: 12px;
+      padding: 30px 34px;
+      margin-bottom: 28px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 2px solid var(--slate-100);
+      padding-bottom: 16px;
+      margin-bottom: 22px;
+      flex-wrap: wrap;
+    }
+
+    .section-title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .section-badge {
+      background: var(--primary);
+      color: #fff;
+      font-weight: 800;
+      font-size: 14px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+
+    .section-header h2 {
+      font-size: 21px;
+      font-weight: 700;
+      color: var(--slate-900);
+    }
+
+    .route-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12.5px;
+      background: var(--slate-100);
+      color: var(--primary);
+      padding: 5px 11px;
+      border-radius: 6px;
+      border: 1px solid var(--slate-300);
+      font-weight: 600;
+    }
+
+    h3 {
+      font-size: 16.5px;
+      font-weight: 700;
+      color: var(--primary);
+      margin: 24px 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h3::before {
+      content: "";
+      display: inline-block;
+      width: 5px;
+      height: 18px;
+      background: var(--accent);
+      border-radius: 3px;
+    }
+
+    h4 {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--slate-800);
+      margin: 16px 0 8px;
+    }
+
+    p {
+      margin-bottom: 12px;
+      font-size: 14.5px;
+    }
+
+    ul, ol {
+      margin: 8px 0 16px 22px;
+      font-size: 14.5px;
+    }
+
+    li {
+      margin-bottom: 6px;
+    }
+
+    /* Step-by-Step Procedure Box */
+    .procedure-box {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 18px 22px;
+      margin: 14px 0 22px;
+    }
+
+    .procedure-title {
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--primary);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .step-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .step-item {
+      display: flex;
+      gap: 14px;
+      padding: 11px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .step-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 72px;
+      height: 26px;
+      padding: 0 8px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 6px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .step-body {
+      flex: 1;
+      font-size: 14px;
+    }
+
+    .step-body strong {
+      color: var(--slate-900);
+    }
+
+    .step-sublist {
+      margin: 6px 0 4px 18px;
+      font-size: 13.5px;
+      color: var(--slate-700);
+    }
+
+    .step-sublist li {
+      margin-bottom: 4px;
+    }
+
+    /* UI Button & Element Badges */
+    .ui-btn {
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      border-radius: 5px;
+      background: #ffffff;
+      border: 1px solid #94a3b8;
+      color: #0f172a;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.06);
+      font-family: inherit;
+      white-space: nowrap;
+    }
+
+    .ui-btn.primary {
+      background: #1d4ed8;
+      border-color: #1e40af;
+      color: #fff;
+    }
+
+    .ui-btn.success {
+      background: #15803d;
+      border-color: #166534;
+      color: #fff;
+    }
+
+    .ui-btn.danger {
+      background: #fef2f2;
+      border-color: #f87171;
+      color: #b91c1c;
+    }
+
+    .ui-btn.danger-solid {
+      background: #dc2626;
+      border-color: #b91c1c;
+      color: #fff;
+    }
+
+    .ui-field {
+      display: inline-block;
+      padding: 1px 7px;
+      font-size: 12.5px;
+      font-weight: 600;
+      border-radius: 4px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1e40af;
+    }
+
+    .ui-tab {
+      display: inline-block;
+      padding: 2px 9px;
+      font-size: 12.5px;
+      font-weight: 700;
+      border-radius: 5px;
+      background: #f1f5f9;
+      border-bottom: 2px solid #0284c7;
+      color: #0f172a;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 20px;
+      font-size: 13.5px;
+    }
+
+    th, td {
+      border: 1px solid var(--slate-200);
+      padding: 10px 13px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--slate-100);
+      font-weight: 700;
+      color: var(--slate-800);
+    }
+
+    tr:nth-child(even) td {
+      background: #fcfdff;
+    }
+
+    /* Callout / Alert Boxes */
+    .callout {
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin: 14px 0;
+      font-size: 13.5px;
+      border-left: 4px solid;
+    }
+
+    .callout-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .callout-info {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: #1e3a8a;
+    }
+
+    .callout-success {
+      background: var(--success-bg);
+      border-color: var(--success);
+      color: #14532d;
+    }
+
+    .callout-warning {
+      background: var(--warning-bg);
+      border-color: var(--warning);
+      color: #78350f;
+    }
+
+    .callout-danger {
+      background: var(--danger-bg);
+      border-color: var(--danger);
+      color: #7f1d1d;
+    }
+
+    /* Flow Diagram */
+    .flow-chain {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0;
+      padding: 14px;
+      background: var(--slate-50);
+      border: 1px dashed var(--slate-300);
+      border-radius: 8px;
+    }
+
+    .flow-node {
+      background: #fff;
+      border: 1px solid var(--slate-300);
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--slate-800);
+    }
+
+    .flow-node.active-head {
+      background: #dbeafe;
+      border-color: #2563eb;
+      color: #1e3a8a;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    }
+
+    .flow-arrow {
+      color: var(--slate-600);
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12.5px;
+      background: var(--slate-100);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #be123c;
+    }
+
+    /* Print Button */
+    .top-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #fff;
+      color: var(--slate-800);
+      border: 1px solid var(--slate-300);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+
+    .btn-action:hover {
+      background: var(--slate-100);
+      border-color: var(--slate-600);
+    }
+
+    .btn-action.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    @media print {
+      .sidebar, .top-actions {
+        display: none !important;
+      }
+      .main-content {
+        margin-left: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+      }
+      .section-card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #cbd5e1;
+      }
+    }
+
+    @media (max-width: 960px) {
+      .sidebar {
+        position: static;
+        width: 100%;
+        height: auto;
+      }
+      body {
+        flex-direction: column;
+      }
+      .main-content {
+        margin-left: 0;
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SIDEBAR NAVIGATION -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="badge-role">RESEARCH_MANAGEMENT_HEAD</span>
+      <h1>Cẩm nang Thao tác Từng bước — Trưởng phòng KHQS</h1>
+      <p>Hệ thống Quản lý KH&amp;CN Quân sự (DocManS)</p>
+    </div>
+
+    <div class="sidebar-search">
+      <input type="text" id="navSearch" placeholder="Tìm nhanh chức năng, nút bấm..." onkeyup="filterNav()" />
+    </div>
+
+    <div class="nav-group-title">Khởi động &amp; Tổng quan</div>
+    <ul class="nav-list" id="navList">
+      <li><a href="#sec-0"><span class="nav-num">00</span> Đăng nhập, Bảo mật &amp; Thanh công cụ</a></li>
+      <li><a href="#sec-1"><span class="nav-num">01</span> Vị trí, Thẩm quyền &amp; Luồng trình duyệt</a></li>
+      <li><a href="#sec-2"><span class="nav-num">02</span> Dashboard (/dashboard)</a></li>
+      <li><a href="#sec-3"><span class="nav-num">03</span> Việc của tôi (/my-tasks)</a></li>
+
+      <div class="nav-group-title">Phê duyệt &amp; Điều phối Đề tài</div>
+      <li><a href="#sec-4"><span class="nav-num">04</span> Tờ trình qua Phòng KHQS (/submissions)</a></li>
+      <li><a href="#sec-5"><span class="nav-num">05</span> Quản lý Đề tài &amp; Hồ sơ (/proposals)</a></li>
+      <li><a href="#sec-6"><span class="nav-num">06</span> Đánh giá Hồ sơ — 6 Tab (/reviews)</a></li>
+      <li><a href="#sec-6-portfolio"><span class="nav-num">6A</span> ↳ Tab Mảng phụ trách chuyên viên</a></li>
+      <li><a href="#sec-6-progress"><span class="nav-num">6B</span> ↳ Tab 1: Tiến độ &amp; Đổi chuyên viên</a></li>
+      <li><a href="#sec-6-council"><span class="nav-num">6C</span> ↳ Tab 2: Phân công Hội đồng KH</a></li>
+      <li><a href="#sec-6-minutes"><span class="nav-num">6D</span> ↳ Tab 3: Biên bản &amp; Chốt kết quả</a></li>
+      <li><a href="#sec-6-irb"><span class="nav-num">6E</span> ↳ Tab 4: Hội đồng Đạo đức (IRB)</a></li>
+      <li><a href="#sec-6-audit"><span class="nav-num">6F</span> ↳ Tab 5: Lịch sử hoạt động</a></li>
+
+      <div class="nav-group-title">Tổ chức Thực hiện &amp; Nghiệm thu</div>
+      <li><a href="#sec-7"><span class="nav-num">07</span> Đợt tiếp nhận (/intakes)</a></li>
+      <li><a href="#sec-8"><span class="nav-num">08</span> Theo dõi Đề tài (/projects)</a></li>
+      <li><a href="#sec-8-detail"><span class="nav-num">8A</span> ↳ Kinh phí, Điều chỉnh, Sản phẩm, Nghiệm thu</a></li>
+
+      <div class="nav-group-title">Dữ liệu Dùng chung &amp; Cá nhân</div>
+      <li><a href="#sec-9"><span class="nav-num">09</span> Hồ sơ Nhà khoa học (/researcher-profiles)</a></li>
+      <li><a href="#sec-10"><span class="nav-num">10</span> Văn bản &amp; Biểu mẫu (/documents)</a></li>
+      <li><a href="#sec-11"><span class="nav-num">11</span> Báo cáo Tổng hợp (/reports)</a></li>
+      <li><a href="#sec-12"><span class="nav-num">12</span> Lý lịch Khoa học &amp; BM-06 (/my-profile)</a></li>
+      <li><a href="#sec-13"><span class="nav-num">13</span> Kịch bản Tác nghiệp Thực tế A–Z</a></li>
+    </ul>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+    <div class="top-actions">
+      <button class="btn-action primary" onclick="window.print()">🖨️ In hướng dẫn / Xuất PDF</button>
+    </div>
+
+    <header class="hero-banner">
+      <span class="doc-type">TÀI LIỆU HƯỚNG DẪN THAO TÁC TỪNG BƯỚC (STEP-BY-STEP)</span>
+      <h1>Hướng dẫn Sử dụng Chi tiết Từng bước dành cho Trưởng phòng Khoa học Quân sự</h1>
+      <p>
+        Tài liệu này mô tả chính xác <strong>từng bước bấm nút, từng ô nhập liệu, từng hộp thoại xác nhận và kết quả chuyển trạng thái</strong> trên toàn bộ 11 phân hệ của phần mềm DocManS đối với vai trò <strong>Trưởng phòng Khoa học Quân sự (KHQS)</strong>.
+      </p>
+      <div class="hero-meta">
+        <span><strong>Mã vai trò:</strong> <code>RESEARCH_MANAGEMENT_HEAD</code></span>
+        <span><strong>Tài khoản mẫu:</strong> <code>nmphuong</code> (Mật khẩu: <code>1234</code>)</span>
+        <span><strong>Phạm vi dữ liệu:</strong> Toàn Học viện (All Units &amp; Projects)</span>
+      </div>
+    </header>
+
+    <!-- SECTION 0 -->
+    <section class="section-card" id="sec-0">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 00</span>
+          <h2>Đăng nhập, Bảo mật Tài khoản &amp; Thanh công cụ chung</h2>
+        </div>
+        <span class="route-pill">/login • /change-password</span>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 0.1: Đăng nhập hệ thống lần đầu và xử lý bắt buộc đổi mật khẩu</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Mở trình duyệt và truy cập địa chỉ trang đăng nhập <code>/login</code>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Tại ô <span class="ui-field">Tên đăng nhập hoặc Email</span>, nhập tên tài khoản (ví dụ: <code>nmphuong</code>). Tại ô <span class="ui-field">Mật khẩu</span>, nhập mật khẩu (mặc định môi trường thử nghiệm: <code>1234</code>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Bấm nút <span class="ui-btn primary">Đăng nhập</span>.
+              <ul class="step-sublist">
+                <li><strong>Trường hợp 1 (Tài khoản mới cấp / vừa được Quản trị viên đặt lại mật khẩu):</strong> Hệ thống phát hiện cờ <code>mustChangePassword = true</code> và tự động chuyển hướng sang màn hình <code>/change-password</code>. Tại đây, nhập <strong>Mật khẩu hiện tại</strong>, <strong>Mật khẩu mới</strong> và <strong>Xác nhận mật khẩu mới</strong> $\rightarrow$ bấm <span class="ui-btn primary">Cập nhật mật khẩu</span> để mở khóa toàn bộ menu.</li>
+                <li><strong>Trường hợp 2 (Tài khoản đang hoạt động bình thường):</strong> Hệ thống chuyển thẳng vào trang <code>/dashboard</code>.</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 0.2: Sử dụng Thanh công cụ phía trên (Topbar) &amp; Thông báo</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              <strong>Kiểm tra Chuông thông báo (Góc trên bên phải):</strong> Bấm vào biểu tượng <strong>🔔 Chuông thông báo</strong> để xem danh sách các sự kiện mới nhất (Tờ trình vừa được Trưởng ban QLKH trình lên, Hồ sơ mới chưa có người phụ trách, Yêu cầu điều chỉnh/gia hạn đề tài). Bấm trực tiếp vào dòng thông báo để nhảy đến hồ sơ đó.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              <strong>Mở Menu tài khoản cá nhân:</strong> Bấm vào khung tên người dùng ở góc trên cùng bên phải (hiển thị tự động theo chuẩn: <em>Quân hàm + Học hàm + Học vị + Họ và tên</em> kèm chức danh <em>Trưởng phòng KHQS</em>). Menu thả xuống gồm 3 lệnh:
+              <ul class="step-sublist">
+                <li><span class="ui-btn">Lý lịch khoa học</span>: Chuyển tới trang <code>/my-profile</code> để cập nhật thông tin cá nhân, chữ ký số và in mẫu BM-06.</li>
+                <li><span class="ui-btn">Đổi mật khẩu</span>: Chuyển tới trang <code>/change-password</code>.</li>
+                <li><span class="ui-btn danger">Đăng xuất</span>: Kết thúc phiên làm việc an toàn.</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 1 -->
+    <section class="section-card" id="sec-1">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 01</span>
+          <h2>Vị trí, Thẩm quyền &amp; Luồng trình duyệt 3 cấp tại Phòng KHQS</h2>
+        </div>
+        <span class="route-pill">Cơ chế phân quyền</span>
+      </div>
+
+      <p>
+        Trong hệ thống <strong>DocManS</strong>, Phòng Khoa học Quân sự vận hành theo mô hình phân cấp 3 tầng chặt chẽ trước khi văn bản trình lên Ban Giám đốc Học viện:
+      </p>
+
+      <div class="flow-chain">
+        <div class="flow-node">1. Chuyên viên KHQS<br><small>Lập tờ trình / Biên bản (OFFICER_DRAFT)</small></div>
+        <span class="flow-arrow">➔</span>
+        <div class="flow-node">2. Trưởng ban QLKH<br><small>Rà soát bước 1 (SECTION_REVIEW)</small></div>
+        <span class="flow-arrow">➔</span>
+        <div class="flow-node active-head">3. Trưởng phòng KHQS<br><small>Duyệt cấp Phòng (HEAD_REVIEW)</small></div>
+        <span class="flow-arrow">➔</span>
+        <div class="flow-node">4. Ban Giám đốc Học viện<br><small>Ký phê duyệt (LEADERSHIP)</small></div>
+      </div>
+
+      <div class="callout callout-info">
+        <span class="callout-title">Quy tắc "Trả lại một chạm" và "Khóa dữ liệu tự động" cần nắm vững:</span>
+        Khi Trưởng phòng bấm <span class="ui-btn danger">Trả lại</span> ở bất kỳ tờ trình nào, tờ trình sẽ <strong>quay thẳng về cho Chuyên viên lập</strong> (trạng thái <code>RETURNED</code>), đồng thời hệ thống tự động mở khóa hồ sơ/hội đồng gốc để chuyên viên sửa lại nội dung rồi trình lại từ đầu qua Trưởng ban QLKH.
+      </div>
+    </section>
+
+    <!-- SECTION 2 -->
+    <section class="section-card" id="sec-2">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 02</span>
+          <h2>Dashboard — Bảng điều khiển Tổng hợp Toàn Học viện</h2>
+        </div>
+        <span class="route-pill">/dashboard</span>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 2.1: Lọc số liệu toàn Học viện và tra cứu tải công việc chuyên viên</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Tại thanh menu bên trái, bấm chọn mục <span class="ui-tab">Dashboard</span> (<code>/dashboard</code>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Tại thanh <strong>Bộ lọc thống kê</strong> phía trên, chọn một hoặc nhiều tiêu chí để thu hẹp dữ liệu:
+              <ul class="step-sublist">
+                <li><span class="ui-field">Năm</span>: Chọn năm kế hoạch hoặc để <em>Tất cả các năm</em>.</li>
+                <li><span class="ui-field">Đơn vị</span>: Chọn Khoa/Bộ môn/Trung tâm cụ thể hoặc toàn Học viện.</li>
+                <li><span class="ui-field">Cấp đề tài</span>: Cấp Quốc gia, Cấp Bộ Quốc phòng, Cấp Ngành, Cấp Học viện / Cơ sở...</li>
+                <li><span class="ui-field">Lĩnh vực</span>: Y học quân sự, Nội, Ngoại, Dược, Công nghệ thông tin...</li>
+                <li><span class="ui-field">Tính chất</span>: Lọc riêng đề tài <strong>Quân sự</strong>, <strong>Dân sự</strong> hoặc <strong>Chưa phân loại</strong>.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Quan sát 4 thẻ KPI tổng quan và kéo xuống bảng <strong>"Theo tính chất và chuyên viên phụ trách"</strong>:
+              <ul class="step-sublist">
+                <li>Bảng liệt kê từng chuyên viên đang phụ trách bao nhiêu đề tài Quân sự, Dân sự, Chưa phân loại.</li>
+                <li>Đặc biệt chú ý dòng <strong>"Chưa có người phụ trách"</strong> (nếu có số &gt; 0 nghĩa là có hồ sơ mới gửi lên chưa được gán chuyên viên).</li>
+                <li><strong>Thao tác tra cứu sâu (Drill-down):</strong> Bấm chuột trực tiếp vào bất kỳ con số nào trong bảng hoặc biểu đồ $\rightarrow$ Một bảng danh sách đề tài chi tiết tương ứng sẽ mở ra ngay bên dưới; bấm vào tên đề tài để mở thẳng hồ sơ đó.</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 2.2: Xuất báo cáo danh sách đề tài ra file Excel</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Sau khi đã chọn bộ lọc mong muốn trên trang <code>/dashboard</code> (hoặc để mặc định toàn bộ), nhìn lên góc trên bên phải màn hình.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Bấm nút <span class="ui-btn primary">Tải báo cáo Excel</span>. Hệ thống tự động kết xuất và tải về máy tệp <code>Danh_sach_de_tai.xlsx</code> bao gồm đầy đủ thông tin: Mã đề tài, Tên đề tài, Chủ nhiệm, Đơn vị, Cấp quản lý, Tính chất (Quân sự/Dân sự), Chuyên viên phụ trách, Kinh phí và Trạng thái hiện tại.
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 3 -->
+    <section class="section-card" id="sec-3">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 03</span>
+          <h2>Việc của tôi — Trung tâm Điều hành Tác vụ Cá nhân</h2>
+        </div>
+        <span class="route-pill">/my-tasks</span>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 3.1: Rà soát và xử lý nhanh các đầu việc đang chờ Trưởng phòng</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn mục <span class="ui-tab">Việc của tôi</span> trên thanh menu trái.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Kiểm tra 3 ô chỉ số ở đầu trang:
+              <ul class="step-sublist">
+                <li><strong>Đang chờ bạn:</strong> Tổng số việc cần Trưởng phòng giải quyết.</li>
+                <li><strong>Quá hạn (Màu đỏ):</strong> Các việc đã vượt quá thời hạn quy định, cần xử lý khẩn.</li>
+                <li><strong>Đến hạn trong 7 ngày (Màu vàng):</strong> Các việc sắp tới hạn trong tuần.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Trong bảng danh sách công việc bên dưới (gồm các cột: <em>Việc</em>, <em>Loại</em>, <em>Đề tài / hồ sơ</em>, <em>Hạn</em>):
+              <ul class="step-sublist">
+                <li>Bấm nút <span class="ui-btn">Mở</span> ở cột ngoài cùng bên phải của dòng công việc $\rightarrow$ Hệ thống đưa bạn đến đúng màn hình chức năng của hồ sơ/đề tài đó để xử lý ngay.</li>
+                <li>Sau khi xử lý xong hoặc muốn cập nhật danh sách mới nhất, bấm nút <span class="ui-btn">Tải lại</span> ở góc trên bên phải bảng.</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 4 -->
+    <section class="section-card" id="sec-4">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 04</span>
+          <h2>Tờ trình qua Phòng KHQS — Hộp thư Duyệt Tờ trình Cấp Phòng</h2>
+        </div>
+        <span class="route-pill">/submissions</span>
+      </div>
+
+      <p>
+        Đây là màn hình quan trọng nhất hàng ngày của Trưởng phòng KHQS. Mọi tờ trình do Chuyên viên lập và đã được <strong>Trưởng ban QLKH nhất trí thông qua</strong> sẽ tự động xuất hiện tại bảng <strong>"Tờ trình chờ Trưởng phòng duyệt"</strong>.
+      </p>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 4.1: Duyệt tờ trình và chuyển lên Ban Giám đốc Học viện</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm vào menu <span class="ui-tab">Tờ trình qua Phòng KHQS</span> (<code>/submissions</code>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Tại bảng <strong>"Tờ trình chờ Trưởng phòng duyệt"</strong>, đọc kỹ thông tin trên từng dòng:
+              <ul class="step-sublist">
+                <li>Cột <strong>Thủ tục</strong>: Hiển thị tên loại tờ trình (VD: <em>Đề xuất Hội đồng xét duyệt thuyết minh</em>, <em>Trình phê duyệt kết quả xét duyệt</em>, <em>Đề xuất Hội đồng Y đức</em>, <em>Điều chỉnh đề tài</em>...) kèm dòng chữ nhỏ ghi rõ <strong>Người ký ở Ban giám đốc</strong> (<em>Giám đốc</em> hoặc <em>Giám đốc / Phó Giám đốc KH</em>).</li>
+                <li>Cột <strong>Hồ sơ / đề tài</strong>: Hiển thị mã số, tên đề tài và dòng chữ xanh lá <em>"Ý kiến gần nhất: [Trưởng ban QLKH]: ..."</em>.</li>
+                <li>Cột <strong>Người lập</strong>: Tên chuyên viên lập và ngày giờ lập.</li>
+                <li>Nếu cần kiểm tra kỹ hồ sơ gốc trước khi ký, bấm nút <span class="ui-btn">Xem</span> ở cuối dòng để mở trang chi tiết đề tài.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Khi đồng ý thông qua tờ trình, bấm nút màu xanh lá <span class="ui-btn success">Duyệt, gửi Ban giám đốc</span> trên dòng tương ứng.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 4</span>
+            <div class="step-body">
+              Một hộp thoại trình duyệt hiện ra với nội dung: <em>"Ý kiến khi duyệt, gửi ban giám đốc (không bắt buộc):"</em>.
+              <ul class="step-sublist">
+                <li>Bạn có thể nhập bút phê của Trưởng phòng (ví dụ: <em>"Phòng KHQS đã thẩm định hồ sơ và danh sách hội đồng, kính trình Thủ trưởng Học viện phê duyệt"</em>) hoặc để trống.</li>
+                <li>Bấm <strong>OK</strong> trên hộp thoại.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 5</span>
+            <div class="step-body">
+              <strong>Kết quả:</strong> Tờ trình chuyển sang trạng thái <code>LEADERSHIP</code> (Đang trình Ban giám đốc) và tự động chuyển xuống bảng <em>"Tất cả tờ trình đang theo dõi"</em> phía dưới; đồng thời gửi thông báo cho Thủ trưởng Ban Giám đốc.
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 4.2: Trả lại tờ trình yêu cầu Chuyên viên chỉnh sửa</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Trên dòng tờ trình chưa đạt yêu cầu tại bảng <strong>"Tờ trình chờ Trưởng phòng duyệt"</strong>, bấm nút viền đỏ <span class="ui-btn danger">Trả lại</span>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Hộp thoại trình duyệt hiện ra yêu cầu: <em>"Lý do trả lại (tờ trình sẽ quay về chuyên viên lập để sửa):"</em>.
+              <ul class="step-sublist">
+                <li><strong>Lưu ý bắt buộc:</strong> Bạn <strong>phải nhập lý do cụ thể</strong> (nếu để trống và bấm OK, hệ thống sẽ báo lỗi đỏ <em>"Cần nhập lý do trả lại."</em> và không thực hiện).</li>
+                <li>Nhập rõ nội dung cần sửa (ví dụ: <em>"Đổi Ủy viên phản biện 2 do trùng đơn vị công tác với Chủ nhiệm đề tài"</em>) rồi bấm <strong>OK</strong>.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              <strong>Kết quả:</strong> Tờ trình đổi trạng thái thành <span class="ui-btn danger">Trả lại để sửa</span> (<code>RETURNED</code>), quay thẳng về màn hình của Chuyên viên lập và mở khóa dữ liệu gốc để chuyên viên chỉnh sửa.
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 5 -->
+    <section class="section-card" id="sec-5">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 05</span>
+          <h2>Quản lý Đề tài — Tra cứu &amp; Rà soát Hồ sơ Đăng ký</h2>
+        </div>
+        <span class="route-pill">/proposals • /proposals/[id]</span>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 5.1: Tìm kiếm và kiểm tra chi tiết Hồ sơ Thuyết minh Đề tài</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn menu <span class="ui-tab">Quản lý đề tài</span> (<code>/proposals</code>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Sử dụng thanh công cụ lọc ở đầu trang:
+              <ul class="step-sublist">
+                <li>Nhập tên đề tài, mã hồ sơ hoặc tên chủ nhiệm vào ô <span class="ui-field">Tìm kiếm</span>.</li>
+                <li>Lọc theo <span class="ui-field">Đợt tiếp nhận</span>, <span class="ui-field">Trạng thái hồ sơ</span> (Đã gửi, Đang sơ duyệt, Yêu cầu bổ sung, Đang phản biện, Đã phê duyệt...), hoặc <span class="ui-field">Đơn vị</span>.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Bấm vào tên đề tài hoặc nút <strong>Xem chi tiết</strong> để mở trang <code>/proposals/[id]</code>. Tại đây Trưởng phòng có thể kiểm tra toàn diện:
+              <ul class="step-sublist">
+                <li><strong>Thông tin chung &amp; Nội dung thuyết minh:</strong> Mục tiêu, nội dung nghiên cứu, sản phẩm dự kiến, kinh phí đề xuất.</li>
+                <li><strong>Thành viên tham gia &amp; Tệp đính kèm:</strong> Xem trước hoặc tải xuống Thuyết minh đề tài (PDF/DOCX), dự toán kinh phí.</li>
+                <li><strong>Trạng thái luồng trình duyệt (RoutingStatus):</strong> Theo dõi hồ sơ đang nằm ở bước nào (Chuyên viên $\rightarrow$ Trưởng ban $\rightarrow$ Trưởng phòng $\rightarrow$ Ban Giám đốc).</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="callout callout-warning">
+        <span class="callout-title">Phân định rõ thao tác Sơ duyệt Hồ sơ mới:</span>
+        Thao tác bấm xác nhận <strong>Kiểm tra tính đầy đủ (Completeness Check)</strong> và <strong>Yêu cầu bổ sung hồ sơ (Supplement Request)</strong> thuộc trách nhiệm trực tiếp của <strong>Chuyên viên KHQS được phân công</strong> hoặc <strong>Trưởng ban QLKH</strong>. Nếu một hồ sơ mới gửi lên chưa có chuyên viên xử lý, Trưởng phòng thực hiện gán chuyên viên ngay tại mục <strong>Đánh giá hồ sơ (/reviews)</strong> theo hướng dẫn ở Phần 06 dưới đây.
+      </div>
+    </section>
+
+    <!-- SECTION 6 -->
+    <section class="section-card" id="sec-6">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 06</span>
+          <h2>Đánh giá Hồ sơ — Không gian Điều phối Chuyên môn (6 Tab)</h2>
+        </div>
+        <span class="route-pill">/reviews</span>
+      </div>
+
+      <p>
+        Khi truy cập menu <span class="ui-tab">Đánh giá hồ sơ</span> (<code>/reviews</code>), Trưởng phòng KHQS được cung cấp <strong>6 Tab chức năng</strong> (nhiều hơn các vai trò khác 1 Tab đầu tiên là <em>Mảng phụ trách của chuyên viên</em>). Dưới đây là hướng dẫn từng bước cho cả 6 Tab:
+      </p>
+
+      <!-- SUB-SECTION 6A -->
+      <h3 id="sec-6-portfolio">6A. Tab "Mảng phụ trách của chuyên viên" (Chỉ dành riêng cho Trưởng phòng)</h3>
+      <p>
+        Tab này giúp Trưởng phòng cấu hình quy tắc tự động giao hồ sơ mới cho từng chuyên viên dựa theo cặp tiêu chí: <strong>Cấp đề tài</strong> + <strong>Tính chất (Quân sự / Dân sự)</strong>.
+      </p>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 6A.1: Thêm / Xóa mảng phụ trách cho từng Chuyên viên KHQS</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Tại trang <code>/reviews</code>, bấm vào tab đầu tiên: <span class="ui-tab">Mảng phụ trách của chuyên viên</span>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Trong bảng danh sách chuyên viên, tìm đến dòng của chuyên viên cần phân công. Quan sát cột <strong>"Thêm mảng"</strong> ở bên phải dòng đó:
+              <ul class="step-sublist">
+                <li>Ô chọn thứ nhất: Chọn <span class="ui-field">Cấp đề tài</span> (ví dụ: <em>Cấp Học viện / Cơ sở</em>, <em>Cấp Bộ Quốc phòng</em>, <em>Cấp Ngành</em>, <em>Cấp Quốc gia</em>...).</li>
+                <li>Ô chọn thứ hai: Chọn <span class="ui-field">Tính chất</span> là <code>Quân sự</code> hoặc <code>Dân sự</code>.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Bấm nút <span class="ui-btn primary">+ Thêm</span> ngay bên cạnh. Mảng vừa thêm sẽ lập tức hiển thị thành một thẻ màu xanh dương ở cột <strong>"Mảng phụ trách"</strong> (ví dụ: <code>Cấp Bộ Quốc phòng · Quân sự</code>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 4</span>
+            <div class="step-body">
+              <strong>Nếu muốn gỡ bỏ một mảng:</strong> Di chuột vào thẻ mảng màu xanh ở cột <em>"Mảng phụ trách"</em> và bấm vào dấu <span class="ui-btn danger">✕</span> nhỏ bên phải thẻ đó.
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 6A.2: Tự động chia toàn bộ các hồ sơ đang thiếu người phụ trách</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Sau khi đã cấu hình xong bảng mảng phụ trách, nhìn lên góc trên bên phải của khung <em>Phân công mảng đề tài cho chuyên viên</em>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Bấm nút <span class="ui-btn">Giao các hồ sơ chưa có người phụ trách</span>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              <strong>Kết quả:</strong> Hệ thống quét toàn bộ các hồ sơ chưa có người phụ trách, đối chiếu Cấp đề tài &amp; Tính chất để tự động gán chuyên viên và hiện dòng thông báo màu xanh lá: <em>"Đã tự động giao X/Y hồ sơ chưa có người phụ trách."</em>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- SUB-SECTION 6B -->
+      <h3 id="sec-6-progress">6B. Tab "1. Theo dõi tiến độ đánh giá" &amp; Đổi chuyên viên trực tiếp</h3>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 6B.1: Giao hoặc Đổi Chuyên viên phụ trách ngay trên bảng tổng hợp</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Tại trang <code>/reviews</code>, bấm chọn tab <span class="ui-tab">1. Theo dõi tiến độ đánh giá</span>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Để tìm nhanh các hồ sơ chưa ai nhận, tại bộ lọc <span class="ui-field">Chuyên viên phụ trách</span> phía trên bảng, chọn mục <strong>"Chưa có người phụ trách"</strong> (hoặc lọc theo <em>Trạng thái</em>, <em>Cấp đề tài</em>, <em>Tính chất</em>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Trong bảng <strong>"Bảng theo dõi tiến độ tổng thể"</strong>, nhìn vào cột <strong>Chuyên viên phụ trách</strong> của dòng đề tài:
+              <ul class="step-sublist">
+                <li>Đối với Trưởng phòng, cột này hiển thị dưới dạng một <strong>ô chọn (Dropdown)</strong>.</li>
+                <li>Bấm vào ô chọn đó và chọn tên Chuyên viên KHQS mới muốn giao.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 4</span>
+            <div class="step-body">
+              Một hộp thoại xác nhận hiện ra: <em>"Lý do giao/đổi chuyên viên phụ trách:"</em>.
+              <ul class="step-sublist">
+                <li>Nhập lý do điều chuyển (hoặc để trống và bấm <strong>OK</strong>; nếu bấm <em>Cancel/Hủy</em> thì thao tác sẽ được hủy bỏ).</li>
+                <li>Sau khi bấm <strong>OK</strong>, hệ thống lưu ngay lập tức, gửi thông báo cho chuyên viên mới và ghi vào nhật ký kiểm toán.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 5</span>
+            <div class="step-body">
+              <strong>Xem chi tiết tiến độ phản biện của 1 đề tài:</strong> Bấm chuột vào dòng đề tài bất kỳ trên bảng $\rightarrow$ Khối <strong>"Chi tiết tiến độ đánh giá chuyên môn"</strong> bên dưới sẽ hiển thị danh sách từng Phản biện viên, trạng thái (<em>Đã nộp phiếu</em> / <em>Đang chấm</em> / <em>Đã mời</em>) và điểm số. Bạn cũng có thể bấm các nút tắt ở cột Thao tác: <span class="ui-btn">Hội đồng</span>, <span class="ui-btn">Biên bản</span>, hoặc <span class="ui-btn">Xem hồ sơ</span>.
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- SUB-SECTION 6C -->
+      <h3 id="sec-6-council">6C. Tab "2. Phân công Hội đồng khoa học" (Phản biện &amp; Lập Hội đồng Giai đoạn 1)</h3>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 6C.1: Phân công Phản biện độc lập &amp; Đề xuất Thành lập Hội đồng Khoa học</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn tab <span class="ui-tab">2. Phân công Hội đồng khoa học</span>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Tại ô <span class="ui-field">Chọn đề tài để xử lý</span> ở đầu khung, chọn đề tài cần lập hội đồng (hoặc bấm nút <span class="ui-btn">Hội đồng</span> từ Tab 1 chuyển sang).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              <strong>Mời chuyên gia phản biện / thành viên:</strong>
+              <ul class="step-sublist">
+                <li>Chọn chuyên gia trong danh sách ứng viên (hệ thống tự động kiểm tra và cảnh báo nếu ứng viên có Xung đột lợi ích - COI như trùng đơn vị hoặc là thành viên đề tài).</li>
+                <li>Chọn vai trò, ngày bắt đầu hiệu lực, hạn hoàn thành nhận xét $\rightarrow$ Bấm nút <strong>Phân công</strong> để gửi lời mời.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 4</span>
+            <div class="step-body">
+              <strong>Kiện toàn danh sách Hội đồng đánh giá (Giai đoạn 1):</strong> Điền đầy đủ các trường trong biểu mẫu Hội đồng:
+              <ul class="step-sublist">
+                <li><span class="ui-field">Ngày họp dự kiến</span>, <span class="ui-field">Địa điểm họp</span>, <span class="ui-field">Chương trình / Nội dung họp</span>.</li>
+                <li><span class="ui-field">Chủ tịch Hội đồng</span> (01 người) và <span class="ui-field">Thư ký khoa học</span> (01 người).</li>
+                <li><span class="ui-field">Ủy viên Phản biện</span> (từ 02 đến 03 người — dùng nút thêm/xóa phản biện).</li>
+                <li><span class="ui-field">Ủy viên Hội đồng</span> (sao cho tổng số thành viên chấm điểm từ 03 đến 05 người).</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 5</span>
+            <div class="step-body">
+              Khi tất cả thành viên được chọn đã bấm <strong>Đồng ý tham gia</strong> lời mời $\rightarrow$ Bấm nút <strong>Lập tờ trình đề xuất Hội đồng</strong> để chuyển sang luồng trình duyệt Phòng KHQS.
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- SUB-SECTION 6D -->
+      <h3 id="sec-6-minutes">6D. Tab "3. Tổng hợp nhận xét &amp; Biên bản họp" (Giai đoạn 2 &amp; Xuất Word)</h3>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 6D.1: Xuất Quyết định / Biên bản Word, Chốt kết quả tổng hợp &amp; Trình phê duyệt</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn tab <span class="ui-tab">3. Tổng hợp nhận xét &amp; Biên bản họp</span> và chọn đề tài ở ô <span class="ui-field">Chọn đề tài để xử lý</span>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              <strong>Tải biểu mẫu Word tự động điền dữ liệu (nếu cần in ấn):</strong> Ở góc phải thanh chọn đề tài, bấm:
+              <ul class="step-sublist">
+                <li><span class="ui-btn">Lưu Quyết định HĐ (Word)</span>: Xuất file <code>.docx</code> Quyết định thành lập Hội đồng có sẵn danh sách thành viên.</li>
+                <li><span class="ui-btn">Lưu Biên bản (Word)</span>: Xuất file <code>.docx</code> Biên bản họp Hội đồng.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              <strong>Cập nhật Biên bản họp Hội đồng (Giai đoạn 2):</strong> Sau khi Ban Giám đốc đã duyệt Quyết định thành lập Hội đồng và phiên họp diễn ra, nhập:
+              <ul class="step-sublist">
+                <li><span class="ui-field">Thời gian họp thực tế</span>, <span class="ui-field">Điểm trung bình chung</span>.</li>
+                <li><span class="ui-field">Kết luận của Hội đồng</span>: Chọn <code>Thông qua (Approved)</code>, <code>Thông qua có chỉnh sửa (Revision Required)</code> hoặc <code>Không thông qua (Rejected)</code>.</li>
+                <li><span class="ui-field">Ý kiến thảo luận tại phiên họp</span> và <span class="ui-field">Nội dung yêu cầu chỉnh sửa</span> $\rightarrow$ Bấm lưu biên bản.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 4</span>
+            <div class="step-body">
+              <strong>Chốt bản Tổng hợp kết quả đánh giá (Evaluation Summary) và Trình duyệt:</strong>
+              <ul class="step-sublist">
+                <li>Nhập nội dung vào ô <em>Tổng hợp nhận xét chuyên môn</em> và <em>Kiến nghị xử lý</em>.</li>
+                <li>Bấm <span class="ui-btn">Lưu bản nháp</span> nếu đang soạn dở.</li>
+                <li>Khi đã hoàn chỉnh, bấm <span class="ui-btn primary">Chốt kết quả tổng hợp</span> (chuyển trạng thái sang <code>finalized</code>).</li>
+                <li>Cuối cùng, bấm nút <span class="ui-btn success">Trình phê duyệt gói đánh giá</span> để tạo tờ trình gửi lên Trưởng phòng &amp; Ban Giám đốc phê duyệt kết quả xét duyệt thuyết minh. (Nếu cần sửa lại bản đã chốt trước khi trình, bấm <em>Mở lại bản đã chốt</em>).</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- SUB-SECTION 6E -->
+      <h3 id="sec-6-irb">6E. Tab "4. Hội đồng Đạo đức (IRB)" — Quy trình Thẩm định Y đức</h3>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 6E.1: Quản lý Hội đồng Đạo đức trong Nghiên cứu Y sinh học</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn tab <span class="ui-tab">4. Hội đồng Đạo đức (IRB)</span> và chọn đề tài ở ô <span class="ui-field">Chọn đề tài để xử lý</span>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Bấm vào nút màu đỏ <span class="ui-btn danger-solid">Quản lý Hội đồng Y đức</span>. Cửa sổ chuyên dụng <strong>Hội đồng Đạo đức trong Nghiên cứu Y sinh học</strong> sẽ mở ra.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Thực hiện tuần tự theo thanh tiến trình 6 bước trên cửa sổ:
+              <ul class="step-sublist">
+                <li><strong>Giai đoạn mời &amp; lập Hội đồng:</strong> Chọn đủ cơ cấu bắt buộc (<strong>01 Chủ tịch</strong>, <strong>01 Thư ký</strong>, <strong>02–03 Ủy viên Phản biện</strong>, <strong>03–05 Ủy viên</strong>) $\rightarrow$ Bấm <strong>Gửi lời mời</strong>.</li>
+                <li><strong>Trình thành lập Hội đồng IRB:</strong> Khi tất cả thành viên đã bấm <em>Đồng ý tham gia</em>, bấm nút <strong>Trình thành lập Hội đồng</strong> (tờ trình đi qua Trưởng ban $\rightarrow$ Trưởng phòng KHQS duyệt tại <code>/submissions</code> $\rightarrow$ Giám đốc ký).</li>
+                <li><strong>Chấm &amp; Trình kết luận Y đức:</strong> Sau khi Giám đốc ký thành lập Hội đồng, các thành viên gửi nhận xét, Thư ký tổng hợp kết luận (<em>Chấp thuận</em> / <em>Yêu cầu bổ sung</em> / <em>Không chấp thuận</em>) và trình qua Phòng KHQS $\rightarrow$ Giám đốc ký cấp <strong>Số Giấy chứng nhận chấp thuận đạo đức</strong> (định dạng <code>IRB-HVQY-năm-số</code>).</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- SUB-SECTION 6F -->
+      <h3 id="sec-6-audit">6F. Tab "5. Lịch sử hoạt động" (Audit Timeline)</h3>
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 6F.1: Tra cứu vết kiểm toán toàn diện của Hồ sơ</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn tab <span class="ui-tab">5. Lịch sử hoạt động</span> và chọn đề tài cần kiểm tra.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Hệ thống hiển thị dòng thời gian chi tiết từ lúc nộp hồ sơ, gán chuyên viên, gửi lời mời phản biện, nộp phiếu chấm cho tới các lần trình duyệt và trả lại. Với quyền Trưởng phòng KHQS (không có xung đột lợi ích với đề tài), bạn được xem đầy đủ danh tính người thực hiện ở từng bước.
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 7 -->
+    <section class="section-card" id="sec-7">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 07</span>
+          <h2>Đợt tiếp nhận — Tạo mới, Mở/Đóng &amp; Cấu hình Hồ sơ Bắt buộc</h2>
+        </div>
+        <span class="route-pill">/intakes</span>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 7.1: Tạo mới một Đợt tiếp nhận đề tài và đính kèm biểu mẫu chuẩn</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn menu <span class="ui-tab">Đợt tiếp nhận</span> (<code>/intakes</code>). Màn hình chia làm 2 cột: <strong>Cột trái</strong> là danh sách các đợt tiếp nhận, <strong>Cột phải</strong> là biểu mẫu Tạo mới / Cập nhật.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Nếu đang ở chế độ sửa đợt cũ, bấm nút <span class="ui-btn">+ Tạo đợt mới</span> để làm trống biểu mẫu bên cột phải.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Điền các thông tin cơ bản của đợt tiếp nhận ở cột phải:
+              <ul class="step-sublist">
+                <li><span class="ui-field">Mã đợt</span>: Nhập mã định danh (ví dụ: <code>DOT-2026-01</code>).</li>
+                <li><span class="ui-field">Tên đợt tiếp nhận</span>: Ví dụ: <em>Đợt đăng ký đề tài KH&amp;CN cấp Học viện năm 2026</em>.</li>
+                <li><span class="ui-field">Ngày bắt đầu</span> và <span class="ui-field">Ngày kết thúc</span>: Chọn ngày giờ mở và khóa cổng nộp hồ sơ.</li>
+                <li><span class="ui-field">Mô tả / Hướng dẫn nộp</span>: Ghi rõ yêu cầu đối với các đơn vị.</li>
+                <li><span class="ui-field">Phạm vi đơn vị áp dụng</span>: Tích chọn các đơn vị được phép nộp hoặc để mặc định <em>Toàn Học viện</em>.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 4</span>
+            <div class="step-body">
+              <strong>Cấu hình Danh mục tài liệu bắt buộc (Required Package):</strong>
+              <ul class="step-sublist">
+                <li>Thêm từng loại tài liệu mà Chủ nhiệm đề tài phải nộp (ví dụ: <em>Thuyết minh đề tài BM-01</em>, <em>Dự toán kinh phí</em>, <em>Lý lịch khoa học BM-06</em>).</li>
+                <li>Đánh dấu tích <strong>Bắt buộc</strong> hoặc không bắt buộc và tải lên tệp biểu mẫu trống (<code>.docx</code> / <code>.pdf</code>) để nhà khoa học tải về điền.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 5</span>
+            <div class="step-body">
+              Bấm nút <span class="ui-btn primary">Lưu đợt tiếp nhận</span> ở cuối biểu mẫu.
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 7.2: Mở cổng tiếp nhận hoặc Đóng đợt tiếp nhận</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Tại danh sách đợt tiếp nhận bên <strong>Cột trái</strong>, dùng ô tìm kiếm hoặc bộ lọc trạng thái (<em>Tất cả</em>, <em>Nháp</em>, <em>Đang mở</em>, <em>Đã đóng</em>, <em>Quá hạn</em>) để tìm đợt cần thao tác.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Trên thẻ của đợt tiếp nhận đó:
+              <ul class="step-sublist">
+                <li>Bấm nút <span class="ui-btn success">Mở đợt</span> để chuyển trạng thái từ <code>draft</code>/<code>closed</code> sang <code>open</code> (cho phép các Chủ nhiệm bắt đầu gửi hồ sơ).</li>
+                <li>Bấm nút <span class="ui-btn danger">Đóng đợt</span> khi hết hạn thu nhận hồ sơ để khóa cổng nộp (trạng thái chuyển sang <code>closed</code>).</li>
+                <li>Bấm nút <span class="ui-btn">Sửa</span> nếu muốn nạp lại thông tin của đợt đó sang biểu mẫu cột phải để gia hạn ngày kết thúc hoặc cập nhật biểu mẫu.</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 8 -->
+    <section class="section-card" id="sec-8">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 08</span>
+          <h2>Theo dõi Đề tài — Giám sát Tiến độ, Kinh phí, Điều chỉnh &amp; Nghiệm thu</h2>
+        </div>
+        <span class="route-pill">/projects • /projects/[id]</span>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 8.1: Lọc nhanh các đề tài có Nguy cơ trễ hạn (Đỏ / Vàng) trên trang /projects</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn menu <span class="ui-tab">Theo dõi đề tài</span> (<code>/projects</code>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Quan sát các thẻ thống kê ở đầu trang và bấm trực tiếp vào thẻ cần kiểm tra để lọc ngay danh sách:
+              <ul class="step-sublist">
+                <li><strong>Trạng thái triển khai:</strong> <em>Chuẩn bị triển khai</em>, <em>Đang thực hiện</em>, <em>Quá hạn</em>, <em>Sắp đến hạn (30 ngày)</em>.</li>
+                <li><strong>Mức độ sức khỏe tiến độ (Health Status):</strong> Bấm thẻ <span class="ui-btn danger">Đỏ - Nguy cơ cao</span> (quá hạn mốc hoặc trễ báo cáo), <span class="ui-btn">Vàng - Cảnh báo</span>, hoặc <span class="ui-btn success">Xanh - Bình thường</span>.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Bấm vào tên đề tài trong bảng để mở không gian quản lý chi tiết của đề tài đó tại <code>/projects/[id]</code>.
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <h3 id="sec-8-detail">8A. Các thao tác của Trưởng phòng trong trang Chi tiết Đề tài (/projects/[id])</h3>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 8A.1: Phân công hoặc Thay thế Chuyên viên phụ trách đề tài</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Trong trang <code>/projects/[id]</code>, kéo tới khối <strong>"Phân công chuyên viên đề tài"</strong>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Tại ô chọn <span class="ui-field">Chuyên viên thuộc phạm vi</span>, chọn tên chuyên viên KHQS muốn giao theo dõi đề tài này.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Bấm nút <span class="ui-btn primary">Phân công / thay thế</span> để lưu (hoặc bấm nút <span class="ui-btn">Thu hồi</span> bên cạnh tên chuyên viên đang phụ trách nếu muốn gỡ phân công).
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 8A.2: Quản lý Kinh phí, Giải ngân và Quyết toán theo từng Mốc</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Tại khối <strong>"Kinh phí và giải ngân"</strong> trong trang <code>/projects/[id]</code>, kiểm tra 4 chỉ số: <em>Tổng dự toán được duyệt</em>, <em>Đã giải ngân</em>, <em>Đã quyết toán</em>, và <em>Kinh phí còn lại</em>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Bấm nút <span class="ui-btn">Cập nhật giải ngân &amp; quyết toán</span> ở góc trên bên phải khối kinh phí.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Trong cửa sổ <strong>Quản lý Giải ngân &amp; Quyết toán</strong> hiện ra:
+              <ul class="step-sublist">
+                <li>Cập nhật tổng dự toán và các khoản mục chi phí được duyệt.</li>
+                <li>Ghi nhận số tiền giải ngân từng đợt, số tiền đã nghiệm thu quyết toán và tải lên chứng từ tài chính đính kèm $\rightarrow$ Bấm <strong>Lưu cập nhật</strong>.</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 8A.3: Xử lý Yêu cầu Điều chỉnh / Gia hạn Đề tài của Chủ nhiệm</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Kéo xuống khối <strong>"Yêu cầu điều chỉnh và gia hạn"</strong> trong trang <code>/projects/[id]</code>.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Trên thẻ yêu cầu do Chủ nhiệm đề tài gửi lên (ví dụ: xin gia hạn thời gian thực hiện thêm 6 tháng, xin thay đổi thành viên, điều chỉnh kinh phí):
+              <ul class="step-sublist">
+                <li><strong>Nếu hồ sơ minh chứng chưa rõ:</strong> Nhập nội dung vào ô <span class="ui-field">Lý do / ghi chú xử lý</span>, chọn ngày tại ô <span class="ui-field">Hạn bổ sung</span> $\rightarrow$ Bấm nút <span class="ui-btn">Yêu cầu bổ sung</span>.</li>
+                <li><strong>Nếu yêu cầu đã được rà soát đầy đủ (trạng thái <code>ready_for_head_decision</code>):</strong> Nhập ý kiến vào ô <span class="ui-field">Lý do / ghi chú xử lý</span> $\rightarrow$ Bấm nút <span class="ui-btn primary">Phê duyệt</span> hoặc <span class="ui-btn danger">Từ chối</span>, đồng thời duyệt tờ trình điều chỉnh tương ứng trên khối <em>Trạng thái trình duyệt</em> (hoặc tại menu <code>/submissions</code>).</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 8A.4: Kiểm tra Thẩm định Sản phẩm, Nghiệm thu (2 cấp) &amp; Thanh lý Đề tài</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              <strong>Tại khối "Sản phẩm đề tài":</strong> Xem danh sách các sản phẩm (bài báo, quy trình kỹ thuật, phần mềm, đào tạo), tệp minh chứng do Chủ nhiệm nộp và kết quả của <strong>Tổ chuyên gia thẩm định sản phẩm</strong>. Duyệt tờ trình thành lập Tổ thẩm định và kết quả thẩm định sản phẩm khi Chuyên viên/Trưởng ban trình lên.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              <strong>Tại khối "Nghiệm thu và Thanh lý đề tài":</strong>
+              <ul class="step-sublist">
+                <li>Theo dõi kết quả <strong>Nghiệm thu cấp Cơ sở</strong> và <strong>Nghiệm thu cấp Quản lý (Học viện / Bộ Quốc phòng)</strong>.</li>
+                <li>Kiểm tra việc nộp báo cáo tổng kết sau chỉnh sửa, xác nhận hoàn tất quyết toán tài chính và duyệt <strong>Biên bản thanh lý hợp đồng nghiên cứu</strong> để đóng đề tài (<code>completed</code>).</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 9 -->
+    <section class="section-card" id="sec-9">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 09</span>
+          <h2>Hồ sơ Nhà khoa học — Quản trị Danh bạ &amp; Tài khoản Đăng nhập</h2>
+        </div>
+        <span class="route-pill">/researcher-profiles</span>
+      </div>
+
+      <p>
+        Trưởng phòng KHQS có toàn quyền thêm mới, chỉnh sửa hồ sơ nhà khoa học (cả trong và ngoài Học viện), đồng thời <strong>cấp mới, liên kết hoặc đặt lại mật khẩu tài khoản đăng nhập</strong> cho nhà khoa học.
+      </p>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 9.1: Tạo mới Hồ sơ Nhà khoa học và cấp Tài khoản đăng nhập ngay</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn menu <span class="ui-tab">Hồ sơ nhà khoa học</span> (<code>/researcher-profiles</code>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Tại biểu mẫu <strong>Tạo mới hồ sơ nhà khoa học</strong>, điền các trường thông tin:
+              <ul class="step-sublist">
+                <li><span class="ui-field">Loại hồ sơ</span>: Chọn <code>Nội bộ Học viện</code> hoặc <code>Chuyên gia bên ngoài</code> (dùng khi mời phản biện/hội đồng ngoài trường).</li>
+                <li><span class="ui-field">Mã cán bộ</span>, <span class="ui-field">Họ và tên</span>, <span class="ui-field">Email</span>, <span class="ui-field">Số điện thoại</span>.</li>
+                <li><span class="ui-field">Quân hàm</span>, <span class="ui-field">Học hàm</span> (GS, PGS), <span class="ui-field">Học vị</span> (TS, ThS, BSCKII...), <span class="ui-field">Chức vụ</span>.</li>
+                <li><span class="ui-field">Đơn vị công tác</span> và <span class="ui-field">Lĩnh vực chuyên môn</span>.</li>
+                <li><em>Lưu ý:</em> Khi bạn nhập Họ tên/Email/Mã cán bộ, hệ thống tự động quét và hiện cảnh báo nếu phát hiện hồ sơ có dấu hiệu trùng lặp.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              <strong>Tùy chọn cấp tài khoản ngay:</strong> Tích vào ô <strong>"Tạo kèm tài khoản đăng nhập hệ thống"</strong>, nhập <span class="ui-field">Tên đăng nhập (Username)</span> và chọn các <span class="ui-field">Vai trò (Roles)</span> cho cán bộ đó (ví dụ: <em>Chủ nhiệm đề tài</em>, <em>Thành viên hội đồng / Phản biện</em>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 4</span>
+            <div class="step-body">
+              Bấm nút <span class="ui-btn primary">Tạo hồ sơ</span>. Nếu có tạo kèm tài khoản, hệ thống sẽ hiển thị hộp thông báo chứa <strong>Mật khẩu tạm thời</strong> vừa sinh ra để bạn gửi cho nhà khoa học.
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 9.2: Liên kết tài khoản, Đặt lại mật khẩu (Reset) &amp; Xem lịch sử hồ sơ</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Trong danh sách nhà khoa học (có thể lọc theo <em>Từ khóa</em>, <em>Nội bộ/Bên ngoài</em>, <em>Trạng thái hoạt động</em>, <em>Đơn vị</em>, <em>Lĩnh vực</em>), bấm chọn vào dòng của nhà khoa học cần quản lý.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Tại khung chi tiết hồ sơ hiện ra, sử dụng các nút quản trị tài khoản:
+              <ul class="step-sublist">
+                <li><strong>Nếu hồ sơ chưa có tài khoản:</strong> Bấm <strong>Tạo tài khoản mới</strong> hoặc chọn một tài khoản chưa gắn hồ sơ từ danh sách thả xuống rồi bấm <span class="ui-btn">Liên kết tài khoản</span>.</li>
+                <li><strong>Nếu nhà khoa học quên mật khẩu:</strong> Bấm nút <span class="ui-btn">Đặt lại mật khẩu / Cấp lại thông tin đăng nhập</span> $\rightarrow$ Hệ thống sinh mật khẩu tạm thời mới và bật cờ bắt buộc đổi mật khẩu ở lần đăng nhập kế tiếp.</li>
+                <li><strong>Nếu gắn nhầm tài khoản:</strong> Nhập lý do và bấm <span class="ui-btn danger">Hủy liên kết tài khoản</span>.</li>
+                <li><strong>Ngừng hoạt động / Kích hoạt lại:</strong> Dùng khi cán bộ nghỉ hưu hoặc chuyển công tác để không còn xuất hiện trong danh sách gợi ý phân công mới nhưng vẫn giữ nguyên dữ liệu lịch sử.</li>
+                <li><strong>Xem lịch sử thay đổi:</strong> Kiểm tra toàn bộ nhật ký ai đã sửa thông tin hoặc cấp/đổi tài khoản của nhà khoa học đó.</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 10 -->
+    <section class="section-card" id="sec-10">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 10</span>
+          <h2>Văn bản &amp; Biểu mẫu — Quản trị Kho Pháp quy &amp; Mẫu Nghiệp vụ</h2>
+        </div>
+        <span class="route-pill">/documents</span>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 10.1: Tải lên Văn bản quy phạm hoặc Biểu mẫu mới cho toàn Học viện</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn menu <span class="ui-tab">Văn bản &amp; Biểu mẫu</span> (<code>/documents</code>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Tại khung <strong>Thêm văn bản / biểu mẫu mới</strong>, nhập đầy đủ các trường:
+              <ul class="step-sublist">
+                <li><span class="ui-field">Danh mục phân loại</span>: Chọn 1 trong 4 nhóm:
+                  <ol style="margin-top:4px;">
+                    <li><strong>1. Văn bản QPPL</strong> (Luật, Nghị định, Thông tư của Bộ KH&amp;CN, Bộ Quốc phòng)</li>
+                    <li><strong>2. Quy chế &amp; Quy định</strong> (Quy chế quản lý hoạt động KH&amp;CN nội bộ của Học viện)</li>
+                    <li><strong>3. Mẫu văn bản</strong> (Các biểu mẫu BM-01 đến BM-20, mẫu thuyết minh, biên bản, hợp đồng)</li>
+                    <li><strong>4. Hướng dẫn nghiệp vụ</strong> (Tài liệu hướng dẫn quy trình, sổ tay thực hiện)</li>
+                  </ol>
+                </li>
+                <li><span class="ui-field">Số hiệu văn bản</span> (VD: <code>125/QĐ-HVQY</code>), <span class="ui-field">Tiêu đề văn bản</span>, <span class="ui-field">Cơ quan ban hành</span>.</li>
+                <li><span class="ui-field">Ngày ban hành</span>, <span class="ui-field">Ngày có hiệu lực</span> và <span class="ui-field">Mô tả tóm tắt</span>.</li>
+                <li><span class="ui-field">Tệp đính kèm</span>: Chọn tệp PDF, Word (<code>.docx</code>) hoặc Excel (<code>.xlsx</code>) từ máy tính.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Bấm nút <span class="ui-btn primary">Tải lên / Lưu văn bản</span>. Văn bản sẽ xuất hiện ngay trong thư viện để toàn bộ cán bộ, giảng viên tra cứu và tải về.
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 4</span>
+            <div class="step-body">
+              <strong>Cập nhật hoặc Xóa văn bản đã đăng:</strong> Trên danh sách văn bản, bấm vào văn bản để xem trước nội dung PDF ngay trên màn hình, hoặc bấm nút <span class="ui-btn">Sửa</span> (để cập nhật số hiệu, thay thế tệp biểu mẫu phiên bản mới) hoặc nút <span class="ui-btn danger">Xóa</span> (xác nhận hộp thoại trước khi xóa).
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 11 -->
+    <section class="section-card" id="sec-11">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 11</span>
+          <h2>Báo cáo Tổng hợp — Báo cáo Kinh phí &amp; Tiến độ Thực hiện</h2>
+        </div>
+        <span class="route-pill">/reports</span>
+      </div>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 11.1: Khai thác 2 phân hệ Báo cáo Tổng hợp phục vụ giao ban &amp; kiểm tra</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm chọn menu <span class="ui-tab">Báo cáo tổng hợp</span> (<code>/reports</code>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Chọn 1 trong 2 Tab báo cáo chuyên đề ở đầu trang:
+              <ul class="step-sublist">
+                <li><strong>Tab 1 — <span class="ui-tab">Báo cáo Kinh phí đề tài</span>:</strong> Tổng hợp toàn bộ dự toán được duyệt, kinh phí đã cấp phát giải ngân, kinh phí đã quyết toán và số dư còn lại của từng đề tài theo Năm, Cấp quản lý và Đơn vị chủ trì.</li>
+                <li><strong>Tab 2 — <span class="ui-tab">Báo cáo Tình hình Thực hiện &amp; Tiến độ</span>:</strong> Tổng hợp tiến độ thực hiện các mốc (Milestones), tỷ lệ đề tài đúng hạn / trễ hạn, tình trạng nộp sản phẩm và nghiệm thu của các đơn vị trong toàn Học viện.</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 3</span>
+            <div class="step-body">
+              Sử dụng các bộ lọc trên từng tab và bấm nút kết xuất báo cáo để phục vụ hội nghị giao ban khoa học hoặc báo cáo Thủ trưởng Học viện.
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 12 -->
+    <section class="section-card" id="sec-12">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 12</span>
+          <h2>Lý lịch Khoa học Cá nhân, Chữ ký số &amp; Xuất Biểu mẫu BM-06</h2>
+        </div>
+        <span class="route-pill">/my-profile</span>
+      </div>
+
+      <p>
+        Trang Lý lịch khoa học cá nhân không chỉ phục vụ công tác nghiên cứu của riêng đồng chí Trưởng phòng mà còn cung cấp <strong>Quân hàm, Học hàm, Học vị và Chữ ký số</strong> để hệ thống tự động điền vào các Tờ trình, Quyết định và Biên bản.
+      </p>
+
+      <div class="procedure-box">
+        <div class="procedure-title">
+          <span>Quy trình 12.1: Cập nhật 5 Tab Lý lịch khoa học và In Biểu mẫu BM-06</span>
+        </div>
+        <ul class="step-list">
+          <li class="step-item">
+            <span class="step-num">Bước 1</span>
+            <div class="step-body">
+              Bấm vào tên tài khoản ở góc trên bên phải màn hình $\rightarrow$ Chọn <span class="ui-btn">Lý lịch khoa học</span> (<code>/my-profile</code>).
+            </div>
+          </li>
+          <li class="step-item">
+            <span class="step-num">Bước 2</span>
+            <div class="step-body">
+              Lần lượt rà soát và cập nhật thông tin trên 5 Tab ngang:
+              <ul class="step-sublist">
+                <li><strong>Tab <span class="ui-tab">1. Thông tin cá nhân</span>:</strong> Tải lên ảnh chân dung 3x4, chọn Quân hàm, Học hàm, Học vị, Chức vụ, Địa chỉ quê quán/nơi sinh (Tỉnh/Xã), Tài khoản ngân hàng và tải lên <strong>Ảnh chữ ký số cá nhân</strong> $\rightarrow$ Bấm <strong>Lưu thông tin</strong>.</li>
+                <li><strong>Tab <span class="ui-tab">2. Quá trình đào tạo</span>:</strong> Bấm <strong>+ Thêm mới</strong> để khai báo các bậc đào tạo Đại học, Thạc sĩ, Tiến sĩ, Thực tập sinh.</li>
+                <li><strong>Tab <span class="ui-tab">3. Quá trình công tác</span>:</strong> Khai báo các mốc thời gian, vị trí công tác và đơn vị.</li>
+                <li><strong>Tab <span class="ui-tab">4. Kinh nghiệm và thành tích nghiên cứu</span>:</strong> Quản lý danh mục <em>Công bố khoa học</em> (bài báo trong nước/quốc tế, sách — các trường thông tin được bố trí theo hàng ngang tự động xuống dòng gọn gàng), <em>Đề tài/nhiệm vụ KH&amp;CN đã chủ trì hoặc tham gia</em>, <em>Bằng độc quyền sáng chế/Sở hữu trí tuệ</em> và <em>Giải thưởng KH&amp;CN</em>.</li>
+                <li><strong>Tab <span class="ui-tab">5. Xem và In (BM-06)</span>:</strong> Xem bản dàn trang chuẩn A4 của Lý lịch khoa học (Biểu mẫu BM-06). Bạn có thể chuyển đổi ngôn ngữ hiển thị <strong>Tiếng Việt (VI)</strong> / <strong>Tiếng Anh (EN)</strong> và bấm nút <span class="ui-btn primary">In / Xuất PDF</span>.</li>
+              </ul>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- SECTION 13 -->
+    <section class="section-card" id="sec-13">
+      <div class="section-header">
+        <div class="section-title-group">
+          <span class="section-badge">PHẦN 13</span>
+          <h2>Kịch bản Tác nghiệp Thực tế A–Z (Quick Reference)</h2>
+        </div>
+        <span class="route-pill">Tổng hợp quy trình</span>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 24%;">Tình huống thực tế</th>
+            <th style="width: 22%;">Menu truy cập</th>
+            <th>Chuỗi bước thao tác nhanh (Step-by-step)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>1. Đầu năm mở đợt đăng ký đề tài mới</strong></td>
+            <td><code>/intakes</code><br><strong>Đợt tiếp nhận</strong></td>
+            <td>
+              Bấm <span class="ui-btn">+ Tạo đợt mới</span> $\rightarrow$ Nhập Mã đợt, Tên đợt, Ngày bắt đầu/kết thúc $\rightarrow$ Thêm danh mục tài liệu bắt buộc &amp; file mẫu $\rightarrow$ Bấm <span class="ui-btn primary">Lưu đợt tiếp nhận</span> $\rightarrow$ Bấm <span class="ui-btn success">Mở đợt</span> ở danh sách cột trái.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>2. Chia các hồ sơ mới nộp cho chuyên viên KHQS</strong></td>
+            <td><code>/reviews</code><br><strong>Đánh giá hồ sơ</strong></td>
+            <td>
+              <strong>Cách 1 (Tự động):</strong> Vào tab <span class="ui-tab">Mảng phụ trách của chuyên viên</span> $\rightarrow$ Chọn Cấp đề tài + Tính chất $\rightarrow$ Bấm <span class="ui-btn primary">+ Thêm</span> $\rightarrow$ Bấm <span class="ui-btn">Giao các hồ sơ chưa có người phụ trách</span>.<br>
+              <strong>Cách 2 (Thủ công từng đề tài):</strong> Vào tab <span class="ui-tab">1. Theo dõi tiến độ đánh giá</span> $\rightarrow$ Chọn chuyên viên ngay tại ô dropdown cột <em>Chuyên viên phụ trách</em> $\rightarrow$ Nhập lý do vào hộp thoại $\rightarrow$ Bấm <strong>OK</strong>.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>3. Duyệt Tờ trình lập Hội đồng KH hoặc Hội đồng Y đức</strong></td>
+            <td><code>/submissions</code><br><strong>Tờ trình qua Phòng KHQS</strong></td>
+            <td>
+              Tại bảng <em>"Tờ trình chờ Trưởng phòng duyệt"</em> $\rightarrow$ Bấm <span class="ui-btn">Xem</span> để kiểm tra danh sách thành viên nếu cần $\rightarrow$ Bấm <span class="ui-btn success">Duyệt, gửi Ban giám đốc</span> $\rightarrow$ Nhập bút phê vào hộp thoại $\rightarrow$ Bấm <strong>OK</strong>. (Nếu cần yêu cầu sửa: bấm <span class="ui-btn danger">Trả lại</span> $\rightarrow$ Nhập lý do bắt buộc $\rightarrow$ Bấm <strong>OK</strong>).
+            </td>
+          </tr>
+          <tr>
+            <td><strong>4. Kiểm tra đề tài trễ hạn và duyệt gia hạn/điều chỉnh</strong></td>
+            <td><code>/projects</code><br><strong>Theo dõi đề tài</strong></td>
+            <td>
+              Bấm thẻ lọc <span class="ui-btn danger">Đỏ - Nguy cơ</span> hoặc <em>Quá hạn</em> $\rightarrow$ Bấm vào tên đề tài để mở <code>/projects/[id]</code> $\rightarrow$ Kéo tới mục <em>Yêu cầu điều chỉnh và gia hạn</em> $\rightarrow$ Nhập ghi chú xử lý $\rightarrow$ Bấm <span class="ui-btn primary">Phê duyệt</span> / <span class="ui-btn">Yêu cầu bổ sung</span> / <span class="ui-btn danger">Từ chối</span>.
+            </td>
+          </tr>
+          <tr>
+            <td><strong>5. Thêm chuyên gia ngoài Học viện để mời phản biện</strong></td>
+            <td><code>/researcher-profiles</code><br><strong>Hồ sơ nhà khoa học</strong></td>
+            <td>
+              Chọn Loại hồ sơ = <code>Chuyên gia bên ngoài</code> $\rightarrow$ Điền Họ tên, Học hàm, Học vị, Đơn vị, Email $\rightarrow$ Tích chọn <em>Tạo kèm tài khoản đăng nhập</em> với vai trò Phản biện $\rightarrow$ Bấm <span class="ui-btn primary">Tạo hồ sơ</span>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+
+  <script>
+    function filterNav() {
+      const input = document.getElementById('navSearch');
+      const filter = input.value.toLowerCase();
+      const ul = document.getElementById('navList');
+      const li = ul.getElementsByTagName('li');
+
+      for (let i = 0; i < li.length; i++) {
+        const a = li[i].getElementsByTagName('a')[0];
+        const txtValue = a.textContent || a.innerText;
+        if (txtValue.toLowerCase().indexOf(filter) > -1) {
+          li[i].style.display = '';
+        } else {
+          li[i].style.display = 'none';
+        }
+      }
+    }
+  </script>
+</body>
+</html>

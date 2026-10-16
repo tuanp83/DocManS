@@ -740,6 +740,8 @@ export class ProposalDecisionsService {
         decidedAt: now.toISOString(),
         decidedById: actor.id,
         decidedByName: actor.displayName,
+        // Văn bản in "GIÁM ĐỐC" hoặc "KT. GIÁM ĐỐC – PHÓ GIÁM ĐỐC" theo người ký thật.
+        decidedByRole: actor.systemRole,
         approvalNote,
         members
       };

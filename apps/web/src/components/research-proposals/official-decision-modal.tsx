@@ -90,11 +90,12 @@ export function OfficialDecisionModal({ isOpen, onClose, proposal }: OfficialDec
   const scopeLabel = getProposalMilitaryScopeLabel(scope);
   const durationMonths = calculateDurationMonths(proposal.startDate, proposal.endDate);
 
-  const approvedDecision = proposal.decisions?.find((d) => d.decision === "approve") || proposal.decisions?.[0];
+  // Giá trị lưu là "approved"; chỉ quyết định phê duyệt mới có người ký trên văn bản này.
+  const approvedDecision = proposal.decisions?.find((d) => d.decision === "approved");
   const decisionDate = approvedDecision?.decidedAt ? new Date(approvedDecision.decidedAt) : new Date();
-  const signatoryName = approvedDecision?.decidedByDisplayName || "GS. TS. Trần Viết Tiến";
-  const proposalCode = proposal.code || "HVQY-2026/ĐTTN";
-  const decisionNumber = `QĐ-${proposalCode.replace(/[^a-zA-Z0-9]/g, "")}/HVQY`;
+  // Không điền tên, số quyết định giả: chưa có dữ liệu thì để trống cho văn thư, người ký.
+  const signatoryName = approvedDecision?.decidedByDisplayName || "…………………………";
+  const decisionNumber = "…………………………";
 
   function handlePrint() {
     window.print();

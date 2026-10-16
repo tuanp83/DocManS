@@ -188,13 +188,6 @@ export const routeDefinitions: Record<string, RouteDefinition> = {
     summaryTitle: "Tiến độ thực hiện",
     summaryBody: "Mỗi đề tài đều được hiển thị cùng mốc báo cáo, nhiệm vụ cần xử lý và các tài liệu liên quan."
   },
-  "/periodic-reports": {
-    eyebrow: "Báo cáo định kỳ",
-    title: "Báo cáo định kỳ",
-    description: "Tập trung các báo cáo sắp đến hạn, đã gửi và cần bổ sung trong kỳ báo cáo hiện hành.",
-    summaryTitle: "Lịch báo cáo",
-    summaryBody: "Tiến độ nộp báo cáo và các yêu cầu bổ sung được quản lý theo chu kỳ đề tài và đơn vị chủ trì."
-  },
   "/my-tasks": {
     eyebrow: "Nhiệm vụ",
     title: "Việc của tôi",
@@ -216,26 +209,12 @@ export const routeDefinitions: Record<string, RouteDefinition> = {
     summaryTitle: "Kênh nhắc việc",
     summaryBody: "Thông báo trong hệ thống được sắp xếp theo mức độ ưu tiên và thời điểm phát sinh để dễ dàng theo dõi."
   },
-  "/assigned-proposals": {
-    eyebrow: "Phân công",
-    title: "Hồ sơ được phân công",
-    description: "Tập hợp các hồ sơ reviewer và thành viên hội đồng được giao xem xét.",
-    summaryTitle: "Danh sách thẩm định",
-    summaryBody: "Hồ sơ được sắp xếp theo hạn nhận xét, lĩnh vực và tình trạng hoàn thành để đảm bảo tiến độ đánh giá."
-  },
   "/my-reviews": {
     eyebrow: "Nhận xét",
     title: "Đánh giá của tôi",
     description: "Quản lý tiến độ chấm điểm, nhận xét và kiến nghị đối với các hồ sơ đã được giao.",
     summaryTitle: "Hồ sơ nhận xét",
     summaryBody: "Mỗi mục bao gồm hạn chấm, kết quả tạm thời và tình trạng nộp nhận xét theo phân công."
-  },
-  "/council-schedule": {
-    eyebrow: "Lịch hội đồng",
-    title: "Lịch họp hội đồng",
-    description: "Theo dõi lịch họp, thành phần tham gia và tài liệu cần chuẩn bị cho từng phiên hội đồng.",
-    summaryTitle: "Lịch điều phối",
-    summaryBody: "Kế hoạch họp hội đồng được sắp xếp theo thời gian và điểm họp để phục vụ công tác tham gia đúng lịch."
   },
   "/users": {
     eyebrow: "Quản trị",
@@ -383,8 +362,8 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/notifications", label: "Thông báo", icon: Bell }
   ],
+  // Quản trị hệ thống không xem dashboard nghiệp vụ (API từ chối), nên không có mục Dashboard.
   SYSTEM_ADMIN: [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/users", label: "Người dùng", icon: Users },
     { href: "/roles", label: "Vai trò", icon: ShieldCheck },
     { href: "/units", label: "Đơn vị", icon: Building2 },

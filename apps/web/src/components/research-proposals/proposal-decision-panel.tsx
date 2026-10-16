@@ -118,7 +118,9 @@ export function ProposalDecisionPanel({
         currency: "VND",
         note: currentBudgetNote
       },
-      decisions: decisionPackage?.decisions || proposal?.decisions
+      decisions: decisionPackage?.decisions || proposal?.decisions,
+      // Giám đốc đã ký phê duyệt (chưa phê duyệt thì để trống chỗ ký trên văn bản).
+      signerName: (decisionPackage?.decisions || proposal?.decisions)?.find((decision: { decision: string; decidedByDisplayName?: string | null }) => decision.decision === "approved")?.decidedByDisplayName ?? null
     };
   }, [proposalId, proposal, decisionPackage, currentBudgetAmount, currentBudgetNote]);
 

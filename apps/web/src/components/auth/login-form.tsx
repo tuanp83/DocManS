@@ -5,6 +5,7 @@ import { startTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/auth/session-provider";
 import { loginWithPassword } from "@/lib/auth-api";
+import { getHomeRoute } from "@/lib/navigation";
 
 export function LoginForm() {
   const router = useRouter();
@@ -39,9 +40,9 @@ export function LoginForm() {
     }
 
     startTransition(() => {
-      // Nhà nghiên cứu vào thẳng lý lịch khoa học; lãnh đạo và cán bộ QLKH (cũng có lý lịch) vào dashboard.
+      // Nhà nghiên cứu vào thẳng lý lịch khoa học; vai trò khác vào trang đầu của vai trò (Quản trị: Người dùng).
       const researcher = refreshedAccount.systemRole === "RESEARCHER_INTERNAL_USER" || refreshedAccount.systemRole === "EXTERNAL_RESEARCHER_USER";
-      router.replace(refreshedAccount.mustChangePassword ? "/change-password" : researcher && refreshedAccount.researcherProfileId ? "/my-profile" : "/dashboard");
+      router.replace(refreshedAccount.mustChangePassword ? "/change-password" : researcher && refreshedAccount.researcherProfileId ? "/my-profile" : getHomeRoute(refreshedAccount.systemRole));
       router.refresh();
     });
   }

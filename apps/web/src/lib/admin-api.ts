@@ -284,3 +284,21 @@ export async function updateOrganizationUnitStatus(unitId: string, status: strin
     body: JSON.stringify({ status })
   });
 }
+
+export type SystemAuditLog = {
+  id: string;
+  action: string;
+  actorId?: string;
+  targetEntity?: string;
+  targetEntityId?: string;
+  username?: string;
+  timestamp: string;
+  result: "success" | "failure";
+  context: { ip?: string; userAgent?: string; reason?: string };
+};
+
+/** 100 bản ghi nhật ký kiểm toán mới nhất (chỉ Quản trị hệ thống). */
+export async function loadSystemAuditLogs() {
+  const response = await requestJson<{ records: SystemAuditLog[] }>("/auth/audit-logs");
+  return response.records;
+}
