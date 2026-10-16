@@ -45,8 +45,8 @@ export function EvaluationSummarySection({
   /** Tải lại dữ liệu và báo cho trang cha sau khi lưu, chốt, mở lại hoặc trình. */
   onChanged: () => Promise<void>;
 }) {
-  const [summaryText, setSummaryText] = useState("");
-  const [recommendation, setRecommendation] = useState("");
+  const [summaryText, setSummaryText] = useState(() => progress.evaluationSummary?.summary ?? "");
+  const [recommendation, setRecommendation] = useState(() => progress.evaluationSummary?.recommendation ?? "");
   const [summaryError, setSummaryError] = useState("");
   const [summaryDirty, setSummaryDirty] = useState(false);
   const [pendingNames, setPendingNames] = useState<string[]>([]);

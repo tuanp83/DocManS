@@ -257,7 +257,7 @@ describe("tổng hợp kết quả", () => {
     const user = userEvent.setup();
     setup({ progress: progress({ allReviewsSubmitted: true, evaluationSummary: { status: "finalized", statusLabel: "Đã chốt", revision: 4, summary: "Nội dung cũ", recommendation: "approve", reopenReason: "" } }) });
     await screen.findByText("PGS. Lê Phản Biện");
-    expect(screen.getByLabelText("Nội dung tổng hợp kết quả")).toHaveValue("Nội dung cũ");
+    await waitFor(() => expect(screen.getByLabelText("Nội dung tổng hợp kết quả")).toHaveValue("Nội dung cũ"));
     expect(screen.getByLabelText("Nội dung tổng hợp kết quả")).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Mở lại để sửa" }));
     await waitFor(() => expect(api.reopenProposalEvaluationSummary).toHaveBeenCalledWith("p1", { reason: "Bổ sung phiếu", revision: 4 }));
