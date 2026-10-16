@@ -193,7 +193,7 @@ export class ProposalReviewsService {
 
       await tx.proposalReviewAssignment.update({
         where: { id: assignmentId },
-        data: { status: "completed", completedAt: submittedAt } as never
+        data: { status: "completed", completedAt: submittedAt }
       });
 
       await tx.researchProposal.update({
@@ -202,7 +202,7 @@ export class ProposalReviewsService {
           authorizationRelationshipVersion: { increment: 1 },
           authorizationDelegationVersion: { increment: 1 },
           authorizationContextUpdatedAt: submittedAt
-        } as never
+        }
       });
 
       // AC-ST-3.3-03: staff read review completion from the proposal timeline, so the submission is
@@ -215,7 +215,7 @@ export class ProposalReviewsService {
           toStatus: proposal.status,
           submittedAt,
           note: REVIEW_SUBMITTED_NOTE
-        } as never
+        }
       });
 
       await tx.auditLog.create({

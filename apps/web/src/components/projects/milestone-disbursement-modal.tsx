@@ -97,14 +97,14 @@ export function MilestoneDisbursementModal({
     }
   };
 
-  const handleMilestoneChange = (index: number, field: keyof DisbursementMilestone, val: any) => {
+  const handleMilestoneChange = (index: number, field: keyof DisbursementMilestone, val: DisbursementMilestone[keyof DisbursementMilestone]) => {
     if (!canManage) return;
     const updated = [...milestones];
     updated[index] = { ...updated[index], [field]: val };
     setMilestones(updated);
   };
 
-  const handleCostItemChange = (index: number, field: keyof DisbursementCostItem, val: any) => {
+  const handleCostItemChange = (index: number, field: keyof DisbursementCostItem, val: string | number) => {
     if (!canManage) return;
     const updated = [...costItems];
     updated[index] = { ...updated[index], [field]: Number(val) || 0 };
@@ -136,8 +136,8 @@ export function MilestoneDisbursementModal({
       };
       setMilestones(updated);
       setMessage({ type: "success", text: `Đã đính kèm chứng từ "${file.name}". Nhấn "Lưu thiết lập" để lưu lại.` });
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Lỗi khi tải file chứng từ." });
+    } catch (err) {
+      setMessage({ type: "error", text: (err instanceof Error && err.message) || "Lỗi khi tải file chứng từ." });
     } finally {
       setUploadingMilestoneIndex(null);
     }
@@ -176,8 +176,8 @@ export function MilestoneDisbursementModal({
       setCostItems(res.disbursement.costItems.length ? res.disbursement.costItems : DEFAULT_COST_ITEMS);
       setMessage({ type: "success", text: "Đã cập nhật dữ liệu giải ngân & quyết toán theo mốc thành công!" });
       onSuccess?.();
-    } catch (err: any) {
-      setMessage({ type: "error", text: err?.message || "Lỗi cập nhật giải ngân" });
+    } catch (err) {
+      setMessage({ type: "error", text: (err instanceof Error && err.message) || "Lỗi cập nhật giải ngân" });
     } finally {
       setSaving(false);
     }
@@ -289,7 +289,7 @@ export function MilestoneDisbursementModal({
                 <select
                   disabled={!canManage}
                   value={settlementStatus}
-                  onChange={e => setSettlementStatus(e.target.value as any)}
+                  onChange={e => setSettlementStatus(e.target.value as typeof settlementStatus)}
                   className="cmd-select"
                   style={{ padding: "4px 8px", fontSize: "12px", fontWeight: 700 }}
                 >

@@ -79,6 +79,9 @@ jobs:
       - name: Typecheck (web + api)
         run: npm run typecheck
 
+      - name: Chốt chặn nợ kiểu dữ liệu (any, ép kiểu không được tăng)
+        run: node scripts/check-type-looseness.mjs
+
       - name: Test (build api + node --test)
         run: npm test
 

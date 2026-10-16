@@ -187,9 +187,9 @@ export class ResearchProposalsService {
   }
 
   private async submissionEvents(proposalId: string, resubmitted: boolean): Promise<WorkflowEvent[]> {
-    const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { id: true, code: true, title: true, ownerId: true, hostOrganizationUnitId: true, submittedById: true } } as never)) as unknown as { id: string; code: string | null; title: string; ownerId: string; hostOrganizationUnitId: string; submittedById: string | null } | null;
+    const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { id: true, code: true, title: true, ownerId: true, hostOrganizationUnitId: true, submittedById: true } })) as unknown as { id: string; code: string | null; title: string; ownerId: string; hostOrganizationUnitId: string; submittedById: string | null } | null;
     if (!proposal) return [];
-    const managers = await researchManagersInScope(this.prisma as never, proposal.hostOrganizationUnitId);
+    const managers = await researchManagersInScope(this.prisma, proposal.hostOrganizationUnitId);
     const name = label(proposal);
     return [
       {
@@ -286,7 +286,7 @@ export class ResearchProposalsService {
         if (query.military && (p.militaryScope ?? defaultMilitaryScope(p)) !== query.military) return false;
 
         const disbursementData: any = p.disbursementMetadata || {};
-        const budgetTotal = Number(disbursementData.totalBudget) || Number((p.budgetMetadata as any)?.approvedAmount) || Number((p.budgetMetadata as any)?.amount) || 0;
+        const budgetTotal = Number(disbursementData.totalBudget) || Number((p.budgetMetadata)?.approvedAmount) || Number((p.budgetMetadata)?.amount) || 0;
         const disbursedTotal = disbursementData.totalDisbursed ?? 0;
         const disbursedPercent = budgetTotal > 0 ? Math.min(100, Math.round((disbursedTotal / budgetTotal) * 100)) : 0;
         
@@ -294,7 +294,7 @@ export class ResearchProposalsService {
         if (query.disbursement === "partial" && (disbursedTotal === 0 || disbursedPercent >= 100)) return false;
         if (query.disbursement === "full" && disbursedPercent < 100) return false;
 
-        const irbStatus = (p.irbMetadata as any)?.status || "PENDING";
+        const irbStatus = (p.irbMetadata)?.status || "PENDING";
         if (query.irb === "approved" && irbStatus !== "APPROVED") return false;
         if (query.irb === "pending" && irbStatus === "APPROVED") return false;
 
@@ -416,7 +416,7 @@ export class ResearchProposalsService {
         endDate,
         budgetMetadata: readBudgetMetadata(input.budgetMetadata),
         status: "draft"
-      } as never
+      }
     })) as ResearchProposalRecord;
 
     if (resolvedMembers?.length) {
@@ -492,7 +492,7 @@ export class ResearchProposalsService {
     }
     const updated = (await this.prisma.researchProposal.update({
       where: { id: proposalId },
-      data: data as never
+      data: data
     })) as ResearchProposalRecord;
 
     await this.auditLog.record({
@@ -547,7 +547,7 @@ export class ResearchProposalsService {
           status: "submitted",
           submittedAt,
           submittedById: actor.id
-        } as never
+        }
       })) as ResearchProposalRecord;
 
       await tx.proposalSubmissionEvent.create({
@@ -559,7 +559,7 @@ export class ResearchProposalsService {
           submittedAt,
           snapshot: await this.submissionSnapshot(proposal),
           note: "PI nộp hồ sơ chính thức"
-        } as never
+        }
       });
 
       await tx.auditLog.create({
@@ -594,8 +594,8 @@ export class ResearchProposalsService {
     if (!this.transactional) {
       const result = await this.mutate(actor, proposalId, input.contextVersion, (service, a) => service.requestSupplement(a, proposalId, input));
       await this.notifyAfterCommit(async () => {
-        const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { id: true, code: true, title: true, ownerId: true } } as never)) as unknown as { id: string; code: string | null; title: string; ownerId: string } | null;
-        const request = (await this.prisma.proposalSupplementRequest.findFirst({ where: { proposalId, status: "open" }, orderBy: { requestedAt: "desc" } } as never)) as unknown as { id: string; reason: string; dueDate: Date } | null;
+        const proposal = (await this.prisma.researchProposal.findUnique({ where: { id: proposalId }, select: { id: true, code: true, title: true, ownerId: true } })) as unknown as { id: string; code: string | null; title: string; ownerId: string } | null;
+        const request = (await this.prisma.proposalSupplementRequest.findFirst({ where: { proposalId, status: "open" }, orderBy: { requestedAt: "desc" } })) as unknown as { id: string; reason: string; dueDate: Date } | null;
         if (!proposal) return [];
         return [{
           type: NOTIFICATION_TYPES.supplementRequested,
@@ -623,7 +623,7 @@ export class ResearchProposalsService {
     const updated = (await this.prisma.$transaction(async (tx) => {
       const record = (await tx.researchProposal.update({
         where: { id: proposalId },
-        data: { status: "supplement_requested" } as never
+        data: { status: "supplement_requested" }
       })) as ResearchProposalRecord;
 
       await tx.proposalSupplementRequest.create({
@@ -634,7 +634,7 @@ export class ResearchProposalsService {
           dueDate,
           requestedAt,
           status: "open"
-        } as never
+        }
       });
 
       await tx.proposalSubmissionEvent.create({
@@ -646,7 +646,7 @@ export class ResearchProposalsService {
           submittedAt: requestedAt,
           snapshot: await this.submissionSnapshot(proposal),
           note: "Staff yêu cầu bổ sung hồ sơ"
-        } as never
+        }
       });
 
       await tx.auditLog.create({
@@ -703,7 +703,7 @@ export class ResearchProposalsService {
           status: "resubmitted",
           submittedAt,
           submittedById: pi.id
-        } as never
+        }
       })) as ResearchProposalRecord;
 
       await tx.proposalSupplementRequest.update({
@@ -711,7 +711,7 @@ export class ResearchProposalsService {
         data: {
           status: "resolved",
           resolvedAt: submittedAt
-        } as never
+        }
       });
 
       await tx.proposalSubmissionEvent.create({
@@ -723,7 +723,7 @@ export class ResearchProposalsService {
           submittedAt,
           snapshot: await this.submissionSnapshot(proposal),
           note: "Nộp lại hồ sơ sau yêu cầu bổ sung"
-        } as never
+        }
       });
 
       await tx.auditLog.create({
@@ -910,7 +910,7 @@ export class ResearchProposalsService {
         authorizationConflictVersion: { increment: 1 },
         authorizationDelegationVersion: { increment: 1 },
         authorizationContextUpdatedAt: now
-      } as never
+      }
     });
   }
 
@@ -1137,12 +1137,12 @@ export class ResearchProposalsService {
                   ? member.effectiveFrom
                   : changedAt
             }
-          } as never);
+          });
         }
         if (creating.length) {
           await tx.proposalMember.createMany({
             data: creating.map((member) => ({ proposalId, ...member, status: "ACTIVE", effectiveFrom: changedAt, effectiveUntil: null }))
-          } as never);
+          });
         }
         // A submitted membership payload is an authorization-context refresh even when its
         // canonical set is unchanged; invalidate a capability obtained before this mutation.
@@ -1161,7 +1161,7 @@ export class ResearchProposalsService {
             authorizationDelegationVersion: { increment: 1 },
             authorizationConflictVersion: { increment: 1 },
             authorizationContextUpdatedAt: changedAt
-          } as never
+          }
         });
         if (expectedContextVersion && contextUpdate.count !== 1) {
           throw new ConflictException({
@@ -1652,7 +1652,7 @@ export class ResearchProposalsService {
     }
 
     // 2. Fetch logs from Prisma
-    const logs = await (this.prisma as any).auditLog.findMany({
+    const logs = await this.prisma.auditLog.findMany({
       where: {
         targetEntityId: proposalId,
       },

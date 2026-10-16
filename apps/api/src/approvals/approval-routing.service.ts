@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
@@ -45,7 +46,7 @@ export class ApprovalRoutingService {
       include: { submittedBy: { select: { displayName: true } }, steps: { include: { actor: { select: { displayName: true } } }, orderBy: { createdAt: "asc" } } },
       orderBy: { updatedAt: "desc" },
       take: INBOX_LIMIT
-    } as never)) as unknown as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
+    })) as unknown as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
     return {
       role: isResearchBoardHead(actor) ? "board_head" : isResearchManagementHead(actor) ? "head" : isLeadership(actor) || isScienceDeputyDirector(actor) ? "leadership" : "staff",
       submissions: rows.map((row) => this.toResponse(row))
@@ -60,7 +61,7 @@ export class ApprovalRoutingService {
     if (!["proposal", "project"].includes(subjectType)) throw new BadRequestException({ message: "Loại đối tượng không hợp lệ." });
     const academyWide = isLeadership(actor) || isScienceDeputyDirector(actor);
     const where: Record<string, unknown> = { subjectType, status: "PENDING", ...(academyWide ? {} : { hostOrganizationUnitId: { in: getOrganizationScopeIds(actor) } }) };
-    const rows = (await this.prisma.approvalSubmission.findMany({ where, select: { id: true, kind: true, subjectId: true, subjectRef: true, stage: true, signer: true } } as never)) as unknown as Array<{ id: string; kind: string; subjectId: string; subjectRef: string; stage: ApprovalStage; signer: string }>;
+    const rows = (await this.prisma.approvalSubmission.findMany({ where, select: { id: true, kind: true, subjectId: true, subjectRef: true, stage: true, signer: true } })) as unknown as Array<{ id: string; kind: string; subjectId: string; subjectRef: string; stage: ApprovalStage; signer: string }>;
     return { pending: rows.map((row) => ({ ...row, stageLabel: APPROVAL_STAGE_LABELS[row.stage] })) };
   }
 
@@ -72,7 +73,7 @@ export class ApprovalRoutingService {
       include: { submittedBy: { select: { displayName: true } }, steps: { include: { actor: { select: { displayName: true } } }, orderBy: { createdAt: "asc" } } },
       orderBy: { createdAt: "desc" },
       take: 50
-    } as never)) as unknown as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
+    })) as unknown as Array<ApprovalSubmissionRow & { submittedBy?: { displayName: string } | null; steps: StepRow[] }>;
     // Đọc theo phạm vi đơn vị (Ban giám đốc toàn Học viện); chủ nhiệm và người ngoài Phòng không xem hồ sơ trình nội bộ.
     const academyWide = isLeadership(actor) || isScienceDeputyDirector(actor);
     const scopeIds = getOrganizationScopeIds(actor);
@@ -95,7 +96,7 @@ export class ApprovalRoutingService {
       return { submission: updated, event: this.event(updated, recipients, next === "HEAD_REVIEW" ? `Trưởng ban QLKH đã trình: ${APPROVAL_KIND_LABELS[updated.kind]}` : `Trưởng phòng KHQS trình Ban giám đốc: ${APPROVAL_KIND_LABELS[updated.kind]}`, note) };
     });
     await this.dispatch(event);
-    return this.toResponse(submission as never);
+    return this.toResponse(submission);
   }
 
   /** Trả lại chuyên viên lập (bắt buộc lý do); thủ tục quay về trạng thái sửa được. */
@@ -111,10 +112,10 @@ export class ApprovalRoutingService {
       return { submission: updated, event: this.event(updated, [submission.submittedById], `Tờ trình bị trả lại: ${APPROVAL_KIND_LABELS[updated.kind]}`, note) };
     });
     await this.dispatch(event);
-    return this.toResponse(submission as never);
+    return this.toResponse(submission);
   }
 
-  private async lockPending(tx: any, submissionId: string) {
+  private async lockPending(tx: Prisma.TransactionClient, submissionId: string) {
     await tx.$queryRaw`SELECT id FROM approval_submissions WHERE id = ${submissionId} FOR UPDATE`;
     const submission = (await tx.approvalSubmission.findUnique({ where: { id: submissionId } })) as ApprovalSubmissionRow | null;
     if (!submission) throw new NotFoundException({ message: "Không tìm thấy tờ trình." });
@@ -132,12 +133,12 @@ export class ApprovalRoutingService {
     if (submission.submittedById === actor.id) throw new ForbiddenException({ message: "Không tự rà soát tờ trình của chính mình." });
   }
 
-  private async usersInScope(tx: any, systemRole: string, organizationUnitId: string) {
+  private async usersInScope(tx: Prisma.TransactionClient, systemRole: string, organizationUnitId: string) {
     const rows = (await tx.user.findMany({ where: { status: "active", systemRole, organizationScopes: { some: { organizationUnitId } } }, select: { id: true } })) as Array<{ id: string }>;
     return rows.map((row) => row.id);
   }
 
-  private async signers(tx: any, signer: string) {
+  private async signers(tx: Prisma.TransactionClient, signer: string) {
     const roles = signer === "DIRECTOR" ? ["LEADERSHIP_APPROVAL_AUTHORITY"] : ["LEADERSHIP_APPROVAL_AUTHORITY", "SCIENCE_DEPUTY_DIRECTOR"];
     const rows = (await tx.user.findMany({ where: { status: "active", systemRole: { in: roles } }, select: { id: true } })) as Array<{ id: string }>;
     return rows.map((row) => row.id);
@@ -201,7 +202,7 @@ function readNote(value: unknown, required: boolean) {
 }
 
 /** Trả lại thì thủ tục về trạng thái chuyên viên sửa được (theo từng loại thủ tục). */
-async function revertOnReturn(tx: any, submission: ApprovalSubmissionRow, actor: SafeUserContext, note: string) {
+async function revertOnReturn(tx: Prisma.TransactionClient, submission: ApprovalSubmissionRow, actor: SafeUserContext, note: string) {
   const returnedInfo = { returnReason: note, returnedAt: new Date().toISOString(), returnedByName: actor.displayName };
   switch (submission.kind) {
     case "EVALUATION_COUNCIL": {

@@ -305,8 +305,8 @@ export class ProposalDecisionsService {
           fromStatus: proposal.status,
           toStatus,
           packageRevision,
-          contextVersion: (input.contextVersion ?? null) as never,
-          packageSnapshot: packageSnapshot as never
+          contextVersion: (input.contextVersion ?? null),
+          packageSnapshot: packageSnapshot
         } as never,
         // Included so the response names the deciding authority, matching what `findDecisions`
         // returns on a later read of the same record.
@@ -341,9 +341,9 @@ export class ProposalDecisionsService {
     })) as unknown as ProposalDecisionRecord;
 
     await this.notifyAfterCommit(async () => {
-      const members = (await this.prisma.proposalMember.findMany({ where: { proposalId, status: "ACTIVE" }, select: { userId: true } } as never).catch(() => [])) as unknown as Array<{ userId: string | null }>;
+      const members = (await this.prisma.proposalMember.findMany({ where: { proposalId, status: "ACTIVE" }, select: { userId: true } }).catch(() => [])) as unknown as Array<{ userId: string | null }>;
       const approved = decision === PROPOSAL_DECISIONS.approved;
-      const managers = approved ? await researchManagersInScope(this.prisma as never, proposal.hostOrganizationUnitId) : [];
+      const managers = approved ? await researchManagersInScope(this.prisma, proposal.hostOrganizationUnitId) : [];
       const name = label(proposal);
       return [
         {
@@ -581,7 +581,7 @@ export class ProposalDecisionsService {
       },
       orderBy: { fullName: "asc" },
       take: 1000
-    } as never)) as unknown as Array<{
+    })) as unknown as Array<{
       id: string; linkedUserId: string | null; fullName: string; title?: string | null; militaryRank?: string | null; position?: string | null; profileType?: string | null;
       managementOrganizationUnitId?: string | null; managementOrganizationUnit?: { name: string } | null;
       academicRankCatalogItem?: { name: string } | null; academicDegreeCatalogItem?: { name: string } | null;
@@ -717,20 +717,20 @@ export class ProposalDecisionsService {
 
       for (const invitation of toActivate) {
         await retireStaleOpenAssignments(tx, proposalId, invitation.reviewerUserId, evidence.eventId, now);
-        await tx.proposalReviewAssignment.update({ where: { id: invitation.id }, data: { status: "assigned", effectiveFrom: now, dueDate } as never });
+        await tx.proposalReviewAssignment.update({ where: { id: invitation.id }, data: { status: "assigned", effectiveFrom: now, dueDate } });
         established.push(invitation.reviewerUserId);
       }
       for (const item of toCreate) {
         await retireStaleOpenAssignments(tx, proposalId, item.userId, evidence.eventId, now);
         await tx.proposalReviewAssignment.create({
-          data: { proposalId, reviewedSubmissionEventId: evidence.eventId, reviewerUserId: item.userId, assignmentRole: item.role, status: "assigned", assignedById: actor.id, assignedAt: now, effectiveFrom: now, dueDate } as never
+          data: { proposalId, reviewedSubmissionEventId: evidence.eventId, reviewerUserId: item.userId, assignmentRole: item.role, status: "assigned", assignedById: actor.id, assignedAt: now, effectiveFrom: now, dueDate }
         });
         invited.push(item);
       }
       // Lời mời còn lại của vòng không thuộc hội đồng được duyệt thì thu hồi.
       await tx.proposalReviewAssignment.updateMany({
         where: { proposalId, reviewedSubmissionEventId: evidence.eventId, status: "invited" },
-        data: { status: "revoked", revokedAt: now, effectiveUntil: now } as never
+        data: { status: "revoked", revokedAt: now, effectiveUntil: now }
       });
 
       const updatedCouncil: Record<string, unknown> = {
@@ -748,7 +748,7 @@ export class ProposalDecisionsService {
       await tx.researchProposal.update({
         where: { id: proposalId },
         data: {
-          councilMetadata: updatedCouncil as never,
+          councilMetadata: updatedCouncil,
           // Quyền xem hồ sơ của các thành viên thay đổi.
           authorizationRelationshipVersion: { increment: 1 },
           authorizationDelegationVersion: { increment: 1 },
@@ -757,9 +757,9 @@ export class ProposalDecisionsService {
       });
       // Hồ sơ mới nộp chuyển sang "Đang đánh giá" qua kiểm tra trạng thái, có dòng thời gian như mọi chuyển trạng thái.
       if (proposal.status === PROPOSAL_STATUS.submitted || proposal.status === PROPOSAL_STATUS.resubmitted) {
-        await updateProposalStatusGuarded(tx as never, proposalId, proposal.status, PROPOSAL_STATUS.underReview);
+        await updateProposalStatusGuarded(tx, proposalId, proposal.status, PROPOSAL_STATUS.underReview);
         await tx.proposalSubmissionEvent.create({
-          data: { proposalId, actorId: actor.id, fromStatus: proposal.status, toStatus: PROPOSAL_STATUS.underReview, submittedAt: now, note: `Lãnh đạo duyệt hội đồng (${decisionNumber}), mở vòng đánh giá` } as never
+          data: { proposalId, actorId: actor.id, fromStatus: proposal.status, toStatus: PROPOSAL_STATUS.underReview, submittedAt: now, note: `Lãnh đạo duyệt hội đồng (${decisionNumber}), mở vòng đánh giá` }
         });
       }
 
@@ -808,7 +808,7 @@ export class ProposalDecisionsService {
         rejectedByName: actor.displayName
       };
 
-      await tx.researchProposal.update({ where: { id: proposalId }, data: { councilMetadata: updatedCouncil as never } });
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { councilMetadata: updatedCouncil } });
       await closeApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.evaluationCouncil, subjectType: "proposal", subjectId: proposalId }, "REJECTED", rejectionReason);
       await auditLog.record({
         action: "reject-council",
@@ -852,7 +852,7 @@ export class ProposalDecisionsService {
       };
       const updatedCouncil = { ...currentCouncil, councilMinutes };
 
-      await tx.researchProposal.update({ where: { id: proposalId }, data: { councilMetadata: updatedCouncil as never } });
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { councilMetadata: updatedCouncil } });
       await auditLog.record({
         action: "record-council-minutes",
         result: "success",
@@ -1021,7 +1021,7 @@ export class ProposalDecisionsService {
         invitationsSentAt: action === "save" ? current.council.invitationsSentAt ?? null : now.toISOString()
       };
       const updated = { ...current, council };
-      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated as never } });
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated } });
       if (action === "submit") {
         const submission = await openApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.irbCouncil, subjectType: "proposal", subjectId: proposalId }, { title: proposal.title, hostOrganizationUnitId: proposal.hostOrganizationUnitId });
         routing = (await boardReviewEvent(tx, submission)) as WorkflowEvent;
@@ -1068,7 +1068,7 @@ export class ProposalDecisionsService {
         reason: JSON.stringify({ memberId, role: current.role, reason: reason || undefined })
       });
       const irb = irbOf({ irbMetadata: current.proposal.irbMetadata });
-      const recipients = irb.council.proposedById ? [irb.council.proposedById] : await researchManagersInScope(tx as never, current.proposal.hostOrganizationUnitId);
+      const recipients = irb.council.proposedById ? [irb.council.proposedById] : await researchManagersInScope(tx, current.proposal.hostOrganizationUnitId);
       notice = irbInvitationResponseEvent(proposalId, current.proposal, recipients, actor.displayName || actor.username, current.role as IrbMemberRole, response, reason);
       return (await tx.proposalIrbMember.findUnique({ where: { id: memberId } })) as IrbMemberRow;
     });
@@ -1121,7 +1121,7 @@ export class ProposalDecisionsService {
       await tx.researchProposal.update({
         where: { id: proposalId },
         // Quyền xem hồ sơ của các thành viên thay đổi.
-        data: { irbMetadata: updated as never, authorizationRelationshipVersion: { increment: 1 }, authorizationContextUpdatedAt: now } as never
+        data: { irbMetadata: updated, authorizationRelationshipVersion: { increment: 1 }, authorizationContextUpdatedAt: now }
       });
       await closeApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.irbCouncil, subjectType: "proposal", subjectId: proposalId }, "APPROVED", approvalNote || undefined);
       await auditLog.record({
@@ -1151,7 +1151,7 @@ export class ProposalDecisionsService {
       await assertReadyForLeadership(tx, actor, { kind: APPROVAL_KINDS.irbCouncil, subjectType: "proposal", subjectId: proposalId });
       const reason = readIrbReasonInput(input, "Lý do trả lại");
       const updated = { ...current, council: { ...current.council, status: "rejected", rejectionReason: reason, rejectedAt: new Date().toISOString(), rejectedById: actor.id, rejectedByName: actor.displayName || actor.username } };
-      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated as never } });
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated } });
       await closeApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.irbCouncil, subjectType: "proposal", subjectId: proposalId }, "REJECTED", reason);
       await auditLog.record({ action: "reject-irb-council", result: "success", actorId: actor.id, targetEntity: "proposal", targetEntityId: proposalId, username: actor.username, reason: JSON.stringify({ proposalId, reason }) });
       if (current.council.proposedById) notice = irbStaffEvent(proposalId, proposal, [current.council.proposedById], "Ban giám đốc trả lại tờ trình Hội đồng IRB", `Lý do: ${reason}. Điều chỉnh danh sách rồi trình lại.`);
@@ -1186,7 +1186,7 @@ export class ProposalDecisionsService {
         submittedAt: new Date().toISOString()
       };
       const updated = { ...current, reviews: [...current.reviews.filter((item) => item.reviewerId !== actor.id), review] };
-      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated as never } });
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated } });
       await auditLog.record({ action: "submit-irb-review", result: "success", actorId: actor.id, targetEntity: "proposal", targetEntityId: proposalId, username: actor.username, reason: JSON.stringify({ proposalId, recommendation }) });
       return { success: true, irb: updated };
     });
@@ -1217,7 +1217,7 @@ export class ProposalDecisionsService {
       const now = new Date().toISOString();
       const conclusion = { ...fields, status: action === "finalize" ? "finalized" : "draft", recordedById: actor.id, recordedByName: actor.displayName || actor.username, recordedAt: now, ...(action === "finalize" ? { finalizedAt: now } : {}) };
       const updated = { ...current, conclusion };
-      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated as never } });
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated } });
       await auditLog.record({ action: "save-irb-conclusion", result: "success", actorId: actor.id, targetEntity: "proposal", targetEntityId: proposalId, username: actor.username, reason: JSON.stringify({ proposalId, conclusionAction: action, decision: fields.decision }) });
       if (action === "finalize" && current.council.proposedById) notice = irbStaffEvent(proposalId, proposal, [current.council.proposedById], "Thư ký đã chốt kết luận Hội đồng IRB", "Kiểm tra và trình kết luận qua Phòng KHQS để Ban giám đốc ký cấp Giấy chứng nhận.");
       return { success: true, irb: updated };
@@ -1238,7 +1238,7 @@ export class ProposalDecisionsService {
       if (current.conclusion?.status !== "finalized") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Thư ký hội đồng chưa chốt kết luận." });
       const now = new Date().toISOString();
       const updated = { ...current, conclusion: { ...current.conclusion, status: "submitted", submittedAt: now, submittedById: actor.id, submittedByName: actor.displayName || actor.username } };
-      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated as never } });
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated } });
       const submission = await openApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.irbCertificate, subjectType: "proposal", subjectId: proposalId }, { title: proposal.title, hostOrganizationUnitId: proposal.hostOrganizationUnitId });
       routing = (await boardReviewEvent(tx, submission)) as WorkflowEvent;
       await auditLog.record({ action: "submit-irb-conclusion", result: "success", actorId: actor.id, targetEntity: "proposal", targetEntityId: proposalId, username: actor.username, reason: JSON.stringify({ proposalId, decision: current.conclusion.decision }) });
@@ -1260,7 +1260,7 @@ export class ProposalDecisionsService {
       await assertReadyForLeadership(tx, actor, { kind: APPROVAL_KINDS.irbCertificate, subjectType: "proposal", subjectId: proposalId });
       const reason = readIrbReasonInput(input, "Lý do trả lại");
       const updated = { ...current, conclusion: { ...current.conclusion, status: "returned", returnReason: reason, returnedAt: new Date().toISOString(), returnedByName: actor.displayName || actor.username } };
-      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated as never } });
+      await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated } });
       await closeApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.irbCertificate, subjectType: "proposal", subjectId: proposalId }, "RETURNED", reason);
       await auditLog.record({ action: "return-irb-conclusion", result: "success", actorId: actor.id, targetEntity: "proposal", targetEntityId: proposalId, username: actor.username, reason: JSON.stringify({ proposalId, reason }) });
       const recipients = [current.conclusion.recordedById, current.conclusion.submittedById].filter((id): id is string => typeof id === "string" && !!id);
@@ -1340,7 +1340,7 @@ export class ProposalDecisionsService {
           updatedAt: new Date().toISOString()
         };
         const updated = { ...current, certificate, ...(conclusion ? { conclusion: { ...conclusion, status: "signed" } } : {}) };
-        await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated as never } });
+        await tx.researchProposal.update({ where: { id: proposalId }, data: { irbMetadata: updated } });
         await closeApprovalSubmission(tx, actor, { kind: APPROVAL_KINDS.irbCertificate, subjectType: "proposal", subjectId: proposalId }, "APPROVED");
         await auditLog.record({
           action: "update-irb-status",
