@@ -414,6 +414,10 @@ export function completeProposalCheck(id: string, contextVersion: ViewerAuthoriz
   return requestJson<{ proposal: ResearchProposal }>(`/research-proposals/${id}/checks/complete`, { method: "POST", body: JSON.stringify({ contextVersion }) });
 }
 
+export function updateProposalCode(id: string, code: string, reason: string, contextVersion: ViewerAuthorizationV1["contextVersion"]) {
+  return requestJson<{ proposal: ResearchProposal }>(`/research-proposals/${id}/code`, { method: "POST", body: JSON.stringify({ code, reason, contextVersion }) });
+}
+
 export async function loadProposalCatalogs() {
   const response = await requestJson<{ items: import("./admin-api").CatalogItem[] }>("/research-proposals/catalogs");
   return response.items;

@@ -111,6 +111,16 @@ test("a proposal goes from submission to the Director's approval through every r
   assert.equal(officerRow.officerUserId, officer.id, "tự giao theo mảng Cơ sở");
   const id = draft.id;
 
+  // Mã số: chuyên viên phụ trách sửa được kèm lý do (ghi nhật ký); chuyên viên khác, chủ nhiệm bị chặn; không trùng mã.
+  await assert.rejects(() => s.proposals.updateCode(otherStaff, id, { code: "DT-E2E-01", reason: "Sửa theo sổ đăng ký" }), { status: 403 });
+  await assert.rejects(() => s.proposals.updateCode(pi, id, { code: "DT-E2E-01", reason: "Sửa theo sổ đăng ký" }), { status: 403 });
+  await s.proposals.updateCode(officer, id, { code: "ĐT.HVQY.2026-01", reason: "Sửa theo sổ đăng ký" });
+  assert.equal((await db.researchProposal.findUnique({ where: { id } })).code, "ĐT.HVQY.2026-01");
+  const codeAudit = await db.auditLog.findFirst({ where: { action: "update-proposal-code", targetEntityId: id } });
+  assert.equal(codeAudit.reason, "Sửa theo sổ đăng ký");
+  const other = await db.researchProposal.create({ data: { intakePeriodId: intake.id, ownerId: pi.id, hostOrganizationUnitId: khoa.id, title: "Hồ sơ khác", status: "submitted", code: "TRUNG-MA" } });
+  await assert.rejects(() => s.proposals.updateCode(officer, id, { code: other.code, reason: "Thử trùng" }), { status: 409 });
+
   // Chỉ chuyên viên phụ trách điều phối; chuyên viên khác bị chặn; Phó phòng và Trưởng ban xem được (chỉ xem).
   await s.proposals.completeCheck(officer, id, {});
   await assert.rejects(() => s.decisions.proposeCouncil(otherStaff, id, { members: [], action: "save" }), /chuyên viên phụ trách/);

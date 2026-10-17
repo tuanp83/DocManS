@@ -89,13 +89,16 @@ test("Board Head checks completeness and requests supplements in unit scope with
   const proposal = { id: "p", ownerId: "pi", hostOrganizationUnitId: "unit-1", status: "submitted", updatedAt: now, authorizationContextUpdatedAt: now, authorizationRelationshipVersion: 1, authorizationConflictVersion: 1, authorizationDelegationVersion: 1 };
   const none = { role: "none", label: "Không tham gia", roles: [], labels: [], isOwner: false, isParticipant: false, relationshipEffectiveFrom: {}, relationshipEffectiveUntil: {} };
   const view = (who, extra = {}) => projectProposalViewerAuthorizationV1({ actor: who, proposal, participation: none, reviewAccess: { isAssignedReviewer: false }, managementOfficer: { resolved: true, officer: null }, canRead: true, canEdit: false, canManageFiles: false, completenessCheckCompleted: false, ...extra });
-  for (const action of ["proposal.completeness.check", "proposal.supplement.request"]) {
+  for (const action of ["proposal.completeness.check", "proposal.supplement.request", "proposal.code.update"]) {
     assert.ok(has(view(boardHead), action), action);
     assert.ok(!has(view(deputyHead), action), action);
     assert.equal(view({ ...boardHead, organizationScopes: [] }).blockedActions.find((item) => item.action === action)?.code, "ORG_SCOPE_DENIED");
     assert.equal(view(boardHead, { reviewAccess: { isAssignedReviewer: true } }).blockedActions.find((item) => item.action === action)?.code, "CONFLICT_DENIED");
   }
   assert.equal(view(boardHead, { completenessCheckCompleted: true }).blockedActions.find((item) => item.action === "proposal.completeness.check")?.code, "WORKFLOW_STATE_DENIED");
+  // Mã số sửa được tới trước khi lãnh đạo quyết định (mã đã in trên quyết định phê duyệt).
+  for (const status of ["under_review", "ready_for_approval"]) assert.ok(has(view(boardHead, { proposal: { ...proposal, status } }), "proposal.code.update"), status);
+  for (const status of ["draft", "approved", "rejected"]) assert.equal(view(boardHead, { proposal: { ...proposal, status } }).blockedActions.find((item) => item.action === "proposal.code.update")?.code, "WORKFLOW_STATE_DENIED", status);
 });
 
 test("Board Head assigns reviewers and coordinates the council in unit scope; Deputy Head only monitors", () => {

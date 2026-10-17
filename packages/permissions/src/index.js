@@ -33,6 +33,7 @@ export const PERMISSION_ACTION_IDS_V1 = [
     "proposal.review.submit",
     "proposal.supplement.request",
   "proposal.completeness.check",
+    "proposal.code.update",
     "proposal.management-officer.assign",
     "proposal.management-officer.revoke",
     "project.read",

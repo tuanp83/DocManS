@@ -44,7 +44,8 @@ import { PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js
 import type { ProposalMemberPersistInput, ProposalMissingItem } from "../proposals-shared/proposal-types.js";
 import { ProposalParticipationService } from "./proposal-participation.service.js";
 import { allocateProposalCode } from "./proposal-code.js";
-import { projectProposalViewerAuthorizationV1 } from "../permissions/proposal-capability-v1.js";
+import { PROPOSAL_CODE_EDITABLE_STATUSES, projectProposalViewerAuthorizationV1 } from "../permissions/proposal-capability-v1.js";
+import type { UpdateProposalCodeDto } from "./research-proposals.dto.js";
 import {
   assertDateRange,
   normalizeRequiredPackage,
@@ -961,6 +962,21 @@ export class ResearchProposalsService {
     await this.prisma.proposalSubmissionEvent.create({ data: { proposalId, actorId: actor.id, fromStatus: proposal.status, toStatus: proposal.status, note: "Đã kiểm tra hồ sơ đầy đủ", snapshot: { kind: "completeness_check", submissionEventId: currentSubmission.eventId, readiness, note: readOptionalText(input.note, "note", 2000) ?? "" } } });
     await this.prisma.researchProposal.update({ where: { id: proposalId }, data: { authorizationContextUpdatedAt: new Date() } });
     await this.auditLog.record({ action: "check-proposal-completeness", result: "success", actorId: actor.id, targetEntity: "research-proposal", targetEntityId: proposalId });
+    return this.getProposal(actor, proposalId);
+  }
+
+  /** Sửa mã số đề tài (cấp tự động khi nộp) trước khi lãnh đạo quyết định; lý do được ghi vào nhật ký hệ thống. */
+  async updateCode(actor: SafeUserContext, proposalId: string, input: UpdateProposalCodeDto): Promise<any> {
+    if (!this.transactional) return this.mutate(actor, proposalId, input.contextVersion, (service, a) => service.updateCode(a, proposalId, input));
+    const proposal = await this.findProposal(proposalId);
+    await this.assertCanRequestSupplement(actor, proposal);
+    if (!PROPOSAL_CODE_EDITABLE_STATUSES.includes(proposal.status)) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ sửa được mã số khi hồ sơ đã nộp và lãnh đạo chưa quyết định." });
+    if (proposal.code === input.code) return this.getProposal(actor, proposalId);
+    const taken = (await this.prisma.researchProposal.findFirst({ where: { code: input.code, NOT: { id: proposalId } }, select: { id: true } }))
+      || (await this.prisma.approvedProject.findFirst({ where: { code: input.code }, select: { id: true } }));
+    if (taken) throw new ConflictException({ code: "PROPOSAL_CODE_TAKEN", field: "code", message: `Mã số "${input.code}" đã dùng cho hồ sơ hoặc đề tài khác.` });
+    await this.prisma.researchProposal.update({ where: { id: proposalId }, data: { code: input.code } });
+    await this.auditLog.record({ action: "update-proposal-code", result: "success", actorId: actor.id, targetEntity: "research-proposal", targetEntityId: proposalId, username: actor.username, reason: input.reason, beforeFacts: { code: proposal.code }, afterFacts: { code: input.code } });
     return this.getProposal(actor, proposalId);
   }
 
