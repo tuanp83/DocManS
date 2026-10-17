@@ -28,7 +28,7 @@ import {
   type UnitOption
 } from "@/lib/conferences-api";
 
-const MAILING_TARGETS: Record<MailingKind, string[]> = { invitation: ["draft", "sent"], reminder: ["sent", "accepted"], change_notice: ["sent", "accepted"] };
+const MAILING_TARGETS: Record<MailingKind, string[]> = { invitation: ["draft", "sent"], reminder: ["sent", "accepted"], change_notice: ["sent", "accepted"], program: ["accepted"], proceedings: ["accepted"] };
 const EMPTY_MANUAL = { kind: "speaker" as InvitationKind, fullName: "", academicTitle: "", email: "", isInternal: false, organizationUnitId: "", externalOrganization: "" };
 
 type Props = { conference: ManagedConference; onChanged: () => Promise<void> };

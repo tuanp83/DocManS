@@ -3,11 +3,11 @@ import { getApiBaseUrl } from "@/lib/session";
 
 export type ConferenceStatus = "draft" | "preparing" | "inviting" | "submission_closed" | "program_published" | "completed" | "cancelled";
 export type ConferenceLevel = "academy" | "faculty" | "national" | "international";
-export type ConferenceAction = "edit" | "officer.assign" | "invitation.manage" | "mailing.send" | "paper.review" | "export" | "close-submission" | "complete" | "cancel";
+export type ConferenceAction = "edit" | "officer.assign" | "invitation.manage" | "mailing.send" | "paper.review" | "export" | "program.manage" | "proceedings.manage" | "close-submission" | "complete" | "cancel";
 export type InvitationKind = "speaker" | "delegate";
 export type InvitationStatus = "draft" | "sent" | "accepted" | "declined" | "revoked";
 export type PaperKind = "abstract" | "full_paper";
-export type MailingKind = "invitation" | "reminder" | "change_notice";
+export type MailingKind = "invitation" | "reminder" | "change_notice" | "program" | "proceedings";
 
 export type UnitOption = { id: string; code: string; name: string };
 
@@ -49,7 +49,36 @@ export type MyPaper = {
   id: string; title: string | null; authors: PaperAuthor[]; status: string; withdrawReason: string | null; version: string; versions: PaperVersion[]; openRevisions: Revision[];
   viewer: { canSubmitAbstract: boolean; abstractBlockReason: string | null; canSubmitFullPaper: boolean; fullPaperBlockReason: string | null; canWithdraw: boolean } | null;
 };
+export type ProgramSnapshot = {
+  conference: { title: string; code: string; location: string; startsAt: string; endsAt: string; hostUnitName: string };
+  sessions: Array<{
+    kind: "plenary" | "track"; name: string; room: string | null; chairName: string | null; secretaryName: string | null; startsAt: string; endsAt: string;
+    items: Array<{ type: "paper"; startsAt: string; endsAt: string; title: string; speaker: string; organization: string | null; authors: PaperAuthor[] } | { type: "break"; startsAt: string; endsAt: string; label: string }>;
+  }>;
+};
+export type PublishedProgram = { versionNumber: number; publishedAt: string; snapshot: ProgramSnapshot };
+export type ProceedingsInfo = { id: string; versionNumber: number; isbn: string | null; note?: string | null; uploadedAt: string; fileName: string; sizeBytes: number; uploadedBy?: { displayName: string } };
+
+export type ScheduleIssue = { code: string; message: string; sessionIds: string[]; paperIds?: string[] };
+export type ProgramSlot = { id: string; paperId: string; position: number; manuallyAdjusted: boolean; title: string | null; speaker: string; paperStatus: string; startsAt: string | null; endsAt: string | null; overflowMinutes: number };
+export type ProgramSession = {
+  id: string; kind: "plenary" | "track"; name: string; room: string | null; chairName: string | null; secretaryName: string | null; startsAt: string; endsAt: string; slotMinutes: number | null; sortOrder: number;
+  breaks: Array<{ id: string; label: string; startsAt: string; endsAt: string }>; slots: ProgramSlot[];
+};
+export type ProgramState = {
+  defaultSlotMinutes: number; changedSincePublish: boolean; sessions: ProgramSession[]; issues: ScheduleIssue[];
+  unscheduled: Array<{ id: string; title: string | null; speaker: string }>;
+  versions: Array<{ id: string; versionNumber: number; publishedAt: string; publishedBy: { displayName: string } }>;
+  proceedings: ProceedingsInfo[];
+};
+export type SessionInput = {
+  kind: "plenary" | "track"; name: string; room?: string | null; chairName?: string | null; secretaryName?: string | null; startsAt: string; endsAt: string; slotMinutes?: number | null; sortOrder?: number;
+  breaks: Array<{ label: string; startsAt: string; endsAt: string }>;
+};
+
 export type MyConference = {
+  program: PublishedProgram | null;
+  proceedings: ProceedingsInfo | null;
   invitation: { id: string; kind: InvitationKind; status: InvitationStatus; sentAt: string | null; respondedAt: string | null; canRespond: boolean };
   conference: Omit<ConferenceInfo, "statusLabel"> & { statusLabel: string };
   paper: MyPaper | null;
@@ -66,12 +95,15 @@ export const INVITATION_STATUS_TONES: Record<InvitationStatus, string> = { draft
 export const INVITATION_KIND_LABELS: Record<InvitationKind, string> = { speaker: "Báo cáo viên", delegate: "Đại biểu" };
 export const PAPER_KIND_LABELS: Record<PaperKind, string> = { abstract: "Tóm tắt", full_paper: "Toàn văn" };
 export const PAPER_STATUS_LABELS: Record<string, string> = { awaiting_abstract: "Chưa nộp tóm tắt", abstract_submitted: "Đã nộp tóm tắt", full_paper_submitted: "Đã nộp toàn văn", scheduled: "Đã xếp lịch", withdrawn: "Đã rút" };
-export const MAILING_KIND_LABELS: Record<MailingKind, string> = { invitation: "Thư mời", reminder: "Thư nhắc", change_notice: "Thông báo thay đổi" };
+export const MAILING_KIND_LABELS: Record<MailingKind, string> = { invitation: "Thư mời", reminder: "Thư nhắc", change_notice: "Thông báo thay đổi", program: "Chương trình hội nghị", proceedings: "Kỷ yếu" };
 export const CONFERENCE_EVENT_LABELS: Record<string, string> = {
   create: "Tạo hội nghị", update: "Sửa thông tin", "officer.assign": "Giao chuyên viên phụ trách", "officer.reassign": "Giao lại chuyên viên phụ trách", "officer.revoke": "Thu hồi chuyên viên phụ trách",
   "open-invitations": "Bắt đầu mời và nhận bài", "close-submission": "Đóng nhận bài", complete: "Kết thúc hội nghị", cancel: "Huỷ hội nghị",
   "invitation.add": "Thêm khách mời", "invitation.update": "Sửa khách mời", "invitation.revoke": "Huỷ lời mời", "invitation.accept": "Nhận lời", "invitation.decline": "Từ chối",
   "mailing.invitation": "Gửi thư mời", "mailing.reminder": "Gửi thư nhắc", "mailing.change_notice": "Gửi thông báo thay đổi",
+  "mailing.program": "Gửi chương trình", "mailing.proceedings": "Gửi kỷ yếu",
+  "program.settings": "Đổi thời lượng mỗi báo cáo", "program.session-create": "Thêm phiên", "program.session-update": "Sửa phiên", "program.session-delete": "Xoá phiên",
+  "program.slots": "Xếp báo cáo vào phiên", "program.publish": "Chốt chương trình", "proceedings.upload": "Tải kỷ yếu",
   "paper.create": "Tạo báo cáo", "paper.submit-abstract": "Nộp tóm tắt", "paper.submit-full": "Nộp toàn văn", "paper.request-revision": "Yêu cầu sửa", "paper.withdraw": "Rút báo cáo", "paper.cancel": "Huỷ báo cáo"
 };
 
@@ -127,3 +159,23 @@ export async function lookupPublicInvitation(token: string) { return post<Public
 export async function respondPublicInvitation(token: string, decision: "accept" | "decline", reason?: string) {
   return post<{ status: string; account: "existing" | "created" | "pending_activation" | null; activationPath: string | null }>("/public/conference-invitations/respond", { token, decision, reason });
 }
+
+// ---- Chương trình chi tiết, kỷ yếu (Đợt 2) ----
+
+export async function getProgram(id: string) { return json<ProgramState>(`${conferencePath(id)}/program`); }
+export async function updateProgramSettings(id: string, defaultSlotMinutes: number) { return json<ProgramState>(`${conferencePath(id)}/program/settings`, { method: "PATCH", body: JSON.stringify({ defaultSlotMinutes }) }); }
+export async function createSession(id: string, input: SessionInput) { return post<ProgramState>(`${conferencePath(id)}/program/sessions`, input); }
+export async function updateSession(id: string, sessionId: string, input: SessionInput) { return json<ProgramState>(`${conferencePath(id)}/program/sessions/${encodeURIComponent(sessionId)}`, { method: "PATCH", body: JSON.stringify(input) }); }
+export async function deleteSession(id: string, sessionId: string) { return json<ProgramState>(`${conferencePath(id)}/program/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }); }
+export async function setSessionSlots(id: string, sessionId: string, paperIds: string[]) { return json<ProgramState>(`${conferencePath(id)}/program/sessions/${encodeURIComponent(sessionId)}/slots`, { method: "PUT", body: JSON.stringify({ paperIds }) }); }
+export async function setSlotTime(id: string, slotId: string, input: { startsAt: string; endsAt: string } | { clear: true }) { return json<ProgramState>(`${conferencePath(id)}/program/slots/${encodeURIComponent(slotId)}`, { method: "PATCH", body: JSON.stringify(input) }); }
+export async function publishProgram(id: string, acknowledgeUnscheduled = false) { return post<{ versionNumber: number; papers: number; unscheduled: number }>(`${conferencePath(id)}/program/publish`, { acknowledgeUnscheduled }); }
+export async function getPublished(id: string) { return json<{ program: PublishedProgram | null; proceedings: ProceedingsInfo | null }>(`${conferencePath(id)}/published`); }
+export async function uploadProceedings(id: string, file: File, input: { isbn?: string; note?: string }) {
+  const form = new FormData();
+  form.append("file", file);
+  if (input.isbn) form.append("isbn", input.isbn);
+  if (input.note) form.append("note", input.note);
+  return apiRequest<ProgramState>(`${conferencePath(id)}/proceedings`, { method: "POST", body: form }, "Không tải được kỷ yếu lên.");
+}
+export function proceedingsDownloadUrl(id: string, proceedingsId: string) { return `${getApiBaseUrl()}${conferencePath(id)}/proceedings/${encodeURIComponent(proceedingsId)}/download`; }
