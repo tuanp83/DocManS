@@ -154,7 +154,17 @@ describe("workspace smoke checks", () => {
       "ProjectHealthSnapshot",
       "StudentResearchProject",
       "StudentResearchEvent",
-      "StudentResearchDocument"
+      "StudentResearchDocument",
+      "ScientificConference",
+      "ConferenceOfficer",
+      "ConferenceInvitation",
+      "ConferenceInvitationToken",
+      "ConferencePaper",
+      "ConferencePaperVersion",
+      "ConferenceRevisionRequest",
+      "ConferenceMailing",
+      "ConferenceMailingRecipient",
+      "ConferenceEvent"
     ]);
     assert.match(schemaSource, /@@map\("users"\)/);
     assert.match(schemaSource, /@@map\("system_role_migration_issues"\)/);

@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   ListTodo,
   NotebookPen,
+  Presentation,
   Settings2,
   ShieldCheck,
   UserRoundSearch,
@@ -183,6 +184,20 @@ export const routeDefinitions: Record<string, RouteDefinition> = {
     summaryTitle: "Kho tài liệu KH&CN",
     summaryBody: "Cung cấp các văn bản pháp lý, quy chế và biểu mẫu chuẩn phục vụ nghiên cứu viên và hội đồng."
   },
+  "/conferences": {
+    eyebrow: "Hội nghị khoa học",
+    title: "Hội nghị khoa học",
+    description: "Tạo hội nghị, giao chuyên viên phụ trách, mời nhà khoa học và theo dõi bài nộp.",
+    summaryTitle: "Hội nghị khoa học",
+    summaryBody: "Trưởng phòng KHQS tạo hội nghị và giao chuyên viên; chuyên viên mời khách, gửi thư và theo dõi tóm tắt, toàn văn."
+  },
+  "/my-conferences": {
+    eyebrow: "Hội nghị khoa học",
+    title: "Hội nghị của tôi",
+    description: "Thư mời tham dự hội nghị, nộp tóm tắt và toàn văn báo cáo tham luận.",
+    summaryTitle: "Hội nghị của tôi",
+    summaryBody: "Nhận lời hoặc từ chối thư mời; báo cáo viên nộp tóm tắt và toàn văn trước hạn."
+  },
   "/student-research": {
     eyebrow: "NCKH Sinh viên",
     title: "Đề tài NCKH Sinh viên",
@@ -201,6 +216,8 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
+    { href: "/conferences", label: "Hội nghị khoa học", icon: Presentation },
+    { href: "/my-conferences", label: "Hội nghị của tôi", icon: Presentation },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch }
   ],
   // Phó GĐ phụ trách Khoa học: ký thành lập hội đồng, gia hạn/điều chỉnh không đổi kinh phí.
@@ -213,6 +230,8 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
     { href: "/notifications", label: "Thông báo", icon: Bell },
+    { href: "/conferences", label: "Hội nghị khoa học", icon: Presentation },
+    { href: "/my-conferences", label: "Hội nghị của tôi", icon: Presentation },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch }
   ],
   // Phó phòng KHQS: theo dõi tiến độ, số lượng đề tài (chỉ xem).
@@ -226,6 +245,8 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/notifications", label: "Thông báo", icon: Bell },
+    { href: "/conferences", label: "Hội nghị khoa học", icon: Presentation },
+    { href: "/my-conferences", label: "Hội nghị của tôi", icon: Presentation },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch }
   ],
   // Trưởng ban QLKH: rà soát việc của chuyên viên, trình Trưởng phòng.
@@ -239,6 +260,8 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
+    { href: "/conferences", label: "Hội nghị khoa học", icon: Presentation },
+    { href: "/my-conferences", label: "Hội nghị của tôi", icon: Presentation },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch }
   ],
   RESEARCH_MANAGEMENT_HEAD: [
@@ -253,6 +276,8 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
+    { href: "/conferences", label: "Hội nghị khoa học", icon: Presentation },
+    { href: "/my-conferences", label: "Hội nghị của tôi", icon: Presentation },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch }
   ],
   RESEARCH_MANAGEMENT_STAFF: [
@@ -268,6 +293,8 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/tasks", label: "Giao việc", icon: ClipboardCheck },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
     { href: "/student-research", label: "NCKH Sinh viên", icon: BookCopy },
+    { href: "/conferences", label: "Hội nghị khoa học", icon: Presentation },
+    { href: "/my-conferences", label: "Hội nghị của tôi", icon: Presentation },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch }
   ],
   RESEARCHER_INTERNAL_USER: [
@@ -277,6 +304,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/my-proposals", label: "Hồ sơ của tôi", icon: FileText },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
     { href: "/student-research", label: "NCKH Sinh viên", icon: BookCopy },
+    { href: "/my-conferences", label: "Hội nghị của tôi", icon: Presentation },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch },
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/notifications", label: "Thông báo", icon: Bell }
@@ -299,6 +327,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/reports", label: "Báo cáo", icon: BarChart3 },
     { href: "/notifications", label: "Thông báo", icon: Bell },
+    { href: "/my-conferences", label: "Hội nghị của tôi", icon: Presentation },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch }
   ],
   EXTERNAL_RESEARCHER_USER: [
@@ -307,6 +336,7 @@ export const navigationByRole: Record<UserRole, NavigationItem[]> = {
     { href: "/invitation-to-review", label: "Được mời phản biện", icon: FileCheck2 },
     { href: "/my-proposals", label: "Hồ sơ của tôi", icon: FileText },
     { href: "/projects", label: "Theo dõi đề tài", icon: FolderKanban },
+    { href: "/my-conferences", label: "Hội nghị của tôi", icon: Presentation },
     { href: "/my-profile", label: "Lý lịch khoa học", icon: UserRoundSearch },
     { href: "/documents", label: "Văn bản & Biểu mẫu", icon: BookOpen },
     { href: "/notifications", label: "Thông báo", icon: Bell }

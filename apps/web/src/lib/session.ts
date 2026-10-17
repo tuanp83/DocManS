@@ -2,6 +2,13 @@ import type { SystemRole } from "@rtms/permissions";
 
 export const AUTH_SESSION_COOKIE = "rtms_session";
 
+/** Trang mở được khi chưa đăng nhập: đăng nhập, đặt mật khẩu (kích hoạt tài khoản), trả lời thư mời hội nghị. */
+export const PUBLIC_ROUTES = ["/login", "/password-reset", "/conference-invitation"];
+
+export function isPublicRoute(pathname: string) {
+  return PUBLIC_ROUTES.includes(pathname);
+}
+
 export type CurrentUser = {
   mustChangePassword?: boolean;
   researcherProfileId?: string;

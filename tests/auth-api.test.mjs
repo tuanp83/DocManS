@@ -239,7 +239,11 @@ describe("auth API behavior", () => {
     const middlewareSource = readFileSync("apps/web/src/middleware.ts", "utf8");
 
     assert.equal(/hasSessionCookie\s*&&\s*pathname\s*===\s*["']\/login["']/.test(middlewareSource), false);
-    assert.match(middlewareSource, /pathname === "\/password-reset"/);
+    assert.match(middlewareSource, /isPublicPath\(pathname\)/);
+    // Trang công khai khai báo một chỗ, dùng chung cho middleware, khung giao diện và SessionProvider.
+    const sessionSource = readFileSync("apps/web/src/lib/session.ts", "utf8");
+    assert.match(sessionSource, /PUBLIC_ROUTES = \["\/login", "\/password-reset", "\/conference-invitation"\]/);
+    assert.match(readFileSync("apps/web/src/components/auth/session-provider.tsx", "utf8"), /!isPublicRoute\(window\.location\.pathname\)/);
     assert.match(middlewareSource, /!hasSessionCookie && !isPublicRoute/);
     assert.match(middlewareSource, /hasValidSession/);
     assert.match(middlewareSource, /\/auth\/me/);
