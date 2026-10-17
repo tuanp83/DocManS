@@ -66,6 +66,12 @@ async function approvedProposal(hostOrg = orgA) {
 
 const context = async (actor, projectId) => (await projects.getProject(actor, projectId)).viewerAuthorization.contextVersion;
 
+/** Một tệp báo cáo đã tải lên đề tài (chỉ bản ghi, không cần MinIO): báo cáo phải có tệp đính kèm mới nộp được. */
+async function reportFile(projectId) {
+  const file = await db.fileRecord.create({ data: { relatedEntityType: "approved_project", relatedEntityId: projectId, filePurpose: "PROJECT_EVIDENCE", originalFileName: "bao-cao.pdf", mimeType: "application/pdf", sizeBytes: 1024, storageBucket: "docmans-files", storageObjectKey: `test/${projectId}/${Date.now()}-${Math.random()}.pdf`, uploadedById: pi.id } });
+  return [file.id];
+}
+
 describe("Approved project execution on real PostgreSQL (5-role model)", () => {
   before(async () => {
     database = await createMigratedDatabase("projects");
@@ -149,11 +155,21 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     const checkpoint = await db.projectCheckpoint.findFirst({ where: { projectId: id } });
     const report = await projects.createReportDraft(pi, id, { contextVersion: await context(pi, id), checkpointId: checkpoint.id, reportingPeriodStart: day("2031-01-01"), reportingPeriodEnd: day("2031-06-30"), progressResults: "Đã hoàn thành 50%." });
     await assert.rejects(projects.createReportDraft(member, id, { contextVersion: await context(member, id), reportingPeriodStart: day("2031-01-01"), reportingPeriodEnd: day("2031-02-01"), progressResults: "x" }), ForbiddenException);
-    await projects.submitReport(pi, id, { contextVersion: await context(pi, id), reportId: report.id });
+    // Không có tệp báo cáo thì không nộp được.
+    await assert.rejects(projects.submitReport(pi, id, { contextVersion: await context(pi, id), reportId: report.id }), (error) => error.getResponse?.().code === "REPORT_INCOMPLETE");
+    await projects.submitReport(pi, id, { contextVersion: await context(pi, id), reportId: report.id, evidenceFileIds: await reportFile(id) });
     await assert.rejects(projects.reviewReport(otherStaff, id, { contextVersion: await context(otherStaff, id), reportId: report.id }), ForbiddenException);
     await projects.reviewReport(staff, id, { contextVersion: await context(staff, id), reportId: report.id });
     await projects.acceptReport(staff, id, { contextVersion: await context(staff, id), reportId: report.id, reason: "Đạt" });
     assert.equal((await db.projectCheckpoint.findUnique({ where: { id: checkpoint.id } })).status, "completed");
+
+    // Chủ nhiệm thấy lý do chuyên viên yêu cầu bổ sung (trước đây chỉ chuyên viên và lãnh đạo thấy).
+    const second = await projects.createReportDraft(pi, id, { contextVersion: await context(pi, id), reportingPeriodStart: day("2031-07-01"), reportingPeriodEnd: day("2031-08-31"), progressResults: "Báo cáo bổ sung." });
+    await projects.submitReport(pi, id, { contextVersion: await context(pi, id), reportId: second.id, evidenceFileIds: await reportFile(id) });
+    await projects.requestReportSupplement(staff, id, { contextVersion: await context(staff, id), reportId: second.id, reason: "Thiếu số liệu thí nghiệm tháng 8", responseDeadline: new Date(Date.now() + 7 * 86_400_000) });
+    const seenByPi = (await projects.getProject(pi, id)).reports.find((item) => item.id === second.id);
+    assert.equal(seenByPi.status, "supplement_requested");
+    assert.equal(seenByPi.reviewReason, "Thiếu số liệu thí nghiệm tháng 8");
 
     // Extension: the officer validates and prepares; only leadership decides.
     const extension = await projects.createExtension(pi, id, { contextVersion: await context(pi, id), proposedValues: { requestedEndDate: "2032-03-31" }, reason: "Cần thêm thời gian thử nghiệm" });
@@ -237,7 +253,7 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     // Mốc 1 hoàn thành khi báo cáo của nó được chấp nhận.
     const checkpoint = await db.projectCheckpoint.findFirst({ where: { projectId: id, milestoneId: milestones[0].id } });
     const report = await projects.createReportDraft(pi, id, { contextVersion: await context(pi, id), checkpointId: checkpoint.id, reportingPeriodStart: day("2031-01-01"), reportingPeriodEnd: day("2031-03-31"), progressResults: "Hoàn thành khảo sát." });
-    await projects.submitReport(pi, id, { contextVersion: await context(pi, id), reportId: report.id });
+    await projects.submitReport(pi, id, { contextVersion: await context(pi, id), reportId: report.id, evidenceFileIds: await reportFile(id) });
     await projects.reviewReport(staff, id, { contextVersion: await context(staff, id), reportId: report.id });
     await projects.acceptReport(staff, id, { contextVersion: await context(staff, id), reportId: report.id, reason: "Đạt" });
     const done = await db.projectMilestone.findUnique({ where: { id: milestones[0].id } });
@@ -281,7 +297,7 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
 
     // "Việc của tôi" (ngày giả định 20/6/2031): mốc 2 sắp đến hạn cho chủ nhiệm và thành viên; báo cáo chờ xét cho chuyên viên.
     const general = await projects.createReportDraft(pi, id, { contextVersion: await context(pi, id), reportingPeriodStart: day("2031-04-01"), reportingPeriodEnd: day("2031-05-31"), progressResults: "Báo cáo chung." });
-    await projects.submitReport(pi, id, { contextVersion: await context(pi, id), reportId: general.id });
+    await projects.submitReport(pi, id, { contextVersion: await context(pi, id), reportId: general.id, evidenceFileIds: await reportFile(id) });
     const workQueue = new WorkQueueService(db, projects);
     const at = day("2031-06-20");
     const piQueue = await workQueue.forUser(pi, at);
