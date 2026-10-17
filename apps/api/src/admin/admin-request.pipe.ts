@@ -1,4 +1,5 @@
 import { BadRequestException, type PipeTransform } from "@nestjs/common";
+import { MAX_POSITIONS_PER_USER } from "./admin-users.service.js";
 
 type FieldRule = {
   maxLength?: number;
@@ -39,3 +40,14 @@ export function adminRequestPipe(fields: Record<string, FieldRule>): PipeTransfo
     }
   };
 }
+
+/** Chức danh của tài khoản: thay toàn bộ danh sách; từng phần tử được kiểm tra chặt ở service. */
+export const userPositionsPipe: PipeTransform<unknown, { positions: unknown[] }> = {
+  transform(value: unknown) {
+    const input = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+    if (!input || !Array.isArray(input.positions) || input.positions.length > MAX_POSITIONS_PER_USER) {
+      throw new BadRequestException({ message: `Danh sách chức danh không hợp lệ (tối đa ${MAX_POSITIONS_PER_USER}).` });
+    }
+    return { positions: input.positions };
+  }
+};

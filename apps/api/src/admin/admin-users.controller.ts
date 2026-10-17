@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import { assertSystemAdmin, type RequestWithCurrentUser } from "./admin-access.js";
-import { adminRequestPipe } from "./admin-request.pipe.js";
+import { adminRequestPipe, userPositionsPipe } from "./admin-request.pipe.js";
 import { AdminUsersService } from "./admin-users.service.js";
 
 const createUserPipe = adminRequestPipe({
@@ -70,10 +70,9 @@ export class AdminUsersController {
 
   /** Chức danh của tài khoản tại các đơn vị (chỉ để hiển thị). Thay toàn bộ danh sách. */
   @Put(":id/positions")
-  async setUserPositions(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: unknown) {
+  async setUserPositions(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(userPositionsPipe) body: { positions: unknown[] }) {
     const actor = assertSystemAdmin(request.currentUser);
-    const input = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
-    return { user: await this.usersService.setUserPositions(actor, id, input) };
+    return { user: await this.usersService.setUserPositions(actor, id, body) };
   }
 
   @Post(":id/password-reset")

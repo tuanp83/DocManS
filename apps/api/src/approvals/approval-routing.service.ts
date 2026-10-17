@@ -189,7 +189,7 @@ export class ApprovalRoutingService {
   }
 }
 
-function readNote(value: unknown, required: boolean) {
+export function readNote(value: unknown, required: boolean) {
   if (value === undefined || value === null || value === "") {
     if (required) throw new BadRequestException({ message: "Nhập lý do trả lại." });
     return null;

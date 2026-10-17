@@ -168,6 +168,7 @@ export type ProposalDecisionRecord = {
 
 export type ProposalDecisionPackage = {
   proposalId: string;
+  contextVersion?: ViewerAuthorizationV1["contextVersion"];
   proposalStatus: string;
   proposalStatusLabel: string;
   title?: string;
@@ -360,7 +361,7 @@ export async function loadProposalReviewProgress(proposalId: string) {
 
 export async function saveProposalEvaluationSummary(
   proposalId: string,
-  input: { summary: string; recommendation: string; contextVersion?: unknown }
+  input: { summary: string; recommendation: string; revision: number; contextVersion?: unknown }
 ) {
   return requestJson<{ evaluationSummary: ProposalEvaluationSummary; proposalStatus: string }>(
     `/research-proposals/${proposalId}/evaluation-summary`,
@@ -369,17 +370,17 @@ export async function saveProposalEvaluationSummary(
 }
 
 /** Chốt bản nháp tổng hợp (khoá nội dung cùng danh sách phân công và phiếu của vòng hiện tại). */
-export async function finalizeProposalEvaluationSummary(proposalId: string, input: { revision?: number; contextVersion?: unknown } = {}) {
+export async function finalizeProposalEvaluationSummary(proposalId: string, input: { revision: number; contextVersion?: unknown }) {
   return requestJson<{ evaluationSummary: ProposalEvaluationSummary; proposalStatus: string }>(`/research-proposals/${proposalId}/evaluation-summary/finalize`, { method: "POST", body: JSON.stringify(input) });
 }
 
 /** Mở lại bản đã chốt về nháp (chưa trình), kèm lý do. */
-export async function reopenProposalEvaluationSummary(proposalId: string, input: { reason: string; revision?: number; contextVersion?: unknown }) {
+export async function reopenProposalEvaluationSummary(proposalId: string, input: { reason: string; revision: number; contextVersion?: unknown }) {
   return requestJson<{ evaluationSummary: ProposalEvaluationSummary; proposalStatus: string }>(`/research-proposals/${proposalId}/evaluation-summary/reopen`, { method: "POST", body: JSON.stringify(input) });
 }
 
 /** Trình lãnh đạo bản tổng hợp đã chốt; hồ sơ chuyển "chờ phê duyệt". */
-export async function submitProposalEvaluationPackage(proposalId: string, input: { revision?: number; contextVersion?: unknown } = {}) {
+export async function submitProposalEvaluationPackage(proposalId: string, input: { revision: number; contextVersion?: unknown }) {
   return requestJson<{ evaluationSummary: ProposalEvaluationSummary; proposalStatus: string }>(`/research-proposals/${proposalId}/evaluation-summary/submit`, { method: "POST", body: JSON.stringify(input) });
 }
 
@@ -404,7 +405,7 @@ export async function decideProposal(
 
 export async function approveProposalBudget(
   proposalId: string,
-  payload: { approvedBudget: number; budgetNote?: string }
+  payload: { approvedBudget: number; budgetNote?: string; contextVersion?: unknown }
 ) {
   return requestJson<{ success: boolean; proposalId: string; approvedAmount: number; budgetMetadata: Record<string, unknown> }>(
     `/research-proposals/${proposalId}/approve-budget`,

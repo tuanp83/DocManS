@@ -258,7 +258,7 @@ describe("tổng hợp kết quả", () => {
     expect(screen.getByRole("button", { name: "Chốt bản tổng hợp" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Lưu nháp tổng hợp" }));
-    await waitFor(() => expect(api.saveProposalEvaluationSummary).toHaveBeenCalledWith("p1", { summary: "Đạt yêu cầu", recommendation: "approve" }));
+    await waitFor(() => expect(api.saveProposalEvaluationSummary).toHaveBeenCalledWith("p1", { summary: "Đạt yêu cầu", recommendation: "approve", revision: 2 }));
     expect(await screen.findByText("Đã lưu bản nháp tổng hợp.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Chốt bản tổng hợp" })).toBeEnabled());
 

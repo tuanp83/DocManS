@@ -3,7 +3,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { uploadInterceptorOptions } from "./upload-limits.js";
 import { SessionAuthGuard } from "../../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../../proposals-shared/proposal-types.js";
-import { listFilesPipe, type ListFilesDto, updateFilePipe, type UpdateFileDto, uploadFilePipe, type UploadFileDto } from "./files.dto.js";
+import { deleteFilePipe, listFilesPipe, type ListFilesDto, updateFilePipe, type UpdateFileDto, uploadFilePipe, type UploadFileDto } from "./files.dto.js";
 import { FilesService } from "./files.service.js";
 import { sendObjectContent } from "./send-object-content.js";
 
@@ -91,9 +91,9 @@ export class FilesController {
   }
 
   @Delete(":id")
-  async deleteFile(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: { contextVersion?: unknown }) {
+  async deleteFile(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(deleteFilePipe) body: { contextVersion: unknown }) {
     return {
-      file: await this.filesService.deleteFile(request.currentUser!, id, body?.contextVersion)
+      file: await this.filesService.deleteFile(request.currentUser!, id, body.contextVersion)
     };
   }
 

@@ -1,4 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
+// @ts-ignore: runtime package is JavaScript; repository consumers use its TypeScript source contract.
+import { isContextVersionTokenV1, type ContextVersionTokenV1 } from "@rtms/permissions";
 import { readProposalTeamRole } from "./proposal-participation.js";
 import type { ProposalMemberInput, RequiredPackageItem } from "./proposal-types.js";
 
@@ -191,4 +193,31 @@ function readMaxSizeMb(value: unknown) {
   }
 
   return numberValue;
+}
+
+/**
+ * Phiên bản hồ sơ client đang xem, bắt buộc ở mọi thao tác ghi lên hồ sơ qua HTTP: máy chủ đối chiếu trong giao dịch
+ * (proposal-mutation.ts) và từ chối nếu hồ sơ đã đổi, nên không ai ghi đè thay đổi của người khác mà không biết.
+ */
+export function readContextVersion(input: Record<string, unknown>) {
+  if (!isContextVersionTokenV1(input.contextVersion)) {
+    throw new BadRequestException({ code: "CONTEXT_VERSION_REQUIRED", message: "Thiếu phiên bản dữ liệu đang xem. Vui lòng tải lại trang rồi thực hiện lại." });
+  }
+  return input.contextVersion as ContextVersionTokenV1;
+}
+
+/** Phiên bản bản tổng hợp đánh giá client đang xem (0 khi chưa có bản nào). */
+export function readRevision(input: Record<string, unknown>) {
+  const revision = Number(input.revision);
+  if (input.revision === undefined || input.revision === null || input.revision === "" || !Number.isInteger(revision) || revision < 0) {
+    throw new BadRequestException({ code: "CONTEXT_VERSION_REQUIRED", message: "Thiếu phiên bản bản tổng hợp đang xem. Vui lòng tải lại trang rồi thực hiện lại." });
+  }
+  return revision;
+}
+
+/** Thân yêu cầu phải là một đối tượng JSON (thân rỗng được coi là đối tượng rỗng). */
+export function readBodyObject(value: unknown) {
+  if (value === undefined || value === null || value === "") return {} as Record<string, unknown>;
+  if (typeof value !== "object" || Array.isArray(value)) throw new BadRequestException({ message: "Dữ liệu gửi lên không hợp lệ." });
+  return value as Record<string, unknown>;
 }

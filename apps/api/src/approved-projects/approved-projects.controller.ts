@@ -47,7 +47,7 @@ export class ApprovedProjectsController {
   async revoke(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(revokeProjectOfficerPipe) body: RevokeProjectOfficerDto) { return { officer: await this.projects.revokeOfficer(req.currentUser!, id, body) }; }
 
   @Post(":id/setup")
-  async setup(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown>) { return { setup: await this.projects.configureSetup(req.currentUser!, id, body ?? {}) }; }
+  async setup(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(closureBodyPipe) body: Record<string, unknown>) { return { setup: await this.projects.configureSetup(req.currentUser!, id, body) }; }
 
   @Post(":id/setup/confirm")
   async confirm(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(projectMutationPipe) body: ProjectMutationDto) { return { project: await this.projects.confirmSetup(req.currentUser!, id, body) }; }

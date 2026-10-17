@@ -211,7 +211,8 @@ export function ProposalDecisionPanel({
     try {
       await approveProposalBudget(proposalId, {
         approvedBudget: approvedNum,
-        budgetNote: budgetNote.trim() || requestedNote || "Ngân sách sự nghiệp NCKH Học viện Quân y năm 2026"
+        budgetNote: budgetNote.trim() || requestedNote || "Ngân sách sự nghiệp NCKH Học viện Quân y năm 2026",
+        contextVersion: decisionPackage?.contextVersion
       });
       setBudgetMessage(`Đã duyệt kinh phí thực hiện: ${formatVndNumber(approvedNum)} VND (${numberToVietnameseWords(approvedNum)}).`);
       setConfirmingBudget(false);

@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards, Query } from
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
 import {
+  completeProposalCheckPipe,
   createResearchProposalDraftPipe,
   requestProposalSupplementPipe,
   proposalMutationPipe,
@@ -71,8 +72,8 @@ export class ResearchProposalsController {
   }
 
   @Post(":id/checks/complete")
-  async completeCheck(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return { proposal: await this.proposalsService.completeCheck(request.currentUser!, id, body ?? {}) };
+  async completeCheck(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(completeProposalCheckPipe) body: { contextVersion: unknown }) {
+    return { proposal: await this.proposalsService.completeCheck(request.currentUser!, id, body) };
   }
 
   @Post(":id/resubmit")

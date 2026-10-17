@@ -1735,6 +1735,21 @@ describe("Evidence binding (mang từ thanhdotien278/DocManS): submission round 
     assert.equal(result.proposalStatus, "ready_for_approval");
   });
 
+  it("hai người cùng sửa bản nháp tổng hợp: người lưu trên bản cũ bị từ chối, không ghi đè", async () => {
+    const services = createServices();
+    const { proposal } = await createFullyAssignedProposalUnderReview(services);
+    const reviewData = { scoreData: FULL_SCORES, comment: "Nhận xét", recommendation: "approve" };
+    for (const user of [reviewerUser, secondReviewerUser, councilMemberUser, councilMemberUser2, councilMemberUser3]) await services.reviews.submitMyReview(user, proposal.id, reviewData);
+    await services.summaries.saveEvaluationSummary(councilSecretaryUser, proposal.id, { summary: "Bản của người thứ nhất.", recommendation: "approve", revision: 0 });
+    await assert.rejects(
+      () => services.summaries.saveEvaluationSummary(councilSecretaryUser, proposal.id, { summary: "Bản của người thứ hai, sửa trên bản trống.", recommendation: "reject", revision: 0 }),
+      /vừa được người khác thay đổi/
+    );
+    assert.equal(services.prisma.store.evaluationSummaries[0].summary, "Bản của người thứ nhất.");
+    await services.summaries.saveEvaluationSummary(councilSecretaryUser, proposal.id, { summary: "Sửa tiếp trên bản mới nhất.", recommendation: "approve", revision: 1 });
+    assert.equal(services.prisma.store.evaluationSummaries[0].revision, 2);
+  });
+
   it("council approval needs a submitted council proposal, binds generated assignments to the current round, and is refused once the package is finalized", async () => {
     const services = createServices();
     const store = services.prisma.store;

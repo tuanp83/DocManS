@@ -195,6 +195,8 @@ export class ProposalDecisionsService {
 
     return {
       proposalId,
+      // Gửi lại khi duyệt kinh phí: hồ sơ đổi sau khi tải gói thì máy chủ từ chối, không ghi đè.
+      contextVersion: proposalContextVersion(proposal as never),
       proposalStatus: proposal.status,
       proposalStatusLabel: PROPOSAL_STATUS_LABELS[proposal.status] ?? proposal.status,
       title: proposal.title,

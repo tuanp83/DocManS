@@ -8,6 +8,7 @@ import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
 import {
   createProposalIntakePeriodPipe,
+  intakePeriodStatusPipe,
   listProposalIntakePeriodsQueryPipe,
   updateProposalIntakePeriodPipe,
   type CreateProposalIntakePeriodDto,
@@ -58,12 +59,12 @@ export class ProposalIntakePeriodsController {
   }
 
   @Post(":id/open")
-  async openPeriod(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return { intakePeriod: await this.intakePeriodsService.openPeriod(request.currentUser!, id, body ?? {}) };
+  async openPeriod(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(intakePeriodStatusPipe) body: { contextVersion: string }) {
+    return { intakePeriod: await this.intakePeriodsService.openPeriod(request.currentUser!, id, body) };
   }
 
   @Post(":id/close")
-  async closePeriod(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return { intakePeriod: await this.intakePeriodsService.closePeriod(request.currentUser!, id, body ?? {}) };
+  async closePeriod(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(intakePeriodStatusPipe) body: { contextVersion: string }) {
+    return { intakePeriod: await this.intakePeriodsService.closePeriod(request.currentUser!, id, body) };
   }
 }

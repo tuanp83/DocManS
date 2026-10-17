@@ -4,6 +4,15 @@ import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.
 import { PROPOSAL_DECISIONS, ProposalDecisionsService } from "./proposal-decisions.service.js";
 import { ProposalEvaluationSummaryService } from "./proposal-evaluation-summary.service.js";
 import {
+  approveIrbCouncilPipe,
+  declineIrbInvitationPipe,
+  irbCertificatePipe,
+  irbConclusionPipe,
+  irbReviewPipe,
+  proposeIrbCouncilPipe,
+  rejectIrbCouncilPipe,
+  returnIrbConclusionPipe,
+  submitIrbConclusionPipe,
   approveCouncilPipe,
   councilMinutesPipe,
   proposeCouncilPipe,
@@ -265,7 +274,7 @@ export class ProposalEvaluationsController {
   async proposeIrbCouncil(
     @Req() request: RequestWithCurrentUser,
     @Param("id") id: string,
-    @Body() body: Record<string, unknown>
+    @Body(proposeIrbCouncilPipe) body: Record<string, unknown>
   ) {
     return this.decisions.proposeIrbCouncil(request.currentUser!, id, body);
   }
@@ -274,9 +283,9 @@ export class ProposalEvaluationsController {
   async approveIrbCouncil(
     @Req() request: RequestWithCurrentUser,
     @Param("id") id: string,
-    @Body() body: Record<string, unknown> = {}
+    @Body(approveIrbCouncilPipe) body: Record<string, unknown>
   ) {
-    return this.decisions.approveIrbCouncil(request.currentUser!, id, body ?? {});
+    return this.decisions.approveIrbCouncil(request.currentUser!, id, body);
   }
 
   @Post(":id/irb/members/:memberId/accept")
@@ -285,38 +294,38 @@ export class ProposalEvaluationsController {
   }
 
   @Post(":id/irb/members/:memberId/decline")
-  async declineIrbInvitation(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Param("memberId") memberId: string, @Body() body: Record<string, unknown> = {}) {
+  async declineIrbInvitation(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Param("memberId") memberId: string, @Body(declineIrbInvitationPipe) body: Record<string, unknown>) {
     return this.decisions.respondToIrbInvitation(request.currentUser!, id, memberId, { response: "decline", reason: body?.reason });
   }
 
   @Post(":id/irb/reject-council")
-  async rejectIrbCouncil(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown> = {}) {
-    return this.decisions.rejectIrbCouncil(request.currentUser!, id, body ?? {});
+  async rejectIrbCouncil(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(rejectIrbCouncilPipe) body: Record<string, unknown>) {
+    return this.decisions.rejectIrbCouncil(request.currentUser!, id, body);
   }
 
   /** Thư ký lập kết luận: action=save|finalize. */
   @Post(":id/irb/conclusion")
-  async saveIrbConclusion(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown> = {}) {
-    return this.decisions.saveIrbConclusion(request.currentUser!, id, body ?? {});
+  async saveIrbConclusion(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(irbConclusionPipe) body: Record<string, unknown>) {
+    return this.decisions.saveIrbConclusion(request.currentUser!, id, body);
   }
 
   /** Chuyên viên trình kết luận đã chốt qua Phòng KHQS. */
   @Post(":id/irb/conclusion/submit")
-  async submitIrbConclusion(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown> = {}) {
-    return this.decisions.submitIrbConclusion(request.currentUser!, id, body ?? {});
+  async submitIrbConclusion(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(submitIrbConclusionPipe) body: Record<string, unknown>) {
+    return this.decisions.submitIrbConclusion(request.currentUser!, id, body);
   }
 
   /** Ban giám đốc trả kết luận về thư ký. */
   @Post(":id/irb/conclusion/return")
-  async returnIrbConclusion(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown> = {}) {
-    return this.decisions.returnIrbConclusion(request.currentUser!, id, body ?? {});
+  async returnIrbConclusion(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(returnIrbConclusionPipe) body: Record<string, unknown>) {
+    return this.decisions.returnIrbConclusion(request.currentUser!, id, body);
   }
 
   @Post(":id/irb/review")
   async submitIrbReview(
     @Req() request: RequestWithCurrentUser,
     @Param("id") id: string,
-    @Body() body: Record<string, unknown>
+    @Body(irbReviewPipe) body: Record<string, unknown>
   ) {
     return this.decisions.submitIrbReview(request.currentUser!, id, body);
   }
@@ -325,7 +334,7 @@ export class ProposalEvaluationsController {
   async updateIRBStatus(
     @Req() request: RequestWithCurrentUser,
     @Param("id") id: string,
-    @Body() body: Record<string, unknown>
+    @Body(irbCertificatePipe) body: Record<string, unknown>
   ) {
     return this.decisions.updateIRBStatus(request.currentUser!, id, body);
   }

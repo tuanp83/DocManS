@@ -1,4 +1,6 @@
 import type { Prisma } from "@prisma/client";
+import { jsonValue } from "../proposals-shared/prisma-json.js";
+import { joinedTransaction } from "../proposals-shared/proposal-mutation.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
@@ -146,8 +148,8 @@ export class ProjectClosureService {
       }
       const after = { totalBudget, ...totals, settlementStatus: accepted.settlementStatus, milestones: milestones.length, costItems: accepted.costItems.length };
       const before = previous ? { totalBudget: money(previous.totalBudget), totalDisbursed: money(previous.totalDisbursed), totalSettled: money(previous.totalSettled), settlementStatus: previous.settlementStatus } : null;
-      await tx.projectHistory.create({ data: { projectId, actorId: currentActor.id, action: "project.finance.update", reason: "Cập nhật giải ngân và quyết toán", beforeFacts: before, afterFacts: after, createdAt: now } });
-      await new AuditLogService(tx).record({ action: "update-project-finance", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: projectId, username: currentActor.username, beforeFacts: previous ? { disbursement: previousRecord } : undefined, afterFacts: { disbursement: { ...accepted, milestones, ...totals, totalBudget } } });
+      await tx.projectHistory.create({ data: { projectId, actorId: currentActor.id, action: "project.finance.update", reason: "Cập nhật giải ngân và quyết toán", beforeFacts: jsonValue(before), afterFacts: jsonValue(after), createdAt: now } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "update-project-finance", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: projectId, username: currentActor.username, beforeFacts: previous ? { disbursement: previousRecord } : undefined, afterFacts: { disbursement: { ...accepted, milestones, ...totals, totalBudget } } });
       const recipients = this.projects.projectRecipients(project, loaded.officer);
       notify({ type: NOTIFICATION_TYPES.disbursementUpdate, userIds: recipients.pi, excludeUserIds: [currentActor.id], title: "Cập nhật giải ngân", message: `Thông tin giải ngân, quyết toán của đề tài ${label(project)} vừa được cập nhật.`, link: projectLink(projectId), metadata: { projectId } });
 
@@ -403,7 +405,7 @@ export class ProjectClosureService {
       const now = await readTransactionClockV1(tx);
       await tx.approvedProject.update({ where: { id: projectId }, data: { status: PROJECT_STATUSES.closed, closedAt: now, closedById: currentActor.id, closureNote: note, aggregateVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
       await tx.projectHistory.create({ data: { projectId, actorId: currentActor.id, action: "project.close", fromStatus: project.status, toStatus: PROJECT_STATUSES.closed, reason: note ?? "Đóng đề tài sau thanh lý", beforeFacts: { status: project.status }, afterFacts: { status: PROJECT_STATUSES.closed, liquidationNumber: project.liquidation?.liquidationNumber ?? null }, createdAt: now } });
-      await new AuditLogService(tx).record({ action: "close-approved-project", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: projectId, username: currentActor.username, reason: note ?? undefined, beforeFacts: { status: project.status }, afterFacts: { status: PROJECT_STATUSES.closed } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "close-approved-project", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: projectId, username: currentActor.username, reason: note ?? undefined, beforeFacts: { status: project.status }, afterFacts: { status: PROJECT_STATUSES.closed } });
       const recipients = this.projects.projectRecipients(project, loaded.officer);
       notify({ type: NOTIFICATION_TYPES.projectClosed, userIds: recipients.team, excludeUserIds: [currentActor.id], title: `Đề tài đã đóng: ${project.title}`, message: `Đề tài ${label(project)} đã hoàn tất nghiệm thu, thanh lý và được đóng hồ sơ.`, link: projectLink(projectId), metadata: { projectId } });
       return this.reload(tx, currentActor, projectId);
@@ -713,14 +715,14 @@ export class ProjectClosureService {
   }
 
   /** Số văn bản: dùng số người dùng nhập (kiểm tra trùng) hoặc cấp số kế tiếp theo năm. */
-  private async documentNumber(tx: any, kind: { scope: string; format: (year: number, sequence: string) => string; takenMessage: string }, requested: string, date: Date, isTaken: (number: string) => Promise<boolean>) {
+  private async documentNumber(tx: Prisma.TransactionClient, kind: { scope: string; format: (year: number, sequence: string) => string; takenMessage: string }, requested: string, date: Date, isTaken: (number: string) => Promise<boolean>) {
     if (requested) {
       if (await isTaken(requested)) throw new ConflictException({ code: "DOCUMENT_NUMBER_TAKEN", message: kind.takenMessage });
       return requested;
     }
     const year = date.getUTCFullYear();
     for (let attempt = 0; attempt < 50; attempt += 1) {
-      const [row] = await tx.$queryRaw`
+      const [row] = await tx.$queryRaw<Array<{ value: number }>>`
         INSERT INTO document_number_counters (scope, year, last_value) VALUES (${kind.scope}, ${year}, 1)
         ON CONFLICT (scope, year) DO UPDATE SET last_value = document_number_counters.last_value + 1
         RETURNING last_value AS value`;
@@ -730,17 +732,17 @@ export class ProjectClosureService {
     throw new ConflictException({ code: "DOCUMENT_NUMBER_TAKEN", message: kind.takenMessage });
   }
 
-  private async transition(tx: any, actor: SafeUserContext, project: LoadedProject, toStatus: string, action: string, reason: string, facts: AnyRecord, now: Date) {
+  private async transition(tx: Prisma.TransactionClient, actor: SafeUserContext, project: LoadedProject, toStatus: string, action: string, reason: string, facts: AnyRecord, now: Date) {
     await tx.approvedProject.update({ where: { id: project.id }, data: { status: toStatus, aggregateVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
     await tx.projectHistory.create({ data: { projectId: project.id, actorId: actor.id, action, fromStatus: project.status, toStatus, reason, beforeFacts: { status: project.status }, afterFacts: { status: toStatus, ...facts }, createdAt: now } });
-    await new AuditLogService(tx).record({ action, result: "success", actorId: actor.id, targetEntity: "approved-project", targetEntityId: project.id, username: actor.username, reason, beforeFacts: { status: project.status }, afterFacts: { status: toStatus, ...facts } });
+    await new AuditLogService(joinedTransaction(tx)).record({ action, result: "success", actorId: actor.id, targetEntity: "approved-project", targetEntityId: project.id, username: actor.username, reason, beforeFacts: { status: project.status }, afterFacts: { status: toStatus, ...facts } });
   }
 
   /** Bước nghiệp vụ không đổi trạng thái đề tài: vẫn tăng aggregateVersion để giao diện cũ phải tải lại. */
-  private async record(tx: any, actor: SafeUserContext, project: LoadedProject, action: string, reason: string, facts: AnyRecord, now: Date) {
+  private async record(tx: Prisma.TransactionClient, actor: SafeUserContext, project: LoadedProject, action: string, reason: string, facts: AnyRecord, now: Date) {
     await tx.approvedProject.update({ where: { id: project.id }, data: { aggregateVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
     await tx.projectHistory.create({ data: { projectId: project.id, actorId: actor.id, action, reason, afterFacts: facts, createdAt: now } });
-    await new AuditLogService(tx).record({ action, result: "success", actorId: actor.id, targetEntity: "approved-project", targetEntityId: project.id, username: actor.username, reason, afterFacts: facts });
+    await new AuditLogService(joinedTransaction(tx)).record({ action, result: "success", actorId: actor.id, targetEntity: "approved-project", targetEntityId: project.id, username: actor.username, reason, afterFacts: facts });
   }
 
   private async reload(tx: Prisma.TransactionClient, actor: SafeUserContext, projectId: string) {

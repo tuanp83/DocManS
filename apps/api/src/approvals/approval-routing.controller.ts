@@ -2,10 +2,8 @@ import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nest
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
 import { ApprovalRoutingService } from "./approval-routing.service.js";
+import { advanceSubmissionPipe, returnSubmissionPipe } from "./approval-routing.dto.js";
 
-function body(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
 
 /** Hồ sơ trình qua Phòng KHQS: hàng chờ, trình/duyệt, trả lại, lịch sử theo đối tượng. */
 @Controller("api/v1/approval-submissions")
@@ -29,12 +27,12 @@ export class ApprovalRoutingController {
   }
 
   @Post(":id/advance")
-  async advance(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() payload: unknown) {
-    return { submission: await this.routing.advance(request.currentUser!, id, body(payload)) };
+  async advance(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(advanceSubmissionPipe) body: { note: string | null }) {
+    return { submission: await this.routing.advance(request.currentUser!, id, body) };
   }
 
   @Post(":id/return")
-  async returnToStaff(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body() payload: unknown) {
-    return { submission: await this.routing.returnToStaff(request.currentUser!, id, body(payload)) };
+  async returnToStaff(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(returnSubmissionPipe) body: { note: string | null }) {
+    return { submission: await this.routing.returnToStaff(request.currentUser!, id, body) };
   }
 }

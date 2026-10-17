@@ -174,6 +174,8 @@ export class ProposalEvaluationSummaryService {
     const recommendation = this.readRecommendation(input.recommendation);
     const round = await this.readRound(proposal);
     const existing = await this.findSummary(proposalId);
+    // Hai người cùng sửa bản nháp: người lưu sau trên bản cũ bị từ chối thay vì ghi đè.
+    this.assertExpectedRevision(existing ?? ({ revision: 0 } as EvaluationSummaryRecord), input);
     if (existing && existing.status !== EVALUATION_SUMMARY_STATUS.draft) {
       throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Bản tổng hợp đã chốt hoặc đã trình lãnh đạo, không còn sửa được. Mở lại bản đã chốt nếu cần sửa." });
     }

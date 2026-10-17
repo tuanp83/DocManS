@@ -7,6 +7,7 @@ import {
 } from "../dist/apps/api/proposal-intake-periods/proposal-intake-periods.dto.js";
 import {
   createResearchProposalDraftPipe,
+  proposalMutationPipe,
   requestProposalSupplementPipe,
   updateResearchProposalDraftPipe
 } from "../dist/apps/api/research-proposals/research-proposals.dto.js";
@@ -579,14 +580,21 @@ describe("EP-02 proposal intake and submission behavior", () => {
         }),
       BadRequestException
     );
+    const contextVersion = { domain: "proposal", recordId: "p1", aggregateVersion: 1, relationshipVersion: 0, conflictVersion: 0, delegationVersion: 0, policyVersion: "v1" };
     assert.doesNotThrow(() =>
       requestProposalSupplementPipe.transform({
         reason: "Thiếu bản giải trình chỉnh sửa.",
-        dueDate: futureDate(7)
+        dueDate: futureDate(7),
+        contextVersion
       })
     );
-    assert.throws(() => requestProposalSupplementPipe.transform({ reason: "", dueDate: futureDate(7) }), BadRequestException);
-    assert.throws(() => requestProposalSupplementPipe.transform({ reason: "Thiếu tài liệu", dueDate: "bad-date" }), BadRequestException);
+    assert.throws(() => requestProposalSupplementPipe.transform({ reason: "", dueDate: futureDate(7), contextVersion }), BadRequestException);
+    assert.throws(() => requestProposalSupplementPipe.transform({ reason: "Thiếu tài liệu", dueDate: "bad-date", contextVersion }), BadRequestException);
+    // Mọi thao tác ghi lên hồ sơ qua HTTP phải gửi phiên bản đang xem, để không ghi đè thay đổi của người khác.
+    assert.throws(() => requestProposalSupplementPipe.transform({ reason: "Thiếu tài liệu", dueDate: futureDate(7) }), /Thiếu phiên bản dữ liệu/);
+    assert.throws(() => updateResearchProposalDraftPipe.transform({ title: "Tên mới" }), /Thiếu phiên bản dữ liệu/);
+    assert.throws(() => proposalMutationPipe.transform(undefined), BadRequestException);
+    assert.deepEqual(proposalMutationPipe.transform({ contextVersion }).contextVersion, contextVersion);
     assert.doesNotThrow(
       () =>
         uploadFilePipe.transform({

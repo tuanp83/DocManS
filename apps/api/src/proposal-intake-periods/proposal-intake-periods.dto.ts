@@ -105,3 +105,14 @@ export const updateProposalIntakePeriodPipe: PipeTransform<unknown, UpdatePropos
     return input as UpdateProposalIntakePeriodDto;
   }
 };
+
+/** Mở / đóng đợt: bắt buộc phiên bản đợt đang xem (thời điểm cập nhật) để không thao tác trên bản đã đổi. */
+export const intakePeriodStatusPipe: PipeTransform<unknown, { contextVersion: string }> = {
+  transform(value: unknown) {
+    const input = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+    if (typeof input.contextVersion !== "string" || !input.contextVersion.trim() || input.contextVersion.length > 64) {
+      throw new BadRequestException({ code: "CONTEXT_VERSION_REQUIRED", message: "Thiếu phiên bản đợt tiếp nhận đang xem. Vui lòng tải lại trang rồi thực hiện lại." });
+    }
+    return { contextVersion: input.contextVersion };
+  }
+};

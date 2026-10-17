@@ -9,7 +9,7 @@ import { validateNewPassword } from "../auth/password-request.pipe.js";
 import { grantAcademyWideScopes, grantUnitToAcademyWideUsers, hasAcademyWideScope } from "../organization/academy-scope.js";
 import { findPosition, inferUnitType, isUnitType, positionDisplay, UNIT_POSITIONS, UNIT_TYPE_LABELS, UNIT_TYPES } from "../organization/unit-positions.js";
 
-const MAX_POSITIONS_PER_USER = 10;
+export const MAX_POSITIONS_PER_USER = 10;
 const POSITION_INCLUDE = { unitPositions: { include: { organizationUnit: { select: { id: true, name: true, unitType: true, status: true } } }, orderBy: { createdAt: "asc" as const } } };
 
 type CreateUserInput = {

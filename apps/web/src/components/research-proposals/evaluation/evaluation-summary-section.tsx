@@ -86,7 +86,8 @@ export function EvaluationSummarySection({
     setSummaryError("");
     setPendingNames([]);
     setMessage("");
-    const revision = progress.evaluationSummary?.revision;
+    // Phiên bản bản tổng hợp đang xem (0 khi chưa có): máy chủ từ chối nếu người khác vừa sửa.
+    const revision = progress.evaluationSummary?.revision ?? 0;
 
     if (mode === "draft") {
       if (!summaryText.trim()) {
@@ -108,7 +109,7 @@ export function EvaluationSummarySection({
 
     setSavingMode(mode);
     try {
-      if (mode === "draft") await saveProposalEvaluationSummary(proposalId, { summary: summaryText, recommendation });
+      if (mode === "draft") await saveProposalEvaluationSummary(proposalId, { summary: summaryText, recommendation, revision });
       else if (mode === "finalize") await finalizeProposalEvaluationSummary(proposalId, { revision });
       else if (mode === "reopen") await reopenProposalEvaluationSummary(proposalId, { reason, revision });
       else await submitProposalEvaluationPackage(proposalId, { revision });

@@ -95,3 +95,14 @@ export const updateFilePipe: PipeTransform<unknown, UpdateFileDto> = {
     };
   }
 };
+
+/** Xoá tệp: bắt buộc phiên bản của hồ sơ / đề tài chứa tệp, máy chủ đối chiếu trong giao dịch. */
+export const deleteFilePipe: PipeTransform<unknown, { contextVersion: unknown }> = {
+  transform(value: unknown) {
+    const input = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+    if (input.contextVersion === undefined || input.contextVersion === null || input.contextVersion === "") {
+      throw new BadRequestException({ code: "CONTEXT_VERSION_REQUIRED", message: "Thiếu phiên bản dữ liệu đang xem. Vui lòng tải lại trang rồi thực hiện lại." });
+    }
+    return { contextVersion: input.contextVersion };
+  }
+};

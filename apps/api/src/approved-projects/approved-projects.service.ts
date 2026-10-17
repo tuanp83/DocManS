@@ -1,4 +1,6 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { jsonValue } from "../proposals-shared/prisma-json.js";
+import { joinedTransaction } from "../proposals-shared/proposal-mutation.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { label, councilSignerUserIds, leadershipUserIds, NOTIFICATION_TYPES, projectLink, vnDate, type WorkflowEvent } from "../notifications/workflow-events.js";
@@ -89,7 +91,7 @@ export class ApprovedProjectsService {
    * Mọi thao tác ghi trên đề tài: khoá dòng đề tài, đọc lại người dùng, đối chiếu contextVersion, chạy trong
    * giao dịch Serializable. Sự kiện thông báo được gom qua `notify` và chỉ phát sau khi giao dịch commit.
    */
-  async mutate<T>(actor: SafeUserContext, projectId: string, expected: unknown, work: (tx: any, currentActor: SafeUserContext, project: LoadedProject, notify: NotifyFn) => Promise<T>): Promise<T> {
+  async mutate<T>(actor: SafeUserContext, projectId: string, expected: unknown, work: (tx: Prisma.TransactionClient, currentActor: SafeUserContext, project: LoadedProject, notify: NotifyFn) => Promise<T>): Promise<T> {
     const events: WorkflowEvent[] = [];
     // Xung đột tuần tự hoá (P2034) có thể đến từ dòng dùng chung (bộ đếm số văn bản) chứ không phải đề tài này:
     // thử lại tối đa 3 lần; nếu đề tài thật sự đã đổi, assertProjectContext ở lần thử lại trả 409.
@@ -164,13 +166,13 @@ export class ApprovedProjectsService {
     throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Bạn chưa được phân công quản lý đề tài này." });
   }
 
-  async assertNoEvaluationConflict(tx: any, userId: string, proposalId: string) {
-    const conflict = await new ProposalReviewAccessService(tx).resolveConflictForProposal(userId, proposalId);
+  async assertNoEvaluationConflict(tx: Prisma.TransactionClient, userId: string, proposalId: string) {
+    const conflict = await new ProposalReviewAccessService(joinedTransaction(tx)).resolveConflictForProposal(userId, proposalId);
     if (conflict.unresolved) throw new ConflictException({ code: "CONTEXT_UNRESOLVED" });
     if (conflict.isAssignedReviewer || conflict.hasPersistedReview) throw new ForbiddenException({ code: "CONFLICT_DENIED" });
   }
 
-  async loadAuthorized(tx: any, actor: SafeUserContext, projectId: string, preloaded?: LoadedProject) {
+  async loadAuthorized(tx: Prisma.TransactionClient, actor: SafeUserContext, projectId: string, preloaded?: LoadedProject) {
     const project: LoadedProject | null = preloaded ?? await tx.approvedProject.findUnique({ where: { id: projectId }, include: PROJECT_INCLUDE });
     if (!project) throw new NotFoundException({ message: "Không tìm thấy đề tài đã được duyệt." });
     const officer = await this.currentOfficer(tx, projectId);
@@ -192,7 +194,7 @@ export class ApprovedProjectsService {
     const participating = { OR: [{ members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] };
     // Ban giám đốc, Trưởng phòng, Trưởng ban xem toàn Học viện; các vai trò khác lọc theo phạm vi đơn vị hoặc quan hệ với đề tài.
     const where = readsAllProjects(actor) ? {} : scopeIds.length ? { OR: [{ hostOrganizationUnitId: { in: scopeIds } }, { members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] } : { OR: [{ members: { some: { userId: actor.id, status: "ACTIVE" } } }, { proposal: { ownerId: actor.id } }] };
-    const records = await (this.prisma as any).approvedProject.findMany({ where: options.mine ? { AND: [where, participating] } : where, include: PROJECT_INCLUDE, orderBy: { createdAt: "desc" } });
+    const records = await this.prisma.approvedProject.findMany({ where: options.mine ? { AND: [where, participating] } : where, include: PROJECT_INCLUDE, orderBy: { createdAt: "desc" } });
     const visible = [];
     for (const project of records) {
       try {
@@ -346,7 +348,7 @@ export class ApprovedProjectsService {
       // Không tăng aggregateVersion: cập nhật tiến độ không được làm mất hiệu lực bản nháp yêu cầu của chủ nhiệm.
       const facts = { milestoneId: milestone.id, previousPercent: milestone.progressPercent ?? 0, progressPercent };
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.progress.update", reason: input.note ?? null, beforeFacts: { milestoneId: milestone.id, progressPercent: milestone.progressPercent ?? 0 }, afterFacts: facts } });
-      await new AuditLogService(tx).record({ action: "update-project-milestone-progress", result: "success", actorId: currentActor.id, targetEntity: "project-milestone", targetEntityId: milestone.id, username: currentActor.username, reason: input.note ?? undefined, beforeFacts: { progressPercent: milestone.progressPercent ?? 0 }, afterFacts: { progressPercent } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "update-project-milestone-progress", result: "success", actorId: currentActor.id, targetEntity: "project-milestone", targetEntityId: milestone.id, username: currentActor.username, reason: input.note ?? undefined, beforeFacts: { progressPercent: milestone.progressPercent ?? 0 }, afterFacts: { progressPercent } });
       return { milestone: updated, update };
     });
   }
@@ -362,7 +364,7 @@ export class ApprovedProjectsService {
       const computedFacts = { plannedPercent: progress.plannedPercent, actualPercent: progress.actualPercent, spi: progress.spi, maxDaysOverdue: progress.maxDaysOverdue, lateReports: progress.lateReports, reasons: progress.reasons };
       const assessment = await tx.projectHealthAssessment.create({ data: { projectId: project.id, level: input.level, computedLevel: progress.level, reason, computedFacts, assessedById: currentActor.id, createdAt: now } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.health.assess", reason, beforeFacts: { computedLevel: progress.level }, afterFacts: { level: input.level, ...computedFacts } } });
-      await new AuditLogService(tx).record({ action: "assess-project-health", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, reason, beforeFacts: { computedLevel: progress.level }, afterFacts: { level: input.level } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "assess-project-health", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, reason, beforeFacts: { computedLevel: progress.level }, afterFacts: { level: input.level } });
       return assessment;
     });
   }
@@ -376,7 +378,7 @@ export class ApprovedProjectsService {
   }
 
   async createFromApprovedProposal(actor: SafeUserContext, proposalId: string, input: ProjectMutationDto = {}) {
-    return this.prisma.$transaction(async (tx: any) => {
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.$queryRaw`SELECT id FROM research_proposals WHERE id = ${proposalId} FOR UPDATE`;
       const currentActor = await this.readCurrentActor(tx, actor.id);
       if (!isProjectStaff(currentActor)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Chỉ chuyên viên quản lý khoa học có phạm vi đơn vị mới được tạo đề tài." });
@@ -406,14 +408,14 @@ export class ApprovedProjectsService {
       const snapshot = readProposalSnapshot(submission.snapshot);
       if (!snapshot || snapshot.id !== proposalId || !snapshot.ownerId || !Array.isArray(snapshot.members)) throw new BadRequestException({ code: "SOURCE_EVIDENCE_MISSING" });
 
-      const sourceMembers = [{ id: randomUUID(), projectId: "", userId: snapshot.ownerId, sourceMemberId: null, name: proposal.owner?.displayName ?? "Chủ nhiệm đề tài", role: "TOPIC_PI", participationRole: "TOPIC_PI", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }, ...snapshot.members.filter((member) => member.userId !== snapshot.ownerId).map((member) => ({ id: randomUUID(), projectId: "", userId: member.userId || null, sourceMemberId: member.id ?? null, name: member.name, role: member.role, participationRole: member.participationRole ?? member.role ?? "TOPIC_MEMBER", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }))];
+      const sourceMembers = [{ id: randomUUID(), projectId: "", userId: snapshot.ownerId, sourceMemberId: null, name: proposal.owner?.displayName ?? "Chủ nhiệm đề tài", role: "TOPIC_PI", participationRole: "TOPIC_PI", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }, ...snapshot.members.filter((member) => member.userId !== snapshot.ownerId).map((member) => ({ id: randomUUID(), projectId: "", userId: member.userId || null, sourceMemberId: member.id ?? null, name: member.name || "Thành viên đề tài", role: member.role ?? "TOPIC_MEMBER", participationRole: member.participationRole ?? member.role ?? "TOPIC_MEMBER", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }))];
       const project = await tx.approvedProject.create({ data: {
         proposalId,
         sourceSubmissionEventId: submission.id,
         sourceDecisionId: decision.id,
         hostOrganizationUnitId: proposal.hostOrganizationUnitId,
         title: snapshot.title,
-        scopeSnapshot: { title: snapshot.title, objectives: snapshot.objectives, summary: snapshot.summary, researchFieldCode: snapshot.researchFieldCode, proposalTypeCode: snapshot.proposalTypeCode, budgetMetadata: snapshot.budgetMetadata },
+        scopeSnapshot: { title: snapshot.title, objectives: snapshot.objectives, summary: snapshot.summary, researchFieldCode: snapshot.researchFieldCode, proposalTypeCode: snapshot.proposalTypeCode, budgetMetadata: snapshot.budgetMetadata } as Prisma.InputJsonValue,
         planSnapshot: { startDate: snapshot.startDate, endDate: snapshot.endDate },
         status: PREPARING,
         startDate: snapshot.startDate ? new Date(snapshot.startDate) : null,
@@ -423,8 +425,8 @@ export class ApprovedProjectsService {
       if (sourceMembers.length) await tx.approvedProjectMember.createMany({ data: sourceMembers.map((member) => ({ ...member, projectId: project.id })) });
       // Dữ liệu giải ngân / nghiệm thu cũ lưu trên đề xuất được chuyển sang đề tài (hàm SQL dùng chung với migration).
       if (typeof tx.$executeRaw === "function") await tx.$executeRaw`SELECT import_legacy_project_closure(${project.id})`;
-      await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.created", fromStatus: null, toStatus: PREPARING, reason: "Tạo từ phiên bản đề xuất đã được phê duyệt", beforeFacts: null, afterFacts: { proposalId, sourceSubmissionEventId: submission.id, sourceDecisionId: decision.id } } });
-      await new AuditLogService(tx).record({ action: "create-approved-project", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, reason: JSON.stringify({ proposalId, sourceSubmissionEventId: submission.id, sourceDecisionId: decision.id }) });
+      await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.created", fromStatus: null, toStatus: PREPARING, reason: "Tạo từ phiên bản đề xuất đã được phê duyệt", beforeFacts: Prisma.DbNull, afterFacts: { proposalId, sourceSubmissionEventId: submission.id, sourceDecisionId: decision.id } } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "create-approved-project", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, reason: JSON.stringify({ proposalId, sourceSubmissionEventId: submission.id, sourceDecisionId: decision.id }) });
       return { id: project.id, proposalId, status: project.status };
     }, { isolationLevel: "Serializable", timeout: 15000 }).catch(async (error) => {
       const denied = ["P2034", "P2002"].includes(error?.code) ? new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Đề tài đã được tạo hoặc ngữ cảnh đã thay đổi. Vui lòng tải lại." }) : error;
@@ -453,7 +455,7 @@ export class ApprovedProjectsService {
         await tx.approvedProject.update({ where: { id: project.id }, data: { status: legacyStatus, aggregateVersion: { increment: 1 } } });
         await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.acceptance.backfill", fromStatus: EXECUTING, toStatus: legacyStatus, reason: "Áp dụng kết quả nghiệm thu chuyển từ dữ liệu cũ của đề xuất", beforeFacts: { status: EXECUTING }, afterFacts: { status: legacyStatus, acceptanceStatus: legacyRound?.status } } });
       }
-      await new AuditLogService(tx).record({ action: "confirm-approved-project-setup", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, beforeFacts: { status: PREPARING }, afterFacts: { status: EXECUTING } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "confirm-approved-project-setup", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, beforeFacts: { status: PREPARING }, afterFacts: { status: EXECUTING } });
       const loaded = await this.loadAuthorized(tx, currentActor, updated.id);
       return this.toProjectResponse(loaded.project, loaded.capability, loaded.officer, currentActor);
     });
@@ -490,7 +492,7 @@ export class ApprovedProjectsService {
       const now = await readTransactionClockV1(tx);
       await tx.approvedProject.update({ where: { id: project.id }, data: { aggregateVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.setup.configure", reason: "Thiết lập mốc thực hiện", afterFacts: { milestones: input.milestones, checkpoints: input.checkpoints } } });
-      await new AuditLogService(tx).record({ action: "configure-approved-project", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, afterFacts: { milestones: input.milestones, checkpoints: input.checkpoints } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "configure-approved-project", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, afterFacts: { milestones: input.milestones, checkpoints: input.checkpoints } });
       return { milestones, checkpoints: await tx.projectCheckpoint.findMany({ where: { projectId: project.id } }) };
     });
   }
@@ -520,7 +522,7 @@ export class ApprovedProjectsService {
       const assignment = await tx.projectManagementOfficer.create({ data: { projectId: project.id, officerUserId: candidate.id, assignedById: currentActor.id, status: "ACTIVE", effectiveFrom: now, reason: input.reason ?? null, assignmentContextVersion: projectContextVersion(project) } });
       await tx.approvedProject.update({ where: { id: project.id }, data: { relationshipVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.officer.assign", reason: input.reason ?? null, beforeFacts: current ? { officerUserId: current.officerUserId } : { officerUserId: null }, afterFacts: { officerUserId: candidate.id } } });
-      await new AuditLogService(tx).record({ action: "assign-project-management-officer", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, reason: input.reason ?? undefined, beforeFacts: current ? { officerUserId: current.officerUserId } : { officerUserId: null }, afterFacts: { officerUserId: candidate.id } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "assign-project-management-officer", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, reason: input.reason ?? undefined, beforeFacts: current ? { officerUserId: current.officerUserId } : { officerUserId: null }, afterFacts: { officerUserId: candidate.id } });
       return { ...assignment, officer: { id: candidate.id, displayName: candidate.displayName, username: candidate.username } };
     });
   }
@@ -535,7 +537,7 @@ export class ApprovedProjectsService {
       await tx.projectManagementOfficer.update({ where: { id: current.id }, data: { status: "REVOKED", effectiveUntil: now, reason: input.reason } });
       await tx.approvedProject.update({ where: { id: project.id }, data: { relationshipVersion: { increment: 1 }, authorizationContextUpdatedAt: now } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.officer.revoke", reason: input.reason, beforeFacts: { officerUserId: current.officerUserId }, afterFacts: { officerUserId: null } } });
-      await new AuditLogService(tx).record({ action: "revoke-project-management-officer", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, reason: input.reason, beforeFacts: { officerUserId: current.officerUserId }, afterFacts: { officerUserId: null } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "revoke-project-management-officer", result: "success", actorId: currentActor.id, targetEntity: "approved-project", targetEntityId: project.id, username: currentActor.username, reason: input.reason, beforeFacts: { officerUserId: current.officerUserId }, afterFacts: { officerUserId: null } });
       return { ...current, status: "REVOKED", effectiveUntil: now };
     });
   }
@@ -585,11 +587,11 @@ export class ApprovedProjectsService {
       const report = await tx.projectReportRevision.create({ data: {
         projectId: project.id, checkpointId: input.checkpointId ?? null, revision: await this.nextReportRevision(tx, project.id), status: REPORT_DRAFT,
         reportingPeriodStart: input.reportingPeriodStart, reportingPeriodEnd: input.reportingPeriodEnd, deadline: checkpoint?.dueDate ?? project.endDate,
-        progressResults: input.progressResults ?? "", issuesRecommendations: input.issuesRecommendations ?? null, milestoneContext: input.milestoneContext ?? null,
+        progressResults: input.progressResults ?? "", issuesRecommendations: input.issuesRecommendations ?? null, milestoneContext: jsonValue(input.milestoneContext ?? null),
         authorId: currentActor.id, createdAt: now
       } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.report.draft", toStatus: REPORT_DRAFT, reason: "Tạo bản nháp báo cáo", afterFacts: { reportId: report.id, revision: report.revision } } });
-      await new AuditLogService(tx).record({ action: "draft-project-report", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "draft-project-report", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username });
       return report;
     });
   }
@@ -609,8 +611,8 @@ export class ApprovedProjectsService {
       this.assertReportPeriod(project, checkpointId, input.reportingPeriodStart ?? report.reportingPeriodStart, input.reportingPeriodEnd ?? report.reportingPeriodEnd, report.id);
       const now = await readTransactionClockV1(tx);
       const next = report.status === REPORT_SUPPLEMENT
-        ? await tx.projectReportRevision.create({ data: { projectId: project.id, checkpointId, revision: await this.nextReportRevision(tx, project.id), status: REPORT_DRAFT, reportingPeriodStart: input.reportingPeriodStart ?? report.reportingPeriodStart, reportingPeriodEnd: input.reportingPeriodEnd ?? report.reportingPeriodEnd, deadline: report.deadline, progressResults: input.progressResults ?? report.progressResults, issuesRecommendations: input.issuesRecommendations ?? report.issuesRecommendations, milestoneContext: input.milestoneContext ?? report.milestoneContext, authorId: currentActor.id, createdAt: now } })
-        : await tx.projectReportRevision.update({ where: { id: report.id }, data: { checkpointId, reportingPeriodStart: input.reportingPeriodStart ?? report.reportingPeriodStart, reportingPeriodEnd: input.reportingPeriodEnd ?? report.reportingPeriodEnd, progressResults: input.progressResults ?? report.progressResults, issuesRecommendations: input.issuesRecommendations ?? report.issuesRecommendations, milestoneContext: input.milestoneContext ?? report.milestoneContext } });
+        ? await tx.projectReportRevision.create({ data: { projectId: project.id, checkpointId, revision: await this.nextReportRevision(tx, project.id), status: REPORT_DRAFT, reportingPeriodStart: input.reportingPeriodStart ?? report.reportingPeriodStart, reportingPeriodEnd: input.reportingPeriodEnd ?? report.reportingPeriodEnd, deadline: report.deadline, progressResults: input.progressResults ?? report.progressResults, issuesRecommendations: input.issuesRecommendations ?? report.issuesRecommendations, milestoneContext: jsonValue(input.milestoneContext ?? report.milestoneContext), authorId: currentActor.id, createdAt: now } })
+        : await tx.projectReportRevision.update({ where: { id: report.id }, data: { checkpointId, reportingPeriodStart: input.reportingPeriodStart ?? report.reportingPeriodStart, reportingPeriodEnd: input.reportingPeriodEnd ?? report.reportingPeriodEnd, progressResults: input.progressResults ?? report.progressResults, issuesRecommendations: input.issuesRecommendations ?? report.issuesRecommendations, milestoneContext: jsonValue(input.milestoneContext ?? report.milestoneContext) } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.report.edit-draft", reason: report.status === REPORT_SUPPLEMENT ? "Tạo phiên bản báo cáo sửa theo yêu cầu bổ sung" : "Cập nhật bản nháp báo cáo", afterFacts: { reportId: next.id, revision: next.revision } } });
       return next;
     });
@@ -629,7 +631,7 @@ export class ApprovedProjectsService {
       const updated = await tx.projectReportRevision.update({ where: { id: report.id }, data: { status: REPORT_SUBMITTED, submittedAt: now, submittedContextVersion: projectContextVersion(project) } });
       if (files.length) await tx.projectReportEvidence.createMany({ data: files.map((file) => ({ reportRevisionId: report.id, fileRecordId: file.id })) });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.report.submit", toStatus: REPORT_SUBMITTED, reason: "PI nộp báo cáo", afterFacts: { reportId: report.id, revision: report.revision, evidenceFileIds: files.map((file) => file.id) } } });
-      await new AuditLogService(tx).record({ action: "submit-project-report", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username, afterFacts: { status: REPORT_SUBMITTED, revision: report.revision, evidenceFileIds: files.map((file) => file.id) } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "submit-project-report", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username, afterFacts: { status: REPORT_SUBMITTED, revision: report.revision, evidenceFileIds: files.map((file) => file.id) } });
       const officer = await this.currentOfficer(tx, project.id);
       notify({ type: NOTIFICATION_TYPES.projectReportSubmitted, userIds: officer ? [officer.officerUserId] : [], excludeUserIds: [currentActor.id], title: `Báo cáo tiến độ mới: ${project.title}`, message: `Chủ nhiệm đề tài ${label(project)} vừa nộp báo cáo tiến độ (phiên bản ${report.revision}).`, link: projectLink(project.id), metadata: { projectId: project.id, reportId: report.id } });
       return updated;
@@ -644,7 +646,7 @@ export class ApprovedProjectsService {
       const now = await readTransactionClockV1(tx);
       const updated = await tx.projectReportRevision.update({ where: { id: report.id }, data: { status: REPORT_UNDER_REVIEW, reviewedById: currentActor.id } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.report.review", fromStatus: REPORT_SUBMITTED, toStatus: REPORT_UNDER_REVIEW, reason: input.reason ?? "Bắt đầu xem xét báo cáo", afterFacts: { reportId: report.id } } });
-      await new AuditLogService(tx).record({ action: "review-project-report", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username, afterFacts: { status: REPORT_UNDER_REVIEW } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "review-project-report", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username, afterFacts: { status: REPORT_UNDER_REVIEW } });
       return updated;
     });
   }
@@ -659,7 +661,7 @@ export class ApprovedProjectsService {
       if (new Date(input.responseDeadline).getTime() <= now.getTime()) throw new BadRequestException({ code: "DEADLINE_INVALID", message: "Hạn bổ sung phải ở tương lai." });
       const updated = await tx.projectReportRevision.update({ where: { id: report.id }, data: { status: REPORT_SUPPLEMENT, reviewedById: currentActor.id, reviewReason: input.reason, responseDeadline: input.responseDeadline ?? null } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.report.request-supplement", fromStatus: report.status, toStatus: REPORT_SUPPLEMENT, reason: input.reason, afterFacts: { reportId: report.id, responseDeadline: input.responseDeadline ?? null } } });
-      await new AuditLogService(tx).record({ action: "request-project-report-supplement", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username, reason: input.reason, afterFacts: { status: REPORT_SUPPLEMENT, responseDeadline: input.responseDeadline ?? null } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "request-project-report-supplement", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username, reason: input.reason, afterFacts: { status: REPORT_SUPPLEMENT, responseDeadline: input.responseDeadline ?? null } });
       notify({ type: NOTIFICATION_TYPES.projectReportSupplement, userIds: [report.authorId], excludeUserIds: [currentActor.id], title: `Yêu cầu bổ sung báo cáo: ${project.title}`, message: `Báo cáo phiên bản ${report.revision} của đề tài ${label(project)} cần bổ sung trước ${vnDate(input.responseDeadline)}. Nội dung: ${input.reason}`, link: projectLink(project.id), metadata: { projectId: project.id, reportId: report.id } });
       return updated;
     });
@@ -685,7 +687,7 @@ export class ApprovedProjectsService {
         await tx.approvedProject.update({ where: { id: project.id }, data: { aggregateVersion: { increment: 1 }, authorizationContextUpdatedAt: await readTransactionClockV1(tx) } });
       }
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: "project.report.accept", fromStatus: REPORT_UNDER_REVIEW, toStatus: REPORT_ACCEPTED, reason: input.reason ?? "Chấp nhận báo cáo hành chính", afterFacts: { reportId: report.id } } });
-      await new AuditLogService(tx).record({ action: "accept-project-report", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username, reason: input.reason ?? undefined, afterFacts: { status: REPORT_ACCEPTED } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: "accept-project-report", result: "success", actorId: currentActor.id, targetEntity: "project-report-revision", targetEntityId: report.id, username: currentActor.username, reason: input.reason ?? undefined, afterFacts: { status: REPORT_ACCEPTED } });
       return updated;
     });
   }
@@ -708,11 +710,11 @@ export class ApprovedProjectsService {
       if (!proposedValues || typeof proposedValues !== "object" || Array.isArray(proposedValues)) throw new BadRequestException({ message: "proposedValues không hợp lệ." });
       this.assertProposedValues(project, requestType, proposedValues);
       const now = await readTransactionClockV1(tx);
-      const request = await tx.projectRequest.create({ data: { projectId: project.id, requestType, status: "draft", revision: 1, requesterId: currentActor.id, currentValues, proposedValues, reason: input.reason, submittedContextVersion: projectContextVersion(project), appraisal: null } });
+      const request = await tx.projectRequest.create({ data: { projectId: project.id, requestType, status: "draft", revision: 1, requesterId: currentActor.id, currentValues, proposedValues, reason: input.reason, submittedContextVersion: projectContextVersion(project), appraisal: Prisma.DbNull } });
       const revision = await tx.projectRequestRevision.create({ data: { requestId: request.id, revision: 1, status: "draft", currentValues, proposedValues, reason: input.reason, createdById: currentActor.id, createdAt: now } });
       await tx.projectRequestHistory.create({ data: { requestId: request.id, actorId: currentActor.id, action: `project.${requestType}.create`, toStatus: "draft", reason: input.reason, afterFacts: { revision: 1, proposedValues } } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: `project.${requestType}.create`, reason: input.reason, requestId: request.id, afterFacts: { requestId: request.id, revision: 1 } } });
-      await new AuditLogService(tx).record({ action: `create-project-${requestType}`, result: "success", actorId: currentActor.id, targetEntity: "project-request", targetEntityId: request.id, username: currentActor.username, reason: input.reason });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: `create-project-${requestType}`, result: "success", actorId: currentActor.id, targetEntity: "project-request", targetEntityId: request.id, username: currentActor.username, reason: input.reason });
       return { ...request, revisions: [revision] };
     });
   }
@@ -720,7 +722,7 @@ export class ApprovedProjectsService {
   async createAdjustment(actor: SafeUserContext, projectId: string, input: ProjectRequestDto) { return this.createRequest(actor, projectId, ADJUSTMENT, input); }
   async createExtension(actor: SafeUserContext, projectId: string, input: ProjectRequestDto) { return this.createRequest(actor, projectId, EXTENSION, input); }
 
-  private async findRequest(tx: any, project: LoadedProject, requestId: string): Promise<ProjectRequestWithRevisions> {
+  private async findRequest(tx: Prisma.TransactionClient, project: LoadedProject, requestId: string): Promise<ProjectRequestWithRevisions> {
     const request = await tx.projectRequest.findUnique({ where: { id: requestId }, include: { revisions: { orderBy: { revision: "desc" } }, evidence: true } });
     if (!request || request.projectId !== project.id) throw new NotFoundException({ message: "Không tìm thấy yêu cầu của đề tài." });
     return request;
@@ -736,8 +738,8 @@ export class ApprovedProjectsService {
       const currentValues = request.currentValues;
       const nextRevision = request.revision + 1;
       const now = await readTransactionClockV1(tx);
-      const revision = await tx.projectRequestRevision.create({ data: { requestId: request.id, revision: nextRevision, status: "draft", currentValues, proposedValues, reason: input.reason, createdById: currentActor.id, createdAt: now } });
-      const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: "draft", revision: nextRevision, currentValues, proposedValues, reason: input.reason, submittedContextVersion: projectContextVersion(project), appraisal: null, preparedById: null, preparedAt: null, responseDeadline: null } });
+      const revision = await tx.projectRequestRevision.create({ data: { requestId: request.id, revision: nextRevision, status: "draft", currentValues: currentValues as Prisma.InputJsonValue, proposedValues: proposedValues as Prisma.InputJsonValue, reason: input.reason, createdById: currentActor.id, createdAt: now } });
+      const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: "draft", revision: nextRevision, currentValues: currentValues as Prisma.InputJsonValue, proposedValues: proposedValues as Prisma.InputJsonValue, reason: input.reason, submittedContextVersion: projectContextVersion(project), appraisal: Prisma.DbNull, preparedById: null, preparedAt: null, responseDeadline: null } });
       await tx.projectRequestHistory.create({ data: { requestId: request.id, actorId: currentActor.id, action: `project.${requestType}.edit-draft`, fromStatus: request.status, toStatus: "draft", reason: input.reason, afterFacts: { revision: nextRevision } } });
       return { ...updated, revisions: [revision] };
     });
@@ -759,7 +761,7 @@ export class ApprovedProjectsService {
       const updated = await tx.projectRequest.update({ where: { id: request.id }, data: { status: nextStatus, submittedContextVersion: projectContextVersion(project) } });
       await tx.projectRequestHistory.create({ data: { requestId: request.id, actorId: currentActor.id, action: `project.${requestType}.submit`, fromStatus: "draft", toStatus: nextStatus, reason: request.reason, afterFacts: { revision: request.revision, contextVersion: projectContextVersion(project) } } });
       await tx.projectHistory.create({ data: { projectId: project.id, actorId: currentActor.id, action: `project.${requestType}.submit`, fromStatus: "draft", toStatus: nextStatus, requestId: request.id, afterFacts: { revision: request.revision } } });
-      await new AuditLogService(tx).record({ action: `submit-project-${requestType}`, result: "success", actorId: currentActor.id, targetEntity: "project-request", targetEntityId: request.id, username: currentActor.username, afterFacts: { status: nextStatus, revision: request.revision } });
+      await new AuditLogService(joinedTransaction(tx)).record({ action: `submit-project-${requestType}`, result: "success", actorId: currentActor.id, targetEntity: "project-request", targetEntityId: request.id, username: currentActor.username, afterFacts: { status: nextStatus, revision: request.revision } });
       return { ...updated, revisionRecord: revision };
     });
   }
@@ -963,11 +965,11 @@ export class ApprovedProjectsService {
     return (project.members ?? []).some((member) => member.userId === actorId && isRelationshipActiveAt(member, new Date()));
   }
 
-  private async recordRequestAction(tx: any, actor: SafeUserContext, project: LoadedProject, request: { id: string; requestType: string; status: string }, action: string, toStatus: string, facts: RequestActionFacts) {
+  private async recordRequestAction(tx: Prisma.TransactionClient, actor: SafeUserContext, project: LoadedProject, request: { id: string; requestType: string; status: string }, action: string, toStatus: string, facts: RequestActionFacts) {
     const name = `project.${request.requestType}.${action}`;
-    await tx.projectRequestHistory.create({ data: { requestId: request.id, actorId: actor.id, action: name, fromStatus: request.status, toStatus, reason: facts.reason ?? facts.note ?? null, beforeFacts: { status: request.status }, afterFacts: facts } });
-    await tx.projectHistory.create({ data: { projectId: project.id, actorId: actor.id, action: name, requestId: request.id, fromStatus: request.status, toStatus, reason: facts.reason ?? facts.note ?? null, beforeFacts: facts.before ?? null, afterFacts: facts.after ?? facts } });
-    await new AuditLogService(tx).record({ action: name, result: "success", actorId: actor.id, targetEntity: "project-request", targetEntityId: request.id, username: actor.username, reason: facts.reason ?? facts.note ?? undefined, beforeFacts: (facts.before ?? { status: request.status }) as Record<string, unknown>, afterFacts: (facts.after ?? { status: toStatus }) as Record<string, unknown> });
+    await tx.projectRequestHistory.create({ data: { requestId: request.id, actorId: actor.id, action: name, fromStatus: request.status, toStatus, reason: facts.reason ?? facts.note ?? null, beforeFacts: { status: request.status }, afterFacts: jsonValue(facts) } });
+    await tx.projectHistory.create({ data: { projectId: project.id, actorId: actor.id, action: name, requestId: request.id, fromStatus: request.status, toStatus, reason: facts.reason ?? facts.note ?? null, beforeFacts: jsonValue(facts.before), afterFacts: jsonValue(facts.after ?? facts) } });
+    await new AuditLogService(joinedTransaction(tx)).record({ action: name, result: "success", actorId: actor.id, targetEntity: "project-request", targetEntityId: request.id, username: actor.username, reason: facts.reason ?? facts.note ?? undefined, beforeFacts: (facts.before ?? { status: request.status }) as Record<string, unknown>, afterFacts: (facts.after ?? { status: toStatus }) as Record<string, unknown> });
   }
 }
 

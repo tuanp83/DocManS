@@ -4,6 +4,7 @@ import {
   readMembers,
   readOptionalCode,
   readOptionalDate,
+  readContextVersion,
   readOptionalText,
   readText
 } from "../proposals-shared/proposal-validation.js";
@@ -129,7 +130,7 @@ export const updateResearchProposalDraftPipe: PipeTransform<unknown, UpdateResea
       readMembers(input.members);
     }
 
-    return input as UpdateResearchProposalDraftDto;
+    return { ...input, contextVersion: readContextVersion(input) } as UpdateResearchProposalDraftDto;
   }
 };
 
@@ -142,19 +143,17 @@ export const requestProposalSupplementPipe: PipeTransform<unknown, RequestPropos
       throw new BadRequestException({ message: PROPOSAL_VALIDATION_MESSAGE });
     }
 
-    return input as RequestProposalSupplementDto;
+    return { ...input, contextVersion: readContextVersion(input) } as unknown as RequestProposalSupplementDto;
   }
 };
 
 export const proposalMutationPipe: PipeTransform<unknown, ProposalMutationDto> = {
   transform(value: unknown) {
-    if (value === undefined || value === null) return {};
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new BadRequestException({ message: PROPOSAL_VALIDATION_MESSAGE });
-    const input = value as Record<string, unknown>;
+    const input = assertRecord(value);
     if (Object.prototype.hasOwnProperty.call(input, "delegationId")) {
       throw new BadRequestException({ message: "Nộp hồ sơ theo ủy quyền không còn được hỗ trợ." });
     }
-    return input as ProposalMutationDto;
+    return { ...input, contextVersion: readContextVersion(input) } as ProposalMutationDto;
   }
 };
 
@@ -163,7 +162,7 @@ export const assignProposalManagementOfficerPipe: PipeTransform<unknown, AssignP
     const input = assertRecord(value);
     readText(input.officerUserId, "officerUserId", 120);
     readText(input.reason, "reason", 2000);
-    return input as AssignProposalManagementOfficerDto;
+    return { ...input, contextVersion: readContextVersion(input) } as AssignProposalManagementOfficerDto;
   }
 };
 
@@ -171,6 +170,13 @@ export const revokeProposalManagementOfficerPipe: PipeTransform<unknown, RevokeP
   transform(value: unknown) {
     const input = assertRecord(value);
     readText(input.reason, "reason", 2000);
-    return input as RevokeProposalManagementOfficerDto;
+    return { ...input, contextVersion: readContextVersion(input) } as RevokeProposalManagementOfficerDto;
+  }
+};
+
+/** Chuyên viên xác nhận hồ sơ đầy đủ theo danh sách kiểm tra: chỉ cần phiên bản hồ sơ đang xem. */
+export const completeProposalCheckPipe: PipeTransform<unknown, { contextVersion: unknown }> = {
+  transform(value: unknown) {
+    return { contextVersion: readContextVersion(assertRecord(value)) };
   }
 };

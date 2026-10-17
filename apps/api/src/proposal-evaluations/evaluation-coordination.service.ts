@@ -13,7 +13,8 @@ import { isRelationshipActiveAt } from "../proposals-shared/proposal-participati
 /** Hồ sơ hiện trên trang điều phối: từ khi nộp đến khi có quyết định. */
 const COORDINATION_STATUSES = ["submitted", "resubmitted", "supplement_requested", "under_review", "ready_for_approval", "approved", "rejected"];
 const MAX_ROWS = 500;
-const MAX_RULES = 30;
+export const MAX_PORTFOLIO_RULES = 30;
+const MAX_RULES = MAX_PORTFOLIO_RULES;
 
 type OverviewProposal = {
   id: string;
