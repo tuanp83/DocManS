@@ -10,6 +10,7 @@ import { assertValidUpload, defaultFileConfig, readUploadFileName, type FileModu
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { canConference, canReadConferenceManagement, isPaperOwner } from "./conference-access.js";
 import { CONFERENCE_INCLUDE, CONFERENCE_PAPER_ENTITY_TYPE, conferenceFacts, iso, lockConference, recordConferenceEvent, stale } from "./conference-support.js";
+import { readProgramSnapshot } from "./conference-program.service.js";
 import { CONFERENCE_STATUS_LABELS, PAPER_OPEN_STATUSES, paperStatusAfterSubmit, submissionBlockReason, type ConferenceStatus, type PaperVersionKind } from "./conference-workflow.js";
 import type { RevisionRequestDto, SubmitPaperDto, VersionedReasonDto } from "./conferences.dto.js";
 
@@ -76,9 +77,20 @@ export class ConferencePapersService {
       include: { conference: { include: CONFERENCE_INCLUDE }, paper: { include: PAPER_INCLUDE } },
       orderBy: { createdAt: "desc" }
     });
+    // Chương trình đã chốt và kỷ yếu mới nhất: chỉ cho khách mời đã nhận lời.
+    const acceptedIds = invitations.filter((invitation) => invitation.status === "accepted").map((invitation) => invitation.conferenceId);
+    const [programs, proceedings] = acceptedIds.length ? await Promise.all([
+      this.prisma.conferenceProgramVersion.findMany({ where: { conferenceId: { in: acceptedIds } }, orderBy: { versionNumber: "desc" } }),
+      this.prisma.conferenceProceedings.findMany({ where: { conferenceId: { in: acceptedIds } }, orderBy: { versionNumber: "desc" }, include: { file: { select: { originalFileName: true, sizeBytes: true } } } })
+    ]) : [[], []];
     return invitations.map((invitation) => {
       const conference = invitation.conference;
+      const accepted = invitation.status === "accepted";
+      const program = accepted ? programs.find((item) => item.conferenceId === conference.id) : undefined;
+      const book = accepted ? proceedings.find((item) => item.conferenceId === conference.id) : undefined;
       return {
+        program: program ? { versionNumber: program.versionNumber, publishedAt: program.publishedAt, snapshot: readProgramSnapshot(program.snapshot) } : null,
+        proceedings: book ? { id: book.id, versionNumber: book.versionNumber, isbn: book.isbn, uploadedAt: book.uploadedAt, fileName: book.file.originalFileName, sizeBytes: book.file.sizeBytes } : null,
         invitation: { id: invitation.id, kind: invitation.kind, status: invitation.status, sentAt: invitation.sentAt, respondedAt: invitation.respondedAt, canRespond: invitation.status === "sent" && !["completed", "cancelled"].includes(conference.status) },
         conference: {
           id: conference.id, code: conference.code, title: conference.title, description: conference.description, level: conference.level,

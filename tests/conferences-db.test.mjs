@@ -11,6 +11,7 @@ import { NotificationsService } from "../dist/apps/api/notifications/notificatio
 import { ConferencesService } from "../dist/apps/api/conferences/conferences.service.js";
 import { ConferenceInvitationsService } from "../dist/apps/api/conferences/conference-invitations.service.js";
 import { ConferencePapersService } from "../dist/apps/api/conferences/conference-papers.service.js";
+import { ConferenceProgramService } from "../dist/apps/api/conferences/conference-program.service.js";
 
 // Hội nghị khoa học Đợt 1 trên PostgreSQL thật: Trưởng phòng tạo và giao chuyên viên; chuyên viên mời, gửi thư;
 // khách mời nhận lời (tạo tài khoản nội bộ theo đơn vị hoặc tài khoản ngoài), nộp tóm tắt và toàn văn trước hạn;
@@ -22,6 +23,7 @@ let authStore;
 let conferences;
 let invitations;
 let papers;
+let program;
 let orgA;
 let orgB;
 let head;
@@ -82,6 +84,7 @@ describe("Scientific conferences on real PostgreSQL", () => {
     conferences = new ConferencesService(db, audit);
     invitations = new ConferenceInvitationsService(db, audit, new PasswordService(), mail, notifications);
     papers = new ConferencePapersService(db, audit, storage, notifications, { allowedExtensions: [".pdf", ".docx"], maxFileSizeBytes: 1_000_000 });
+    program = new ConferenceProgramService(db, audit, storage, { allowedExtensions: [".pdf", ".docx"], maxFileSizeBytes: 1_000_000 });
 
     orgA = await db.organizationUnit.create({ data: { code: unique("HN-A"), name: "Phòng KHQS" } });
     orgB = await db.organizationUnit.create({ data: { code: unique("HN-B"), name: "Khoa Nội" } });
@@ -242,6 +245,90 @@ describe("Scientific conferences on real PostgreSQL", () => {
     const invitedStaff = await createUser("RESEARCH_MANAGEMENT_STAFF", orgA, staffEmail);
     await invitations.addInvitations(officer, created.id, [{ kind: "delegate", userId: invitedStaff.id }]);
     await assert.rejects(conferences.assignOfficer(head, created.id, { version: await version(head, created.id), userId: invitedStaff.id }), /đang là khách mời/);
+  });
+
+  it("phase 2: sessions, automatic schedule, publish program, send program and proceedings", async () => {
+    // Hội nghị diễn ra ngày D+60 từ 08:00 (giờ Việt Nam) đến hết D+61.
+    const dayStart = new Date(daysFromNow(60)); dayStart.setUTCHours(1, 0, 0, 0);
+    const at = (hours, minutes = 0) => new Date(dayStart.getTime() + ((hours - 8) * 60 + minutes) * 60000);
+    const created = await newConference({ startsAt: dayStart, endsAt: new Date(dayStart.getTime() + 2 * 86400000) });
+    await conferences.assignOfficer(head, created.id, { version: created.version, userId: officer.id });
+    const speakers = [];
+    for (let index = 0; index < 4; index += 1) speakers.push(await createUser("RESEARCHER_INTERNAL_USER", orgB));
+    await invitations.addInvitations(officer, created.id, speakers.map((user) => ({ kind: "speaker", userId: user.id })));
+    const detail = (await conferences.detail(officer, created.id)).conference;
+    await invitations.sendMailing(officer, created.id, { kind: "invitation", invitationIds: detail.invitations.map((item) => item.id) });
+    for (const [index, user] of speakers.entries()) {
+      const mine = (await papers.myConferences(user)).find((item) => item.conference.id === created.id);
+      await invitations.respondInApp(user, mine.invitation.id, { decision: "accept" });
+      let paper = (await papers.myConferences(user)).find((item) => item.conference.id === created.id).paper;
+      await papers.submit(user, paper.id, { version: paper.version, kind: "abstract", title: `Báo cáo ${index + 1}`, abstractText: "Tóm tắt" });
+      // Báo cáo viên thứ tư chỉ nộp tóm tắt: không xếp được vào chương trình.
+      if (index === 3) continue;
+      paper = (await papers.myConferences(user)).find((item) => item.conference.id === created.id).paper;
+      await papers.submit(user, paper.id, { version: paper.version, kind: "full_paper" }, pdf(`full ${index}`));
+    }
+    const ids = async () => Object.fromEntries((await Promise.all(speakers.map(async (user) => (await papers.myConferences(user)).find((item) => item.conference.id === created.id).paper))).map((paper, index) => [index, paper.id]));
+    const paperIds = await ids();
+
+    // Chưa đóng nhận bài thì chưa lập chương trình.
+    await assert.rejects(program.createSession(officer, created.id, { kind: "plenary", name: "Toàn thể", room: "Hội trường", chairName: null, secretaryName: null, startsAt: at(8), endsAt: at(9), slotMinutes: null, sortOrder: 0, breaks: [] }), /sau khi đã đóng nhận bài/);
+    await conferences.transition(officer, created.id, "close-submission", { version: await version(officer, created.id) });
+    await assert.rejects(program.createSession(head, created.id, { kind: "plenary", name: "x", room: null, chairName: null, secretaryName: null, startsAt: at(8), endsAt: at(9), slotMinutes: null, sortOrder: 0, breaks: [] }), /chuyên viên phụ trách/);
+
+    let state = await program.createSession(officer, created.id, { kind: "plenary", name: "Phiên toàn thể", room: "Hội trường", chairName: "GS.TS A", secretaryName: null, startsAt: at(8), endsAt: at(8, 30), slotMinutes: 20, sortOrder: 0, breaks: [] });
+    state = await program.createSession(officer, created.id, { kind: "track", name: "Tiểu ban Nội", room: "P1", chairName: null, secretaryName: null, startsAt: at(9), endsAt: at(9, 30), slotMinutes: null, sortOrder: 1, breaks: [{ label: "Giải lao", startsAt: at(9, 15), endsAt: at(9, 20) }] });
+    state = await program.createSession(officer, created.id, { kind: "track", name: "Tiểu ban Ngoại", room: "P2", chairName: null, secretaryName: null, startsAt: at(9), endsAt: at(10), slotMinutes: null, sortOrder: 2, breaks: [] });
+    const [plenary, internal, surgery] = state.sessions;
+    assert.equal(state.unscheduled.length, 3, "chỉ báo cáo đã nộp toàn văn chờ xếp");
+    await assert.rejects(program.setSessionSlots(officer, created.id, surgery.id, { paperIds: [paperIds[3]] }), /đã nộp toàn văn/);
+    await program.setSessionSlots(officer, created.id, plenary.id, { paperIds: [paperIds[0]] });
+    state = await program.setSessionSlots(officer, created.id, internal.id, { paperIds: [paperIds[1], paperIds[2]] });
+    const internalSlots = state.sessions.find((item) => item.id === internal.id).slots;
+    // 15 phút mặc định, bỏ qua giải lao 09:15–09:20: báo cáo thứ hai 09:20–09:35, vượt khung 5 phút.
+    assert.equal(internalSlots[1].overflowMinutes, 5);
+    assert.ok(state.issues.some((issue) => issue.code === "OVERFLOW"));
+    await assert.rejects(program.publish(officer, created.id, { acknowledgeUnscheduled: true }), /lỗi cần sửa/);
+
+    // Chuyển một báo cáo sang tiểu ban Ngoại (chạy song song): hết vượt khung.
+    state = await program.setSessionSlots(officer, created.id, surgery.id, { paperIds: [paperIds[2]] });
+    assert.deepEqual(state.sessions.find((item) => item.id === internal.id).slots.map((item) => item.paperId), [paperIds[1]], "báo cáo được chuyển khỏi phiên cũ");
+    assert.deepEqual(state.issues, []);
+    const published = await program.publish(officer, created.id, { acknowledgeUnscheduled: false });
+    assert.deepEqual(published, { versionNumber: 1, papers: 3, unscheduled: 0 });
+    assert.equal((await conferences.detail(officer, created.id)).conference.status, "program_published");
+    assert.equal((await db.conferencePaper.count({ where: { conferenceId: created.id, status: "scheduled" } })), 3);
+
+    // Gửi chương trình cho người đã nhận lời; khách mời thấy bản đã chốt.
+    const mailing = await invitations.sendMailing(officer, created.id, { kind: "program", invitationIds: detail.invitations.map((item) => item.id) });
+    assert.equal(mailing.recipients, 4);
+    const notification = await db.userNotification.findFirst({ where: { userId: speakers[0].id, title: { contains: "Chương trình hội nghị" } } });
+    assert.match(notification.message, /Phiên toàn thể Phiên toàn thể: 08:00/);
+    const mine = (await papers.myConferences(speakers[1])).find((item) => item.conference.id === created.id);
+    assert.equal(mine.program.versionNumber, 1);
+    assert.deepEqual(mine.program.snapshot.sessions.map((item) => item.name), ["Phiên toàn thể", "Tiểu ban Nội", "Tiểu ban Ngoại"]);
+    assert.deepEqual(mine.program.snapshot.sessions[1].items.map((item) => item.type), ["paper", "break"]);
+
+    // Sửa sau khi chốt: đánh dấu cần chốt lại; bản đã chốt không đổi.
+    state = await program.setSessionSlots(officer, created.id, internal.id, { paperIds: [] });
+    assert.equal(state.changedSincePublish, true);
+    await assert.rejects(program.publish(officer, created.id, { acknowledgeUnscheduled: false }), /chưa được xếp/);
+    await program.publish(officer, created.id, { acknowledgeUnscheduled: true });
+    assert.equal((await db.conferencePaper.findUnique({ where: { id: paperIds[1] } })).status, "full_paper_submitted", "bỏ khỏi chương trình thì trở về đã nộp toàn văn");
+    assert.equal((await program.getProgram(officer, created.id)).changedSincePublish, false);
+
+    // Kỷ yếu: chưa tải thì chưa gửi; tải lên rồi gửi được, kể cả sau khi kết thúc hội nghị.
+    await assert.rejects(invitations.sendMailing(officer, created.id, { kind: "proceedings", invitationIds: detail.invitations.map((item) => item.id) }), /Chưa tải kỷ yếu/);
+    await db.scientificConference.update({ where: { id: created.id }, data: { startsAt: new Date(Date.now() - 86400000) } });
+    await conferences.transition(officer, created.id, "complete", { version: await version(officer, created.id) });
+    state = await program.uploadProceedings(officer, created.id, { isbn: "978-604-0-00000-0" }, pdf("ky yeu"));
+    assert.equal(state.proceedings[0].versionNumber, 1);
+    const sent = await invitations.sendMailing(officer, created.id, { kind: "proceedings", invitationIds: detail.invitations.map((item) => item.id) });
+    assert.equal(sent.sent, 4);
+    await assert.rejects(invitations.sendMailing(officer, created.id, { kind: "reminder", invitationIds: detail.invitations.map((item) => item.id) }), /chuyên viên phụ trách|vừa đổi trạng thái/);
+    const book = (await papers.myConferences(speakers[0])).find((item) => item.conference.id === created.id).proceedings;
+    assert.equal((await program.downloadProceedings(speakers[0], created.id, book.id)).content.toString(), "%PDF-1.4 ky yeu");
+    await assert.rejects(program.downloadProceedings(otherStaff, created.id, book.id), /Không tìm thấy/);
   });
 
   it("imports invitees from Excel all-or-nothing and reports bad rows", async () => {

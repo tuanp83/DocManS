@@ -20,6 +20,7 @@ import {
   type PaperKind
 } from "@/lib/conferences-api";
 import { ConferenceInfoCard } from "./conference-detail";
+import { ProceedingsLink, PublishedProgramView } from "./program-view";
 
 export function MyConferences() {
   const [items, setItems] = useState<MyConference[] | null>(null);
@@ -40,7 +41,7 @@ function MyConferenceCard({ item, onChanged }: { item: MyConference; onChanged: 
   const askReason = useAskReason();
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
-  const { invitation, conference, paper } = item;
+  const { invitation, conference, paper, program, proceedings } = item;
 
   async function run(work: () => Promise<unknown>, success?: string) {
     setBusy(true);
@@ -63,6 +64,10 @@ function MyConferenceCard({ item, onChanged }: { item: MyConference; onChanged: 
       </div> : <p>Hội nghị đã kết thúc hoặc đã huỷ.</p>}
     </SectionCard> : null}
     {paper ? <PaperWorkspace paper={paper} busy={busy} run={run} /> : null}
+    {program || proceedings ? <SectionCard title="Chương trình và kỷ yếu">
+      {program ? <PublishedProgramView program={program} /> : <p>Chương trình chi tiết sẽ có sau khi các tiểu ban sắp xếp xong.</p>}
+      {proceedings ? <ProceedingsLink conferenceId={conference.id} proceedings={proceedings} /> : null}
+    </SectionCard> : null}
   </div>;
 }
 

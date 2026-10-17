@@ -1,7 +1,7 @@
 # Thiết kế: Quản lý Hội nghị Khoa học
 
 Phạm vi: module lớn mới, ngang hàng với **Đề xuất đề tài** (`research-proposals`, `proposal-intake-periods`).
-Tài liệu mô tả 3 đợt; **Đợt 1 đã hiện thực** (module `apps/api/src/conferences`, trang `/conferences`, `/my-conferences`, `/conference-invitation`). Các quyết định nghiệp vụ đã chốt ở mục 11.
+Tài liệu mô tả 3 đợt; **Đợt 1 và Đợt 2 đã hiện thực** (module `apps/api/src/conferences`, trang `/conferences`, `/my-conferences`, `/conference-invitation`). Đợt 3 chưa làm. Các quyết định nghiệp vụ đã chốt ở mục 11.
 
 Đáp ứng thuyết minh: 2.6 ("quản lý văn bản liên quan đề tài, hội nghị theo thời gian thực"), 2.5 (dashboard, báo cáo).
 
@@ -148,18 +148,24 @@ chỉ hiển thị capability; máy chủ luôn kiểm tra lại.
 sau đó các tiểu ban chạy song song với nhau, mỗi tiểu ban ở một phòng.
 
 **Hệ thống làm:**
-1. Xếp phiên toàn thể trước. Các tiểu ban bắt đầu sớm nhất từ lúc phiên toàn thể kết thúc (cộng giờ nghỉ chuyển phòng nếu có).
-2. Với mỗi phiên, xếp lần lượt các báo cáo theo thứ tự vào khung giờ, bỏ qua các khoảng nghỉ.
+1. Giờ bắt đầu, kết thúc của từng phiên do chuyên viên nhập (không tự suy từ giờ kết thúc phiên toàn thể); hệ thống
+   kiểm tra để không tiểu ban nào trùng giờ phiên toàn thể.
+2. Với mỗi phiên, xếp lần lượt các báo cáo theo thứ tự vào khung giờ, bỏ qua các khoảng nghỉ. Giờ được tính lại mỗi
+   lần xem, nên không cần nút "Xếp lại" riêng.
 3. Báo cáo không vừa khung giờ thì đánh dấu **vượt khung**, báo số phút thiếu. Hệ thống không tự cắt thời lượng.
-4. Kiểm tra và báo lỗi:
-   - Có tiểu ban trùng giờ với phiên toàn thể.
+4. Lỗi chặn việc chốt chương trình:
+   - Phiên toàn thể có phiên khác chạy cùng lúc; một ngày có hai phiên toàn thể.
    - Hai tiểu ban dùng cùng một phòng trong cùng thời gian.
-   - Một báo cáo viên có báo cáo ở hai tiểu ban trùng giờ.
-   - Còn báo cáo đã nộp toàn văn mà chưa được xếp.
-5. Chuyên viên kéo thả đổi thứ tự hoặc chuyển phiên, sửa giờ từng báo cáo; bấm **Xếp lại** để tính lại các báo cáo
-   chưa chỉnh tay.
-6. Chốt chương trình, xuất Word theo mẫu của Học viện, gửi cho khách mời. Sửa sau khi đã gửi thì tạo phiên bản mới
-   và gợi ý gửi thông báo thay đổi.
+   - Một báo cáo viên có báo cáo ở hai phiên trùng giờ (hiện mỗi báo cáo viên chỉ có một báo cáo trong một hội nghị,
+     nên lỗi này chỉ là lớp bảo vệ).
+   - Báo cáo vượt khung; giờ đặt tay nằm ngoài phiên hoặc chồng lên giải lao, báo cáo khác.
+   Còn báo cáo đã nộp toàn văn mà chưa được xếp: không chặn, nhưng phải xác nhận khi chốt.
+5. Chuyên viên đổi thứ tự (lên/xuống), chuyển báo cáo sang phiên khác, bỏ khỏi phiên, đặt giờ tay cho từng báo cáo
+   (giữ nguyên khi tính lại) hoặc bỏ đặt tay.
+6. Chốt chương trình tạo một bản bất biến; báo cáo trong chương trình chuyển "đã xếp lịch", hội nghị chuyển "đã gửi
+   chương trình". Sửa sau khi chốt thì hệ thống báo cần chốt lại; chốt lại tạo bản mới. Bản Word xuất trên trình
+   duyệt từ bản đã chốt. Gửi chương trình và gửi kỷ yếu là thư cho khách mời đã nhận lời; khách mời xem chương trình,
+   tải bản Word và kỷ yếu ở mục Hội nghị của tôi.
 
 ---
 
@@ -273,11 +279,14 @@ Dùng hộp xác nhận, thông báo, nhập lý do của hệ thống (commit `
    trùng phòng; chỉnh tay, xếp lại.
 4. Chốt chương trình, xuất Word, gửi khách mời; phiên bản và thông báo thay đổi.
 5. Tải kỷ yếu lên, gửi khách mời.
-6. Kết thúc hội nghị; thống kê trên dashboard và trong `/reports`.
+6. Kết thúc hội nghị (kỷ yếu vẫn tải và gửi được sau khi kết thúc).
+
+Chưa làm, chuyển sang Đợt 3: thống kê hội nghị trên dashboard và trong `/reports`.
 
 ### Đợt 3: Mở rộng khi có nhu cầu
 
-Phản biện báo cáo, điểm danh, giấy chứng nhận, giải thưởng, liên kết lý lịch khoa học và sản phẩm đề tài.
+Thống kê trên dashboard và `/reports`, phản biện báo cáo, điểm danh, giấy chứng nhận, giải thưởng, liên kết lý lịch
+khoa học và sản phẩm đề tài.
 
 ---
 

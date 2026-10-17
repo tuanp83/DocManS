@@ -7,7 +7,7 @@ import {
   isResearchManagementHead,
   isResearchManagementStaff
 } from "../proposals-shared/proposal-access.js";
-import { CONFERENCE_CLOSED_STATUSES, CONFERENCE_INVITABLE_STATUSES, CONFERENCE_TRANSITIONS, type ConferenceStatus, type ConferenceTransition } from "./conference-workflow.js";
+import { CONFERENCE_CLOSED_STATUSES, CONFERENCE_INVITABLE_STATUSES, CONFERENCE_PROCEEDINGS_STATUSES, CONFERENCE_PROGRAM_STATUSES, CONFERENCE_TRANSITIONS, type ConferenceStatus, type ConferenceTransition } from "./conference-workflow.js";
 
 /**
  * Phân quyền hội nghị khoa học (hàm thuần, có test).
@@ -15,7 +15,7 @@ import { CONFERENCE_CLOSED_STATUSES, CONFERENCE_INVITABLE_STATUSES, CONFERENCE_T
  *   - Trưởng phòng KHQS: tạo hội nghị cho đơn vị trong phạm vi của mình, giao/giao lại/thu hồi chuyên viên phụ
  *     trách, sửa thông tin, huỷ; xem toàn bộ hội nghị trong phạm vi.
  *   - Chuyên viên phụ trách (một người còn hiệu lực): khách mời, gửi thư, theo dõi và yêu cầu sửa bài, đóng nhận bài,
- *     kết thúc, huỷ. Chuyên viên khác không xử lý hội nghị không được giao.
+ *     lập và chốt chương trình chi tiết (sau khi đóng nhận bài), tải và gửi kỷ yếu (cả sau khi kết thúc), kết thúc, huỷ. Chuyên viên khác không xử lý hội nghị không được giao.
  *   - Phó phòng, Trưởng ban QLKH: xem trong phạm vi. Ban giám đốc: xem mọi hội nghị không còn là nháp.
  *   - Khách mời (đã gửi thư hoặc đã nhận lời) có tài khoản: chỉ thông tin chung, lời mời và báo cáo của mình.
  *   - Tách nhiệm vụ: chuyên viên phụ trách không đồng thời là khách mời của chính hội nghị đó (kiểm tra cả hai chiều
@@ -36,6 +36,8 @@ export type ConferenceAction =
   | "mailing.send"
   | "paper.review"
   | "export"
+  | "program.manage"
+  | "proceedings.manage"
   | ConferenceTransition;
 
 /** Vai trò được giao làm chuyên viên phụ trách hội nghị. */
@@ -100,6 +102,10 @@ export function canConference(actor: SafeUserContext, conference: ConferenceFact
       return officer && !isClosed(conference);
     case "export":
       return canReadConferenceManagement(actor, conference);
+    case "program.manage":
+      return officer && (CONFERENCE_PROGRAM_STATUSES as string[]).includes(conference.status);
+    case "proceedings.manage":
+      return officer && (CONFERENCE_PROCEEDINGS_STATUSES as string[]).includes(conference.status);
     case "close-submission":
     case "complete":
       return officer && (CONFERENCE_TRANSITIONS[action].from as string[]).includes(conference.status);
@@ -110,7 +116,7 @@ export function canConference(actor: SafeUserContext, conference: ConferenceFact
   }
 }
 
-const ALL_ACTIONS: ConferenceAction[] = ["edit", "officer.assign", "invitation.manage", "mailing.send", "paper.review", "export", "close-submission", "complete", "cancel"];
+const ALL_ACTIONS: ConferenceAction[] = ["edit", "officer.assign", "invitation.manage", "mailing.send", "paper.review", "export", "program.manage", "proceedings.manage", "close-submission", "complete", "cancel"];
 
 export function conferenceActions(actor: SafeUserContext, conference: ConferenceFacts) {
   return ALL_ACTIONS.filter((action) => canConference(actor, conference, action));

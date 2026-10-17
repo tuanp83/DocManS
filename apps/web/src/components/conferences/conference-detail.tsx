@@ -25,6 +25,7 @@ import {
 } from "@/lib/conferences-api";
 import { ConferenceFields, conferenceFormProblem, conferenceToForm, formToPayload, type ConferenceFormState } from "./conference-form";
 import { ConferenceInvitationsPanel } from "./conference-invitations-panel";
+import { ConferenceProgramPanel } from "./conference-program-panel";
 
 const dateTime = new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -132,6 +133,7 @@ function ManagementWorkspace({ conference, onChanged }: { conference: ManagedCon
 
     <OfficerCard conference={conference} busy={busy} run={run} />
     <ConferenceInvitationsPanel conference={conference} onChanged={onChanged} />
+    {conference.status !== "draft" && conference.status !== "preparing" ? <ConferenceProgramPanel conference={conference} onConferenceChanged={onChanged} /> : null}
 
     <SectionCard title="Thư đã gửi">
       {!conference.mailings.length ? <p>Chưa gửi thư nào.</p> : <div className="table-wrap"><table className="data-table">

@@ -25,16 +25,28 @@ export type ConferenceMailInput = {
   message?: string;
   /** Đường link tuyệt đối để trả lời thư mời (chỉ thư email gửi người chưa có tài khoản). */
   responseUrl?: string;
+  /** Thư chương trình: tóm tắt các phiên (tên, giờ, phòng). */
+  programLines?: string[];
 };
 
 const KIND_LABEL: Record<MailingKind, string> = {
   invitation: "Thư mời",
   reminder: "Thư nhắc",
-  change_notice: "Thông báo thay đổi"
+  change_notice: "Thông báo thay đổi",
+  program: "Chương trình hội nghị",
+  proceedings: "Kỷ yếu hội nghị"
 };
 
 export function formatVietnamDate(date: Date) {
   return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+}
+
+export function formatVietnamTime(date: Date) {
+  return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+export function formatVietnamDateTime(date: Date) {
+  return `${formatVietnamTime(date)} ngày ${formatVietnamDate(date)}`;
 }
 
 function period(conference: ConferenceMailFacts) {
@@ -56,16 +68,25 @@ export function conferenceMailLines(input: ConferenceMailInput) {
     lines.push(`${conference.hostUnitName} trân trọng kính mời ${recipient.kind === "speaker" ? "đồng chí tham dự và trình bày báo cáo tham luận tại" : "đồng chí tới dự"} ${conference.title}.`);
   } else if (input.kind === "reminder") {
     lines.push(`Xin nhắc đồng chí về ${conference.title}.`);
-  } else {
+  } else if (input.kind === "change_notice") {
     lines.push(`${conference.title} có thay đổi như sau:`);
+  } else if (input.kind === "program") {
+    lines.push(`${conference.hostUnitName} trân trọng gửi đồng chí chương trình chi tiết của ${conference.title}.`);
+  } else {
+    lines.push(`${conference.hostUnitName} trân trọng gửi đồng chí kỷ yếu ${conference.title}.`);
   }
   if (input.message) lines.push("", input.message);
   lines.push("", `Thời gian: ${period(conference)}`, `Địa điểm: ${conference.location}`);
+  if (input.kind === "program" || input.kind === "proceedings") {
+    if (input.programLines?.length) lines.push("", ...input.programLines);
+    lines.push("", `Xem ${input.kind === "program" ? "chương trình chi tiết và tải bản Word" : "và tải kỷ yếu"} tại mục Hội nghị của tôi trên hệ thống DocManS.`);
+    return lines;
+  }
   if (recipient.kind === "speaker") {
     lines.push(`Hạn nộp tóm tắt: ${formatVietnamDate(conference.abstractDeadline)}`, `Hạn nộp toàn văn: ${formatVietnamDate(conference.fullPaperDeadline)}`);
   }
   if (conference.responseDeadline && input.kind !== "change_notice") lines.push(`Đề nghị trả lời trước ngày: ${formatVietnamDate(conference.responseDeadline)}`);
-  lines.push("", "Chương trình chi tiết sẽ được gửi sau khi các tiểu ban sắp xếp xong.");
+  if (input.kind === "invitation") lines.push("", "Chương trình chi tiết sẽ được gửi sau khi các tiểu ban sắp xếp xong.");
   return lines;
 }
 
