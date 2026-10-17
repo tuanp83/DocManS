@@ -303,4 +303,21 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     await projects.assignOfficer(boardHead, id, { contextVersion: stale, officerUserId: staff.id });
     await assert.rejects(projects.assignOfficer(boardHead, id, { contextVersion: stale, officerUserId: otherStaff.id }), (error) => error.getResponse?.().code === "CONTEXT_VERSION_MISMATCH");
   });
+
+  it("only projects still in execution are flagged as approaching or overdue", async () => {
+    const proposal = await approvedProposal();
+    const { id } = await projects.createFromApprovedProposal(staff, proposal.id);
+    const inDays = (days) => new Date(Date.now() + days * 86_400_000);
+    const flags = async (status, endDate) => {
+      await db.approvedProject.update({ where: { id }, data: { status, startDate: inDays(-400), endDate, closedAt: status === "closed" ? new Date() : null } });
+      const { overdue, approaching } = await projects.getProject(staff, id);
+      return { overdue, approaching };
+    };
+    assert.deepEqual(await flags("executing", inDays(5)), { overdue: false, approaching: true });
+    assert.deepEqual(await flags("executing", inDays(-10)), { overdue: true, approaching: false });
+    for (const status of ["pending_acceptance", "accepted", "failed", "closed"]) {
+      assert.deepEqual(await flags(status, inDays(5)), { overdue: false, approaching: false }, status);
+      assert.deepEqual(await flags(status, inDays(-10)), { overdue: false, approaching: false }, `${status}: đã kết thúc thì không còn "sắp đến hạn"`);
+    }
+  });
 });

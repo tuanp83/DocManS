@@ -237,8 +237,10 @@ export class ApprovedProjectsService {
     const nearest = deadlines.sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
     // So sánh theo ngày lịch (giờ Việt Nam): mốc đến hạn hôm nay chưa bị coi là quá hạn.
     const daysLeft = nearest ? calendarDayIndex(nearest) - localDayIndex(now) : null;
-    const overdue = daysLeft !== null && daysLeft < 0 && [PREPARING, EXECUTING, PROJECT_STATUSES.paused].some((status) => status === project.status);
-    const approaching = daysLeft !== null && !overdue && daysLeft <= 14;
+    // Chỉ cảnh báo hạn khi đề tài còn trong thời gian thực hiện; đề tài đã sang nghiệm thu, đã nghiệm thu, đã đóng thì không.
+    const tracksDeadlines = [PREPARING, EXECUTING, PROJECT_STATUSES.paused].some((status) => status === project.status);
+    const overdue = tracksDeadlines && daysLeft !== null && daysLeft < 0;
+    const approaching = tracksDeadlines && daysLeft !== null && daysLeft >= 0 && daysLeft <= 14;
     return {
       id: project.id,
       code: project.code,
