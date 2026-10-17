@@ -37,6 +37,12 @@ export const CONFERENCE_INVITABLE_STATUSES: ConferenceStatus[] = ["preparing", "
 /** Trạng thái báo cáo viên được nộp bài: còn hạn trong `inviting`, hoặc theo yêu cầu sửa còn hạn đến trước khi kết thúc. */
 export const CONFERENCE_SUBMISSION_STATUSES: ConferenceStatus[] = ["inviting", "submission_closed", "program_published"];
 
+/** Trạng thái được lập và chốt chương trình chi tiết: sau khi đóng nhận bài (chốt lại được sau khi đã gửi). */
+export const CONFERENCE_PROGRAM_STATUSES: ConferenceStatus[] = ["submission_closed", "program_published"];
+
+/** Trạng thái được tải và gửi kỷ yếu: sau khi có chương trình, kể cả sau khi hội nghị kết thúc. */
+export const CONFERENCE_PROCEEDINGS_STATUSES: ConferenceStatus[] = ["program_published", "completed"];
+
 export type ConferenceTransition = "close-submission" | "complete" | "cancel";
 
 export const CONFERENCE_TRANSITIONS: Record<ConferenceTransition, { from: ConferenceStatus[]; to: ConferenceStatus; reasonRequired: boolean }> = {

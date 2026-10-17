@@ -38,7 +38,13 @@ test("the head assigns the officer; only the assigned officer runs invitations a
   // Tài khoản đổi vai trò thì mất quyền phụ trách dù dòng giao việc còn.
   assert.equal(canConference({ ...officer, systemRole: "RESEARCHER_INTERNAL_USER" }, conference(), "mailing.send"), false);
   assert.equal(canConference(officer, conference({ status: "draft" }), "mailing.send"), false);
-  assert.deepEqual(conferenceActions(officer, conference({ status: "completed" })), ["export"]);
+  // Kỷ yếu tải và gửi được cả sau khi hội nghị kết thúc; ngoài ra không còn thao tác nào.
+  assert.deepEqual(conferenceActions(officer, conference({ status: "completed" })), ["export", "proceedings.manage"]);
+  // Chương trình chi tiết lập sau khi đóng nhận bài, chốt lại được sau khi đã gửi.
+  for (const status of ["submission_closed", "program_published"]) assert.equal(canConference(officer, conference({ status }), "program.manage"), true, status);
+  for (const status of ["preparing", "inviting", "completed"]) assert.equal(canConference(officer, conference({ status }), "program.manage"), false, status);
+  assert.equal(canConference(head, conference({ status: "submission_closed" }), "program.manage"), false);
+  assert.equal(canConference(officer, conference({ status: "inviting" }), "proceedings.manage"), false);
   assert.deepEqual(conferenceActions(head, conference({ status: "cancelled" })), ["export"]);
 });
 
@@ -109,4 +115,57 @@ test("invitation mail carries time and location, deadlines for speakers, and esc
   const delegate = renderConferenceMailText({ kind: "invitation", conference: facts, recipient: { fullName: "B", academicTitle: null, kind: "delegate" } });
   assert.doesNotMatch(delegate, /Hạn nộp/);
   assert.doesNotMatch(renderConferenceMailHtml({ kind: "invitation", conference: facts, recipient: { fullName: "B", academicTitle: null, kind: "delegate" } }), /<KH>/);
+});
+
+// ---- Đợt 2: xếp lịch ----
+import { scheduleProgram, scheduleSession } from "../dist/apps/api/conferences/conference-scheduling.js";
+import { sessionInputPipe } from "../dist/apps/api/conferences/conferences.dto.js";
+
+const at = (hhmm, day = "2030-03-02") => new Date(`${day}T${hhmm}:00+07:00`);
+const hm = (date) => new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" }).format(date);
+const slot = (paperId, position, extra = {}) => ({ paperId, ownerId: `owner-${paperId}`, position, manuallyAdjusted: false, startsAt: null, endsAt: null, ...extra });
+const session = (overrides = {}) => ({ id: "s1", kind: "track", name: "Tiểu ban 1", room: "P1", startsAt: at("08:00"), endsAt: at("09:00"), slotMinutes: null, breaks: [], slots: [], ...overrides });
+
+test("papers are placed in order with the slot length, skipping breaks", () => {
+  const result = scheduleSession(session({ breaks: [{ startsAt: at("08:20"), endsAt: at("08:30"), label: "Giải lao" }], slots: [slot("a", 0), slot("b", 1), slot("c", 2)] }), 15);
+  assert.deepEqual(result.slots.map((item) => [item.paperId, hm(item.startsAt), hm(item.endsAt)]), [["a", "08:00", "08:15"], ["b", "08:30", "08:45"], ["c", "08:45", "09:00"]]);
+  assert.deepEqual(result.issues, []);
+});
+
+test("overflow is flagged with the missing minutes instead of shortening talks", () => {
+  const result = scheduleSession(session({ slotMinutes: 25, slots: [slot("a", 0), slot("b", 1), slot("c", 2)] }), 15);
+  assert.equal(hm(result.slots[2].endsAt), "09:15");
+  assert.equal(result.slots[2].overflowMinutes, 15);
+  assert.equal(result.issues[0].code, "OVERFLOW");
+  assert.match(result.issues[0].message, /vượt khung 15 phút/);
+});
+
+test("manually timed papers stay put and others fill around them", () => {
+  const manual = slot("m", 1, { manuallyAdjusted: true, startsAt: at("08:10"), endsAt: at("08:25") });
+  const result = scheduleSession(session({ slots: [slot("a", 0), manual, slot("b", 2)] }), 15);
+  assert.deepEqual(result.slots.map((item) => [item.paperId, hm(item.startsAt)]), [["a", "08:25"], ["m", "08:10"], ["b", "08:40"]]);
+  const outside = scheduleSession(session({ slots: [slot("x", 0, { manuallyAdjusted: true, startsAt: at("07:50"), endsAt: at("08:05") })] }), 15);
+  assert.equal(outside.issues[0].code, "MANUAL_OUTSIDE_SESSION");
+});
+
+test("plenary runs alone; tracks may run in parallel but not in the same room or with the same speaker", () => {
+  const plenary = session({ id: "p", kind: "plenary", name: "Toàn thể", room: "Hội trường", startsAt: at("08:00"), endsAt: at("10:00") });
+  const t1 = session({ id: "t1", name: "Tiểu ban 1", room: "P1", startsAt: at("10:00"), endsAt: at("11:00"), slots: [slot("a", 0)] });
+  const t2 = session({ id: "t2", name: "Tiểu ban 2", room: "P2", startsAt: at("10:00"), endsAt: at("11:00"), slots: [slot("b", 0)] });
+  assert.deepEqual(scheduleProgram([plenary, t1, t2], 15).issues, [], "tiểu ban song song sau phiên toàn thể là hợp lệ");
+  const clash = scheduleProgram([plenary, { ...t1, startsAt: at("09:30") }], 15).issues;
+  assert.equal(clash[0].code, "PLENARY_OVERLAP");
+  assert.equal(scheduleProgram([t1, { ...t2, room: "p1 " }], 15).issues[0].code, "ROOM_OVERLAP");
+  const sameSpeaker = scheduleProgram([t1, { ...t2, slots: [{ ...slot("b", 0), ownerId: "owner-a" }] }], 15).issues;
+  assert.equal(sameSpeaker[0].code, "SPEAKER_OVERLAP");
+  const twoPlenaries = scheduleProgram([plenary, { ...plenary, id: "p2", name: "Toàn thể 2", startsAt: at("14:00"), endsAt: at("15:00") }], 15).issues;
+  assert.equal(twoPlenaries[0].code, "PLENARY_SAME_DAY");
+});
+
+test("session input keeps breaks inside the session", () => {
+  const base = { kind: "track", name: "Tiểu ban Nội", startsAt: at("08:00").toISOString(), endsAt: at("11:00").toISOString() };
+  assert.equal(sessionInputPipe.transform(base).slotMinutes, null);
+  assert.throws(() => sessionInputPipe.transform({ ...base, breaks: [{ startsAt: at("07:30").toISOString(), endsAt: at("08:10").toISOString() }] }), /nằm trong khung giờ/);
+  assert.throws(() => sessionInputPipe.transform({ ...base, kind: "room" }), /phiên toàn thể hoặc tiểu ban/);
+  assert.throws(() => sessionInputPipe.transform({ ...base, slotMinutes: 0 }), /từ 1 đến 240/);
 });

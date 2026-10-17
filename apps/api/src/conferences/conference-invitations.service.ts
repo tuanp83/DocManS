@@ -10,7 +10,8 @@ import { MailService } from "../mail/mail.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { absoluteLink, escapeHtml } from "../notifications/workflow-events.js";
 import { canConference, isConferenceParticipant } from "./conference-access.js";
-import { conferenceMailLines, conferenceMailSubject, renderConferenceMailHtml, type ConferenceMailFacts } from "./conference-mail-templates.js";
+import { conferenceMailLines, conferenceMailSubject, formatVietnamDateTime, formatVietnamTime, renderConferenceMailHtml, type ConferenceMailFacts } from "./conference-mail-templates.js";
+import { readProgramSnapshot } from "./conference-program.service.js";
 import { CONFERENCE_INCLUDE, conferenceFacts, conferenceNotFound, lockConference, recordConferenceEvent, touchConference, type ConferenceRecord } from "./conference-support.js";
 import { CONFERENCE_CLOSED_STATUSES } from "./conference-workflow.js";
 import { readEmail, readInvitationInput, type InvitationInputDto, type InvitationResponseDto, type MailingKind, type PublicInvitationResponseDto, type SendMailingDto, type UpdateInvitationDto } from "./conferences.dto.js";
@@ -25,7 +26,9 @@ const PUBLIC_MAX_FAILURES = 10;
 const MAILING_RECIPIENT_STATUSES: Record<MailingKind, string[]> = {
   invitation: ["draft", "sent"],
   reminder: ["sent", "accepted"],
-  change_notice: ["sent", "accepted"]
+  change_notice: ["sent", "accepted"],
+  program: ["accepted"],
+  proceedings: ["accepted"]
 };
 
 const INVITATION_INCLUDE = { organizationUnit: { select: { id: true, name: true } } } satisfies Prisma.ConferenceInvitationInclude;
@@ -66,7 +69,7 @@ export class ConferenceInvitationsService {
     @Optional() private readonly notifications?: NotificationsService
   ) {}
 
-  private async loadForAction(actor: SafeUserContext, conferenceId: string, action: "invitation.manage" | "mailing.send") {
+  private async loadForAction(actor: SafeUserContext, conferenceId: string, action: "invitation.manage" | "mailing.send" | "proceedings.manage") {
     const conference = await this.prisma.scientificConference.findUnique({ where: { id: conferenceId }, include: CONFERENCE_INCLUDE });
     if (!conference) conferenceNotFound();
     const facts = conferenceFacts(conference);
@@ -301,15 +304,17 @@ export class ConferenceInvitationsService {
    * Người nhận không đúng trạng thái cho loại thư được bỏ qua và báo lại.
    */
   async sendMailing(actor: SafeUserContext, conferenceId: string, input: SendMailingDto) {
-    const conference = await this.loadForAction(actor, conferenceId, "mailing.send");
+    // Kỷ yếu gửi được cả sau khi hội nghị kết thúc; các loại thư khác theo quyền gửi thư thông thường.
+    const conference = await this.loadForAction(actor, conferenceId, input.kind === "proceedings" ? "proceedings.manage" : "mailing.send");
     const allowed = MAILING_RECIPIENT_STATUSES[input.kind];
+    const programLines = await this.programPrecondition(conferenceId, input.kind);
     const tokenExpiresAt = new Date(Math.max(conference.endsAt.getTime(), Date.now() + MIN_TOKEN_TTL_MS));
     const subject = conferenceMailSubject({ kind: input.kind, conference: mailFacts(conference), subject: input.subject });
 
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockConference(tx, conferenceId);
       const current = await tx.scientificConference.findUnique({ where: { id: conferenceId } });
-      if (!current || (CONFERENCE_CLOSED_STATUSES as string[]).includes(current.status)) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Hội nghị vừa đổi trạng thái. Vui lòng tải lại trang." });
+      if (!current || current.status === "cancelled" || (current.status === "completed" && input.kind !== "proceedings")) throw new ConflictException({ code: "CONTEXT_VERSION_MISMATCH", message: "Hội nghị vừa đổi trạng thái. Vui lòng tải lại trang." });
       const invitations = await tx.conferenceInvitation.findMany({ where: { conferenceId, id: { in: input.invitationIds } } });
       const targets = invitations.filter((invitation) => allowed.includes(invitation.status));
       if (!targets.length) throw new BadRequestException({ message: "Không có người nhận phù hợp với loại thư này." });
@@ -346,7 +351,7 @@ export class ConferenceInvitationsService {
       const recipient = { fullName: invitation.fullName, academicTitle: invitation.academicTitle, kind: invitation.kind as "speaker" | "delegate" };
       let channel = "notification", status = "sent", error: string | null = null;
       if (invitation.userId) {
-        const lines = conferenceMailLines({ kind: input.kind, conference: facts, recipient, message: input.message });
+        const lines = conferenceMailLines({ kind: input.kind, conference: facts, recipient, message: input.message, programLines });
         const notification = await this.notifications?.createNotification({ userId: invitation.userId, title: subject, message: lines.join("\n"), type: "conference", link: "/my-conferences", metadata: { conferenceId, invitationId: invitation.id } });
         if (!notification) { status = "failed"; error = "Tài khoản không hoạt động hoặc không ghi được thông báo."; }
       } else {
@@ -356,7 +361,7 @@ export class ConferenceInvitationsService {
         else if (!invitation.email) { status = "failed"; error = "Không có email."; }
         else {
           try {
-            const result = await this.mail?.sendMail(invitation.email, subject, renderConferenceMailHtml({ kind: input.kind, conference: facts, recipient, message: input.message, responseUrl: responseUrl || undefined }));
+            const result = await this.mail?.sendMail(invitation.email, subject, renderConferenceMailHtml({ kind: input.kind, conference: facts, recipient, message: input.message, responseUrl: responseUrl || undefined, programLines }));
             if (!result) { status = "skipped"; error = "Chưa cấu hình máy chủ email (SMTP)."; }
           } catch (cause) {
             status = "failed"; error = (cause as Error)?.message?.slice(0, 300) ?? "Gửi email thất bại.";
@@ -368,6 +373,17 @@ export class ConferenceInvitationsService {
     }
     await this.auditLog.record({ action: `send-conference-${input.kind.replace("_", "-")}`, result: "success", actorId: actor.id, targetEntity: "scientific-conference", targetEntityId: conferenceId, username: actor.username, afterFacts: { mailingId: prepared.mailing.id, sent, failed, skipped } });
     return { mailingId: prepared.mailing.id, recipients: prepared.deliveries.length, sent, failed, skipped, ignored: input.invitationIds.length - prepared.deliveries.length };
+  }
+
+  /** Thư chương trình cần bản đã chốt (và trả về tóm tắt các phiên); thư kỷ yếu cần kỷ yếu đã tải lên. */
+  private async programPrecondition(conferenceId: string, kind: MailingKind) {
+    if (kind === "program") {
+      const program = await this.prisma.conferenceProgramVersion.findFirst({ where: { conferenceId }, orderBy: { versionNumber: "desc" } });
+      if (!program) throw new BadRequestException({ message: "Chưa chốt chương trình chi tiết." });
+      return readProgramSnapshot(program.snapshot).sessions.map((session) => `${session.kind === "plenary" ? "Phiên toàn thể" : "Tiểu ban"} ${session.name}: ${formatVietnamDateTime(new Date(session.startsAt))} – ${formatVietnamTime(new Date(session.endsAt))}${session.room ? `, ${session.room}` : ""}`);
+    }
+    if (kind === "proceedings" && !(await this.prisma.conferenceProceedings.findFirst({ where: { conferenceId } }))) throw new BadRequestException({ message: "Chưa tải kỷ yếu lên." });
+    return undefined;
   }
 
   // ---- Trả lời thư mời ----

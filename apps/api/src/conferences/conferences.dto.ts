@@ -30,7 +30,7 @@ export type InvitationInputDto = {
 };
 export type UpdateInvitationDto = Omit<InvitationInputDto, "userId" | "kind"> & { kind?: InvitationKind };
 
-export type MailingKind = "invitation" | "reminder" | "change_notice";
+export type MailingKind = "invitation" | "reminder" | "change_notice" | "program" | "proceedings";
 export type SendMailingDto = { kind: MailingKind; invitationIds: string[]; subject?: string; message?: string };
 
 export type InvitationResponseDto = { decision: "accept" | "decline"; reason?: string };
@@ -201,14 +201,14 @@ export const reasonPipe: PipeTransform<unknown, { reason: string }> = { transfor
 
 export const sendMailingPipe: PipeTransform<unknown, SendMailingDto> = { transform(value) {
   const input = record(value);
-  if (input.kind !== "invitation" && input.kind !== "reminder" && input.kind !== "change_notice") throw new BadRequestException({ message: "Loại thư không hợp lệ." });
+  if (!["invitation", "reminder", "change_notice", "program", "proceedings"].includes(String(input.kind))) throw new BadRequestException({ message: "Loại thư không hợp lệ." });
   if (!Array.isArray(input.invitationIds) || !input.invitationIds.length) throw new BadRequestException({ message: "Chưa chọn người nhận." });
   if (input.invitationIds.length > 2000) throw new BadRequestException({ message: "Mỗi đợt thư tối đa 2000 người nhận." });
   const invitationIds = [...new Set(input.invitationIds.map((id) => readRequired(id, "Người nhận", 80)))];
   const subject = readOptional(input.subject, "Tiêu đề", 300);
   const message = readOptional(input.message, "Nội dung", 5000);
   if (input.kind === "change_notice" && !message) throw new BadRequestException({ message: "Thông báo thay đổi cần nêu nội dung thay đổi." });
-  return { kind: input.kind, invitationIds, subject, message };
+  return { kind: input.kind as MailingKind, invitationIds, subject, message };
 } };
 
 function readDecision(input: Record<string, unknown>): InvitationResponseDto {
@@ -264,3 +264,97 @@ export const revisionRequestPipe: PipeTransform<unknown, RevisionRequestDto> = {
   const input = record(value);
   return { version: readVersion(input.version), kind: readPaperKind(input.kind), reason: readRequired(input.reason, "Nội dung cần sửa", 2000), dueAt: readInstant(input.dueAt, "Hạn nộp lại") };
 } };
+
+// ---- Chương trình chi tiết (Đợt 2) ----
+
+export type SessionBreakDto = { label: string; startsAt: Date; endsAt: Date };
+export type SessionInputDto = {
+  kind: "plenary" | "track";
+  name: string;
+  room: string | null;
+  chairName: string | null;
+  secretaryName: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  slotMinutes: number | null;
+  sortOrder: number;
+  breaks: SessionBreakDto[];
+};
+export type SessionSlotsDto = { paperIds: string[] };
+export type SlotTimeDto = { startsAt: Date; endsAt: Date } | { clear: true };
+export type ProgramSettingsDto = { defaultSlotMinutes: number };
+export type PublishProgramDto = { acknowledgeUnscheduled: boolean };
+export type ProceedingsInputDto = { isbn?: string; note?: string };
+
+function readMinutes(value: unknown, field: string) {
+  const minutes = typeof value === "string" ? Number(value) : value;
+  if (typeof minutes !== "number" || !Number.isInteger(minutes) || minutes < 1 || minutes > 240) throw new BadRequestException({ message: `${field} phải là số phút từ 1 đến 240.` });
+  return minutes;
+}
+
+function readSortOrder(value: unknown) {
+  if (value === undefined || value === null || value === "") return 0;
+  const order = Number(value);
+  if (!Number.isInteger(order) || order < 0 || order > 1000) throw new BadRequestException({ message: "Thứ tự phiên không hợp lệ." });
+  return order;
+}
+
+function readInterval(input: Record<string, unknown>, field: string) {
+  const startsAt = readInstant(input.startsAt, `Giờ bắt đầu ${field}`);
+  const endsAt = readInstant(input.endsAt, `Giờ kết thúc ${field}`);
+  if (endsAt <= startsAt) throw new BadRequestException({ message: `Giờ kết thúc ${field} phải sau giờ bắt đầu.` });
+  return { startsAt, endsAt };
+}
+
+export const sessionInputPipe: PipeTransform<unknown, SessionInputDto> = { transform(value) {
+  const input = record(value);
+  if (input.kind !== "plenary" && input.kind !== "track") throw new BadRequestException({ message: "Loại phiên phải là phiên toàn thể hoặc tiểu ban." });
+  const interval = readInterval(input, "phiên");
+  if (interval.endsAt.getTime() - interval.startsAt.getTime() > 24 * 60 * 60 * 1000) throw new BadRequestException({ message: "Một phiên không dài quá một ngày." });
+  const rawBreaks = input.breaks ?? [];
+  if (!Array.isArray(rawBreaks) || rawBreaks.length > 20) throw new BadRequestException({ message: "Danh sách khoảng nghỉ không hợp lệ (tối đa 20)." });
+  const breaks = rawBreaks.map((item) => {
+    const entry = record(item);
+    const range = readInterval(entry, "khoảng nghỉ");
+    if (range.startsAt < interval.startsAt || range.endsAt > interval.endsAt) throw new BadRequestException({ message: "Khoảng nghỉ phải nằm trong khung giờ của phiên." });
+    return { label: readOptional(entry.label, "Tên khoảng nghỉ", 100) ?? "Giải lao", ...range };
+  });
+  return {
+    kind: input.kind,
+    name: readRequired(input.name, "Tên phiên", 300),
+    room: readOptional(input.room, "Phòng", 200) ?? null,
+    chairName: readOptional(input.chairName, "Chủ toạ", 300) ?? null,
+    secretaryName: readOptional(input.secretaryName, "Thư ký", 300) ?? null,
+    ...interval,
+    slotMinutes: input.slotMinutes === undefined || input.slotMinutes === null || input.slotMinutes === "" ? null : readMinutes(input.slotMinutes, "Thời lượng mỗi báo cáo"),
+    sortOrder: readSortOrder(input.sortOrder),
+    breaks
+  };
+} };
+
+export const sessionSlotsPipe: PipeTransform<unknown, SessionSlotsDto> = { transform(value) {
+  const input = record(value);
+  if (!Array.isArray(input.paperIds) || input.paperIds.length > 300) throw new BadRequestException({ message: "Danh sách báo cáo không hợp lệ." });
+  const paperIds = input.paperIds.map((id) => readRequired(id, "Báo cáo", 80));
+  if (new Set(paperIds).size !== paperIds.length) throw new BadRequestException({ message: "Một báo cáo bị lặp trong phiên." });
+  return { paperIds };
+} };
+
+export const slotTimePipe: PipeTransform<unknown, SlotTimeDto> = { transform(value) {
+  const input = record(value);
+  if (input.clear === true) return { clear: true };
+  return readInterval(input, "báo cáo");
+} };
+
+export const programSettingsPipe: PipeTransform<unknown, ProgramSettingsDto> = { transform(value) {
+  return { defaultSlotMinutes: readMinutes(record(value).defaultSlotMinutes, "Thời lượng mỗi báo cáo") };
+} };
+
+export const publishProgramPipe: PipeTransform<unknown, PublishProgramDto> = { transform(value) {
+  return { acknowledgeUnscheduled: record(value ?? {}).acknowledgeUnscheduled === true };
+} };
+
+export function readProceedingsInput(value: unknown): ProceedingsInputDto {
+  const input = record(value ?? {});
+  return { isbn: readOptional(input.isbn, "ISBN", 40), note: readOptional(input.note, "Ghi chú", 1000) };
+}

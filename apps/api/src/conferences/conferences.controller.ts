@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SessionAuthGuard } from "../auth/session-auth.guard.js";
 import { buildContentDisposition } from "../modules/files/files.controller.js";
@@ -7,11 +7,18 @@ import { uploadInterceptorOptions } from "../modules/files/upload-limits.js";
 import type { RequestWithCurrentUser } from "../proposals-shared/proposal-types.js";
 import { ConferenceInvitationsService, type UploadedSheet } from "./conference-invitations.service.js";
 import { ConferencePapersService, type UploadedPaperFile } from "./conference-papers.service.js";
+import { ConferenceProgramService, type UploadedProceedingsFile } from "./conference-program.service.js";
 import {
   assignOfficerPipe,
   createConferencePipe,
   createInvitationsPipe,
   invitationResponsePipe,
+  programSettingsPipe,
+  publishProgramPipe,
+  readProceedingsInput,
+  sessionInputPipe,
+  sessionSlotsPipe,
+  slotTimePipe,
   invitationTokenPipe,
   publicInvitationResponsePipe,
   reasonPipe,
@@ -25,7 +32,12 @@ import {
   type ConferenceInfoDto,
   type InvitationInputDto,
   type InvitationResponseDto,
+  type ProgramSettingsDto,
   type PublicInvitationResponseDto,
+  type PublishProgramDto,
+  type SessionInputDto,
+  type SessionSlotsDto,
+  type SlotTimeDto,
   type RevisionRequestDto,
   type SendMailingDto,
   type UpdateConferenceDto,
@@ -120,6 +132,56 @@ export class ConferencesController {
 
   @Post(":id/mailings")
   async sendMailing(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(sendMailingPipe) body: SendMailingDto) { return this.invitations.sendMailing(req.currentUser!, id, body); }
+}
+
+/** Chương trình chi tiết và kỷ yếu (Đợt 2). */
+@Controller("api/v1/conferences/:id")
+@UseGuards(SessionAuthGuard)
+export class ConferenceProgramController {
+  constructor(private readonly program: ConferenceProgramService) {}
+
+  @Get("program")
+  async get(@Req() req: RequestWithCurrentUser, @Param("id") id: string) { return this.program.getProgram(req.currentUser!, id); }
+
+  @Patch("program/settings")
+  async settings(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(programSettingsPipe) body: ProgramSettingsDto) { return this.program.updateSettings(req.currentUser!, id, body); }
+
+  @Post("program/sessions")
+  async createSession(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(sessionInputPipe) body: SessionInputDto) { return this.program.createSession(req.currentUser!, id, body); }
+
+  @Patch("program/sessions/:sessionId")
+  async updateSession(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("sessionId") sessionId: string, @Body(sessionInputPipe) body: SessionInputDto) { return this.program.updateSession(req.currentUser!, id, sessionId, body); }
+
+  @Delete("program/sessions/:sessionId")
+  async deleteSession(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("sessionId") sessionId: string) { return this.program.deleteSession(req.currentUser!, id, sessionId); }
+
+  @Put("program/sessions/:sessionId/slots")
+  async setSlots(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("sessionId") sessionId: string, @Body(sessionSlotsPipe) body: SessionSlotsDto) { return this.program.setSessionSlots(req.currentUser!, id, sessionId, body); }
+
+  @Patch("program/slots/:slotId")
+  async setSlotTime(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("slotId") slotId: string, @Body(slotTimePipe) body: SlotTimeDto) { return this.program.setSlotTime(req.currentUser!, id, slotId, body); }
+
+  @Post("program/publish")
+  async publish(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body(publishProgramPipe) body: PublishProgramDto) { return this.program.publish(req.currentUser!, id, body); }
+
+  /** Chương trình đã chốt và kỷ yếu mới nhất (khách mời đã nhận lời, người quản lý). */
+  @Get("published")
+  async published(@Req() req: RequestWithCurrentUser, @Param("id") id: string) { return this.program.publishedForViewer(req.currentUser!, id); }
+
+  @Post("proceedings")
+  @UseInterceptors(FileInterceptor("file", uploadInterceptorOptions()))
+  async uploadProceedings(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Body() body: Record<string, unknown>, @UploadedFile() file?: UploadedProceedingsFile) {
+    return this.program.uploadProceedings(req.currentUser!, id, readProceedingsInput(body), file);
+  }
+
+  @Get("proceedings/:proceedingsId/download")
+  async downloadProceedings(@Req() req: RequestWithCurrentUser, @Param("id") id: string, @Param("proceedingsId") proceedingsId: string, @Res() response: DownloadResponse) {
+    const download = await this.program.downloadProceedings(req.currentUser!, id, proceedingsId);
+    response.setHeader("Content-Type", download.mimeType);
+    response.setHeader("Content-Disposition", buildContentDisposition(download.fileName));
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    await sendObjectContent(response, download.content, download.sizeBytes);
+  }
 }
 
 @Controller("api/v1/my-conferences")
