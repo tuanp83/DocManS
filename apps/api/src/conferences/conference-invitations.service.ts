@@ -185,7 +185,7 @@ export class ConferenceInvitationsService {
     if (!file?.buffer?.length) throw new BadRequestException({ message: "Chưa chọn tệp Excel." });
     if (!/\.xlsx$/i.test(file.originalname)) throw new BadRequestException({ message: "Chỉ nhận tệp Excel .xlsx." });
     const workbook = new ExcelJS.Workbook();
-    try { await workbook.xlsx.load(file.buffer as unknown as ExcelJS.Buffer); } catch { throw new BadRequestException({ message: "Không đọc được tệp Excel." }); }
+    try { await workbook.xlsx.load(file.buffer.buffer.slice(file.buffer.byteOffset, file.buffer.byteOffset + file.buffer.byteLength) as ArrayBuffer); } catch { throw new BadRequestException({ message: "Không đọc được tệp Excel." }); }
     const sheet = workbook.worksheets[0];
     if (!sheet) throw new BadRequestException({ message: "Tệp Excel không có trang tính nào." });
     const headerIndex = new Map<string, number>();

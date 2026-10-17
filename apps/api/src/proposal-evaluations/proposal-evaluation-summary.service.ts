@@ -285,7 +285,7 @@ export class ProposalEvaluationSummaryService {
     this.assertCompleteRound(progress);
 
     const now = new Date();
-    await updateProposalStatusGuarded(this.prisma as unknown as Parameters<typeof updateProposalStatusGuarded>[0], proposalId, PROPOSAL_STATUS.underReview, PROPOSAL_STATUS.readyForApproval);
+    await updateProposalStatusGuarded(this.prisma, proposalId, PROPOSAL_STATUS.underReview, PROPOSAL_STATUS.readyForApproval);
     const record = (await this.prisma.proposalEvaluationSummary.update({
       where: { id: existing.id },
       data: { status: EVALUATION_SUMMARY_STATUS.readyForApproval, updatedById: actor.id, markedReadyAt: now },

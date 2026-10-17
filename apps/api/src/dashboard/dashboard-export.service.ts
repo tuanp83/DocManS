@@ -77,6 +77,6 @@ export class DashboardExportService {
       targetEntity: "research-proposal-export",
       afterFacts: { format: "xlsx", rowCount: proposals.length, filters }
     });
-    return buffer as unknown as Buffer;
+    return Buffer.from(buffer);
   }
 }

@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import type { SystemRole } from "../auth/auth.types.js";
 
 /**
@@ -17,14 +18,8 @@ export function hasAcademyWideScope(systemRole?: string | null) {
   return (ACADEMY_WIDE_SCOPE_ROLES as readonly string[]).includes(systemRole ?? "");
 }
 
-type ScopeClient = {
-  organizationUnit: { findMany: (args: unknown) => Promise<Array<{ id: string }>> };
-  user: { findMany: (args: unknown) => Promise<Array<{ id: string }>> };
-  userOrganizationScope: {
-    findFirst: (args: unknown) => Promise<unknown>;
-    createMany: (args: unknown) => Promise<{ count: number }>;
-  };
-};
+/** Đủ cho cả PrismaService lẫn client trong giao dịch. */
+type ScopeClient = Pick<Prisma.TransactionClient, "organizationUnit" | "user" | "userOrganizationScope">;
 
 /** Cấp cho một tài khoản phạm vi mọi đơn vị đang hoạt động (chỉ thêm, không gỡ). Trả về số đơn vị được thêm. */
 export async function grantAcademyWideScopes(client: ScopeClient, userId: string) {

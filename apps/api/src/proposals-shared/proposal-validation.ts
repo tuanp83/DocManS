@@ -1,6 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-// @ts-ignore: runtime package is JavaScript; repository consumers use its TypeScript source contract.
-import { isContextVersionTokenV1, type ContextVersionTokenV1 } from "@rtms/permissions";
+import { isContextVersionTokenV1, type ContextVersionTokenV1 } from "./proposal-mutation.js";
 import { readProposalTeamRole } from "./proposal-participation.js";
 import type { ProposalMemberInput, RequiredPackageItem } from "./proposal-types.js";
 

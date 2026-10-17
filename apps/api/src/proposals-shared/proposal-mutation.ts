@@ -1,9 +1,12 @@
 import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 // @ts-ignore Runtime and TypeScript contracts share the same registry.
-import { isContextVersionTokenV1 } from "@rtms/permissions";
+import { isContextVersionTokenV1, type ContextVersionTokenV1 } from "@rtms/permissions";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import type { PrismaService } from "../infrastructure/prisma/prisma.service.js";
+
+// Dùng lại cho các module khác trong API để chỉ một chỗ phải bỏ qua kiểm tra kiểu khi import gói JavaScript.
+export { isContextVersionTokenV1, type ContextVersionTokenV1 };
 
 export function proposalContextVersion(proposal: { id: string; updatedAt: Date; authorizationRelationshipVersion: number; authorizationConflictVersion: number; authorizationDelegationVersion: number }) {
   return { domain: "proposal", recordId: proposal.id, aggregateVersion: proposal.updatedAt.getTime(), relationshipVersion: proposal.authorizationRelationshipVersion, conflictVersion: proposal.authorizationConflictVersion, delegationVersion: proposal.authorizationDelegationVersion, policyVersion: "v1" };

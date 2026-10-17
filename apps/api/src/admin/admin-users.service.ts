@@ -214,7 +214,7 @@ export class AdminUsersService {
         unitType: input.unitType === undefined ? inferUnitType(readText(input.name, "name")) : this.readUnitType(input.unitType)
       }
     }));
-    if (unit.status === "active") await grantUnitToAcademyWideUsers(this.prisma as never, unit.id);
+    if (unit.status === "active") await grantUnitToAcademyWideUsers(this.prisma, unit.id);
 
     await this.auditLog.record({
       action: "create-organization-unit",
@@ -262,7 +262,7 @@ export class AdminUsersService {
       where: { id: unitId },
       data
     }));
-    if (unit.status === "active") await grantUnitToAcademyWideUsers(this.prisma as never, unit.id);
+    if (unit.status === "active") await grantUnitToAcademyWideUsers(this.prisma, unit.id);
 
     await this.auditLog.record({
       action: "update-organization-unit",
@@ -334,7 +334,7 @@ export class AdminUsersService {
           isPrimary: true
         }
       });
-      if (hasAcademyWideScope(systemRole)) await grantAcademyWideScopes(tx as never, created.id);
+      if (hasAcademyWideScope(systemRole)) await grantAcademyWideScopes(tx, created.id);
 
       return created;
     });
@@ -437,7 +437,7 @@ export class AdminUsersService {
         });
       }
       // Vai trò toàn Học viện luôn có đủ mọi đơn vị, kể cả sau khi đổi vai trò hoặc đổi đơn vị chính.
-      if (hasAcademyWideScope((data.systemRole as string | undefined) ?? existing.systemRole)) await grantAcademyWideScopes(tx as never, userId);
+      if (hasAcademyWideScope((data.systemRole as string | undefined) ?? existing.systemRole)) await grantAcademyWideScopes(tx, userId);
 
       return updated;
     });
