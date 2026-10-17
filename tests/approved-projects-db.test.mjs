@@ -100,11 +100,13 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
 
   it("only in-scope staff create the project, from the approved submission, idempotently", async () => {
     const proposal = await approvedProposal();
+    const { code } = await db.researchProposal.update({ where: { id: proposal.id }, data: { code: unique("2030-A") } });
     await assert.rejects(projects.createFromApprovedProposal(outsiderStaff, proposal.id), ForbiddenException);
     await assert.rejects(projects.createFromApprovedProposal(researcher, proposal.id), ForbiddenException);
     await assert.rejects(projects.createFromApprovedProposal(leader, proposal.id), ForbiddenException);
 
     const created = await projects.createFromApprovedProposal(staff, proposal.id);
+    assert.equal((await db.approvedProject.findUnique({ where: { id: created.id } })).code, code, "đề tài kế thừa mã số của hồ sơ");
     assert.equal(created.status, "preparing");
     const again = await projects.createFromApprovedProposal(staff, proposal.id);
     assert.equal(again.id, created.id);

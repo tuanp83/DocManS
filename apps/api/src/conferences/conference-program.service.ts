@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
-import type { ObjectStorage } from "../infrastructure/minio/minio-object-storage.service.js";
+import { storageReadFailure, type ObjectStorage } from "../infrastructure/minio/minio-object-storage.service.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { assertValidUpload, defaultFileConfig, readUploadFileName, type FileModuleConfig } from "../modules/files/file-validation.js";
 import { canConference, canReadConferenceManagement, isConferenceParticipant, type ConferenceAction } from "./conference-access.js";
@@ -338,8 +338,8 @@ export class ConferenceProgramService {
     let content: Awaited<ReturnType<ObjectStorage["getObject"]>>;
     try {
       content = await this.storage.getObject(item.file.storageObjectKey);
-    } catch {
-      throw new NotFoundException({ message: "Không tìm thấy nội dung tệp." });
+    } catch (error) {
+      throw storageReadFailure(error);
     }
     await this.auditLog.record({ action: "download-conference-proceedings", result: "success", actorId: actor.id, targetEntity: "scientific-conference", targetEntityId: conferenceId, username: actor.username, reason: `proceedings:${proceedingsId}` });
     return { fileName: item.file.originalFileName, mimeType: item.file.mimeType, sizeBytes: item.file.sizeBytes, content };

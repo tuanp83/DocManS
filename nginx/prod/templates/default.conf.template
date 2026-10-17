@@ -17,6 +17,12 @@ limit_req_zone $api_limit_key       zone=api_per_client:10m rate=20r/s;
 limit_req_zone $binary_remote_addr  zone=login_per_ip:10m   rate=60r/m;
 limit_req_status 429;
 
+# Log truy cập kèm request_id (cùng mã gửi cho API qua X-Request-Id và trả về trình duyệt), để tra một lỗi
+# người dùng báo từ log nginx sang log API. rt = thời gian xử lý (giây), urt = thời gian chờ upstream.
+log_format docmans '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent '
+                   '"$http_referer" "$http_user_agent" request_id=$request_id rt=$request_time urt=$upstream_response_time';
+access_log /var/log/nginx/access.log docmans;
+
 upstream docmans_api {
     server api:4000;
     keepalive 32;

@@ -1,6 +1,6 @@
 import { PasswordService } from "../auth/password.service.js";
 import { positionDisplay } from "../organization/unit-positions.js";
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 // @ts-ignore: runtime package is JavaScript; repository consumers use its TypeScript source contract.
@@ -84,6 +84,8 @@ function activeScopeIds(actor: SafeUserContext) {
 
 @Injectable()
 export class ResearcherProfilesService {
+  private readonly logger = new Logger(ResearcherProfilesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
@@ -644,7 +646,11 @@ export class ResearcherProfilesService {
 
   private async deliverActivation(deliveryId: string, email: string, displayName: string, token: string, expiresAt: Date, actor: SafeUserContext, correlationId: string) {
     let status = "ACCEPTED";
-    try { await this.mailService.sendAccountActivation({ to: email, displayName, activationUrl: this.activationUrl(token), expiresAt, templateKey: "researcher_account_activation" }); } catch { status = "UNKNOWN"; }
+    try { await this.mailService.sendAccountActivation({ to: email, displayName, activationUrl: this.activationUrl(token), expiresAt, templateKey: "researcher_account_activation" }); } catch (error) {
+      status = "UNKNOWN";
+      // Không ghi địa chỉ thư hay mã kích hoạt; mã giao nhận đủ để tra trên hồ sơ và nhật ký hệ thống.
+      this.logger.error(`Gửi thư kích hoạt thất bại (giao nhận ${deliveryId}): ${(error as Error)?.message ?? error}`);
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.accountCredentialDelivery.update({ where: { id: deliveryId }, data: { status, attempts: { increment: 1 }, lastError: status === "UNKNOWN" ? "MAIL_DELIVERY_UNCONFIRMED" : null } });
       await this.auditLog.record({ action: "deliver-researcher-activation", result: status === "ACCEPTED" ? "success" : "failure", actorId: actor.id, targetEntity: "credential-delivery", targetEntityId: deliveryId, correlationId, reason: status === "UNKNOWN" ? "MAIL_DELIVERY_UNCONFIRMED" : undefined }, tx);

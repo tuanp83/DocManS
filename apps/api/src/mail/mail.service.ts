@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as nodemailer from "nodemailer";
+import { smtpRequireTls } from "./smtp-tls.js";
 
 @Injectable()
 export class MailService {
@@ -21,14 +22,12 @@ export class MailService {
         this.logger.warn("Cấu hình SMTP chưa đầy đủ (SMTP_HOST, SMTP_FROM). Dịch vụ gửi mail đã bị vô hiệu hóa.");
         return;
       }
-      
-      const localHost = /^(localhost|127\.0\.0\.1|::1)$/i.test(host);
 
       this.transporter = nodemailer.createTransport({
         host,
         port,
         secure: process.env.SMTP_SECURE === "true" || port === 465,
-        requireTLS: !localHost,
+        requireTLS: smtpRequireTls(host),
         auth: process.env.SMTP_USER ? {
           user: process.env.SMTP_USER,
           pass: process.env.SMTP_PASSWORD ?? "",

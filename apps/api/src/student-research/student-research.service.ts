@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
-import type { ObjectStorage } from "../infrastructure/minio/minio-object-storage.service.js";
+import { storageReadFailure, type ObjectStorage } from "../infrastructure/minio/minio-object-storage.service.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { assertValidUpload, defaultFileConfig, readUploadFileName, type FileModuleConfig } from "../modules/files/file-validation.js";
 import type { CompleteStudentProjectDto, CreateStudentProjectDto, RegisterStudentProjectDto, TransitionStudentProjectDto, UpdateStudentProjectDto } from "./dto/create-student-project.dto.js";
@@ -382,8 +382,8 @@ export class StudentResearchService {
     let content: Awaited<ReturnType<ObjectStorage["getObject"]>>;
     try {
       content = await this.storage.getObject(document.file.storageObjectKey);
-    } catch {
-      throw new NotFoundException({ message: "Không tìm thấy nội dung tệp." });
+    } catch (error) {
+      throw storageReadFailure(error);
     }
     await this.auditLog.record({ action: "download-student-research-document", result: "success", actorId: actor.id, targetEntity: "student-research-project", targetEntityId: project.id, username: actor.username, reason: `document:${document.id}` });
     return { fileName: document.file.originalFileName as string, mimeType: document.file.mimeType as string, sizeBytes: document.file.sizeBytes as number, content };

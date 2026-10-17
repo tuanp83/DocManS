@@ -43,6 +43,7 @@ import { MANAGEMENT_OFFICER_STATUS, ProposalManagementOfficerService, type Propo
 import { PROPOSAL_STATUS_LABELS } from "../proposals-shared/proposal-workflow.js";
 import type { ProposalMemberPersistInput, ProposalMissingItem } from "../proposals-shared/proposal-types.js";
 import { ProposalParticipationService } from "./proposal-participation.service.js";
+import { allocateProposalCode } from "./proposal-code.js";
 import { projectProposalViewerAuthorizationV1 } from "../permissions/proposal-capability-v1.js";
 import {
   assertDateRange,
@@ -548,7 +549,8 @@ export class ResearchProposalsService {
         data: {
           status: "submitted",
           submittedAt,
-          submittedById: actor.id
+          submittedById: actor.id,
+          ...(proposal.code ? {} : { code: await allocateProposalCode(tx, proposal.hostOrganizationUnit?.code ?? proposal.hostOrganizationUnitId, submittedAt) })
         }
       })) as ResearchProposalRecord;
 

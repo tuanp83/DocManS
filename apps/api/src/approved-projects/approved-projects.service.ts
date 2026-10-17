@@ -411,6 +411,7 @@ export class ApprovedProjectsService {
       const sourceMembers = [{ id: randomUUID(), projectId: "", userId: snapshot.ownerId, sourceMemberId: null, name: proposal.owner?.displayName ?? "Chủ nhiệm đề tài", role: "TOPIC_PI", participationRole: "TOPIC_PI", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }, ...snapshot.members.filter((member) => member.userId !== snapshot.ownerId).map((member) => ({ id: randomUUID(), projectId: "", userId: member.userId || null, sourceMemberId: member.id ?? null, name: member.name || "Thành viên đề tài", role: member.role ?? "TOPIC_MEMBER", participationRole: member.participationRole ?? member.role ?? "TOPIC_MEMBER", status: "ACTIVE", effectiveFrom: new Date(), effectiveUntil: null, createdById: currentActor.id }))];
       const project = await tx.approvedProject.create({ data: {
         proposalId,
+        code: proposal.code ?? null,
         sourceSubmissionEventId: submission.id,
         sourceDecisionId: decision.id,
         hostOrganizationUnitId: proposal.hostOrganizationUnitId,

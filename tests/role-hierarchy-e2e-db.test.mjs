@@ -105,6 +105,8 @@ test("a proposal goes from submission to the Director's approval through every r
     militaryScope: "military", startDate: "2027-01-01", endDate: "2027-12-31", objectives: "Mục tiêu", summary: "Tóm tắt", budgetMetadata: { amount: 150000000, currency: "VND" }
   });
   await s.proposals.submitProposal(pi, draft.id);
+  const vnYear = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
+  assert.equal((await db.researchProposal.findUnique({ where: { id: draft.id } })).code, `${vnYear}-KHOA-E2E-001`, "nộp lần đầu được cấp mã số");
   const officerRow = await db.proposalManagementOfficer.findFirst({ where: { proposalId: draft.id, status: "ACTIVE" } });
   assert.equal(officerRow.officerUserId, officer.id, "tự giao theo mảng Cơ sở");
   const id = draft.id;

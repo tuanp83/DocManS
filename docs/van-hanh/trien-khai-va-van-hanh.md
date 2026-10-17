@@ -4,7 +4,7 @@ Tài liệu dành cho cán bộ CNTT triển khai và vận hành DocManS tại 
 (việc gì phải xong trước khi mở cho người dùng) và **quy trình từng bước** từ chuẩn bị máy chủ tới vận hành hằng
 ngày, cập nhật phiên bản, sao lưu và xử lý sự cố.
 
-Đối chiếu mã nguồn tại nhánh `DocManS` ngày 16/10/2026. Mọi lệnh chạy trong thư mục cài đặt (mặc định `/opt/docmans`).
+Đối chiếu mã nguồn tại nhánh `DocMan3` ngày 17/10/2026 (đã chạy thử toàn bộ stack production và diễn tập khôi phục). Mọi lệnh chạy trong thư mục cài đặt (mặc định `/opt/docmans`).
 
 ---
 
@@ -108,6 +108,7 @@ openssl rand -base64 32                  # tạo mật khẩu ngẫu nhiên cho 
 | `MINIO_ROOT_PASSWORD`, `MINIO_APP_SECRET_KEY` | Hai chuỗi ngẫu nhiên **khác nhau**; `MINIO_APP_ACCESS_KEY` khác `MINIO_ROOT_USER`. |
 | `ADMIN_USERNAME`, `ADMIN_INITIAL_PASSWORD` | Tài khoản quản trị đầu tiên; mật khẩu ≥ 12 ký tự, có chữ hoa, chữ thường, chữ số. **Xoá dòng mật khẩu sau lần triển khai đầu.** |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Thông tin máy chủ thư. |
+| `SMTP_REQUIRE_TLS` | Giữ `true` (bắt buộc STARTTLS). Chỉ đặt `false` khi máy chủ chuyển tiếp thư nội bộ không hỗ trợ STARTTLS (log API báo `STARTTLS ... not implemented`). |
 | `DEADLINE_REMINDERS_ENABLED`, `HEALTH_SNAPSHOTS_ENABLED` | Giữ `true`: nhắc hạn 07:00 và chụp sức khoẻ đề tài 23:55 Chủ nhật (giờ Việt Nam). |
 
 **Không bao giờ** đặt `NODE_ENV` khác `production` cho bản triển khai: ngoài production, seed tạo 17 tài khoản mẫu mật khẩu `1234`. File `docker-compose.prod.yml` đã cố định `NODE_ENV=production`; chỉ dùng file này trên máy chủ, không dùng `docker-compose.yml` (bản phát triển).
@@ -132,7 +133,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.production ps         
 
 Đặt bí danh cho gọn (dùng ở các bước sau): `alias dc='docker compose -f docker-compose.prod.yml --env-file .env.production'`.
 
-Kiểm tra: `curl -k https://<SERVER_NAME>/api/v1/health` trả `200`; trình duyệt mở `https://<SERVER_NAME>/login`.
+Kiểm tra: `curl -k https://<SERVER_NAME>/api/v1/health/ready` trả `200` (cơ sở dữ liệu và kho tệp đều `up`); trình duyệt mở `https://<SERVER_NAME>/login`.
 
 ### C2. Đăng nhập quản trị lần đầu
 
@@ -177,7 +178,7 @@ Có hiệu lực ngay, không cần người dùng đăng nhập lại. Mỗi l�
 
 ### C6. Kiểm tra thư
 
-Tạo một hồ sơ nhà khoa học thử có cấp tài khoản, với email của cán bộ CNTT. Thư kích hoạt phải tới trong vài phút. Nếu không: `dc logs api | grep -i smtp`, kiểm tra `SMTP_*`, tường lửa ra cổng 587/465. Xoá hồ sơ thử sau khi xong.
+Tạo một hồ sơ nhà khoa học thử có cấp tài khoản, với email của cán bộ CNTT. Thư kích hoạt phải tới trong vài phút. Nếu không: `dc logs api | grep -iE "thư kích hoạt|mail"` (lỗi gửi được ghi kèm nguyên nhân), kiểm tra `SMTP_*` và `SMTP_REQUIRE_TLS`, tường lửa ra cổng 587/465. Sau khi xong, ngừng hoạt động hồ sơ thử (hệ thống không xoá hẳn hồ sơ).
 
 ### C7. Chạy thử nghiệm thu trước khi mở
 
@@ -202,8 +203,9 @@ Xoá hoặc đánh dấu dữ liệu thử theo quy định trước khi mở ch
 30 1 * * * cd /opt/docmans && ./scripts/backup.sh >> /var/log/docmans-backup.log 2>&1 && rsync -a --delete backups/ backup-host:/srv/docmans-backups/
 # Cảnh báo chứng chỉ sắp hết hạn (< 21 ngày)
 0 8 * * * cd /opt/docmans && ./scripts/check-cert-expiry.sh >> /var/log/docmans-cert.log 2>&1
-# Kiểm tra sức khoẻ 5 phút một lần
-*/5 * * * * curl -fsS --max-time 10 https://<SERVER_NAME>/api/v1/health > /dev/null || echo "DocManS không phản hồi $(date)" | mail -s "DocManS cảnh báo" it@hvqy.edu.vn
+# Kiểm tra sức khoẻ 5 phút một lần (/health/ready kiểm tra cả cơ sở dữ liệu lẫn kho tệp MinIO;
+# /health chỉ kiểm tra cơ sở dữ liệu nên KHÔNG phát hiện được kho tệp sập)
+*/5 * * * * curl -fsS --max-time 10 https://<SERVER_NAME>/api/v1/health/ready > /dev/null || echo "DocManS không phản hồi $(date)" | mail -s "DocManS cảnh báo" it@hvqy.edu.vn
 ```
 
 ### D2. Theo dõi
@@ -211,13 +213,13 @@ Xoá hoặc đánh dấu dữ liệu thử theo quy định trước khi mở ch
 | Việc | Lệnh / nơi xem | Tần suất |
 |---|---|---|
 | Trạng thái service | `dc ps` (mọi service `healthy`) | hằng ngày |
-| Lỗi API | `dc logs --since 24h api \| grep -i '"level":"error"'` | hằng ngày |
+| Lỗi API | `dc logs --since 24h api \| grep -E '"level":"error"\|ERROR'` (log request dạng JSON; tác vụ định kỳ và gửi thư ghi dạng chữ có `ERROR`) | hằng ngày |
 | Dung lượng đĩa | `df -h /var/lib/docker /opt/docmans` (cảnh báo khi > 80%) | hằng tuần |
 | Sao lưu | `tail /var/log/docmans-backup.log`, có thư mục mới trong `backups/` và trên máy sao lưu | hằng ngày |
 | Hoạt động bất thường | Quản trị → Nhật ký hệ thống: lọc "Thất bại", đăng nhập sai nhiều, đặt lại mật khẩu | hằng tuần |
 | Phạm vi tài khoản | `./scripts/unit-scopes.sh list <tài khoản>` với người vừa đổi đơn vị, nghỉ, chuyển công tác | khi có thay đổi nhân sự |
 
-Mỗi request API có mã `X-Request-Id`, dùng để đối chiếu log nginx và log API khi người dùng báo lỗi.
+Mỗi request API có mã `X-Request-Id` (trình duyệt nhận trong header phản hồi). Cùng mã đó có trong log nginx (`request_id=...`) và log lỗi của API: `dc logs nginx | grep <mã>`, `dc logs api | grep <mã>`.
 
 ### D3. Thay đổi nhân sự
 
@@ -231,7 +233,7 @@ Mỗi request API có mã `X-Request-Id`, dùng để đối chiếu log nginx v
 
 - `./scripts/backup.sh` lưu `backups/<YYYYMMDD_HHMMSS>/` gồm `postgres.dump`, `minio-data.tar.gz`, `SHA256SUMS`; tự xoá bản cũ hơn 30 ngày (`RETENTION_DAYS`).
 - Bản sao lưu **phải** được chép ra máy hoặc ổ khác: sao lưu nằm cùng máy không cứu được khi hỏng ổ hay mất máy.
-- Khôi phục: `./scripts/restore.sh backups/<thư mục>` (kiểm tra checksum, hỏi xác nhận, ghi đè toàn bộ dữ liệu, khởi động lại). Sau khi khôi phục: đăng nhập, mở một hồ sơ, tải một tệp.
+- Khôi phục: `./scripts/restore.sh backups/<thư mục>`. Script kiểm tra checksum, hỏi xác nhận, **tự sao lưu dữ liệu hiện tại** (thư mục mới trong `backups/`, để quay lại nếu chọn nhầm bản), xoá và dựng lại toàn bộ schema từ bản sao lưu trong một giao dịch (an toàn cả khi quay về phiên bản cũ hơn), giải nén tệp MinIO ra thư mục tạm rồi mới thay, sau đó khởi động lại. Mất khoảng 1 phút với dữ liệu nhỏ. Khôi phục trên máy mới hoặc khi dữ liệu hiện tại đã hỏng: `SKIP_SAFETY_BACKUP=1 ./scripts/restore.sh ...`. Sau khi khôi phục: đăng nhập, mở một hồ sơ, tải một tệp.
 - **Diễn tập khôi phục** trên một máy thử trước khi mở chính thức và 6 tháng một lần.
 
 ---
@@ -249,6 +251,7 @@ sed -i 's/^APP_VERSION=.*/APP_VERSION=<phiên bản mới>/' .env.production
 dc build                                                 # 4. build trước để rút ngắn thời gian gián đoạn
 dc up -d                                                 # 5. migrate chạy trước, rồi api, web, nginx
 dc logs --tail 50 migrate && dc ps                       # 6. migrate "exited (0)", các service healthy
+dc restart nginx                                         # 7. nạp cấu hình nginx mới (template chỉ được đọc khi nginx khởi động)
 ```
 
 Gián đoạn thường dưới 1 phút. Nên cập nhật ngoài giờ làm việc và báo trước cho người dùng.
@@ -264,9 +267,10 @@ Gián đoạn thường dưới 1 phút. Nên cập nhật ngoài giờ làm vi�
 | `migrate` thoát mã khác 0, API không khởi động | Migration lỗi, hoặc thiếu/sai `ADMIN_INITIAL_PASSWORD` ở lần đầu | `dc logs migrate`; sửa `.env.production`, `dc up -d`. Migration lỗi giữa chừng: khôi phục bản sao lưu trước cập nhật. |
 | `minio` không lên, báo không tìm thấy image | Chưa nạp image MinIO | Bước B3. |
 | Trang báo lỗi chứng chỉ | Chứng chỉ hết hạn hoặc sai tên miền | `./scripts/check-cert-expiry.sh`; thay chứng chỉ ở `nginx/ssl/`, `dc exec nginx nginx -s reload`. |
-| Người dùng không nhận được thư kích hoạt | SMTP sai hoặc bị chặn | `dc logs api \| grep -i mail`; kiểm tra `SMTP_*`. Chuyên viên có thể **gửi lại thư kích hoạt** trên hồ sơ nhà khoa học. |
+| Người dùng không nhận được thư kích hoạt | SMTP sai, bị chặn, hoặc máy chủ thư không hỗ trợ STARTTLS | `dc logs api \| grep -iE "thư kích hoạt\|mail"`; kiểm tra `SMTP_*`; lỗi `STARTTLS ... not implemented` thì đặt `SMTP_REQUIRE_TLS=false`, `dc up -d api`. Chuyên viên có thể **gửi lại thư kích hoạt** trên hồ sơ nhà khoa học. |
 | Lãnh đạo, chuyên viên báo "không thấy hồ sơ của khoa X" | Thiếu phạm vi đơn vị | `./scripts/unit-scopes.sh list <tài khoản>`, cấp thêm (C5). |
 | Người dùng bị báo "thao tác quá nhanh" (429) | Vượt giới hạn tần suất (nhiều người chung một IP) | Tạm thời bình thường; nếu kéo dài, nâng `rate`/`burst` trong `nginx/prod/templates/default.conf.template`, `dc up -d nginx`. |
+| Tải tệp báo "Kho tệp tạm thời không truy cập được" (503) | Container `minio` dừng hoặc lỗi; tệp vẫn còn | `dc ps minio`, `dc logs --tail 50 minio`; `dc up -d minio`. `/api/v1/health/ready` trở lại `200` là xong. |
 | Đăng nhập sai nhiều lần bị khoá tạm | Chống dò mật khẩu (5 lần sai / 15 phút) | Chờ 15 phút, hoặc quản trị đặt lại mật khẩu. |
 | Đầy ổ đĩa | Tệp đính kèm, bản sao lưu, image cũ | `docker system df`; `docker image prune` (giữ image `rollback`); giảm `RETENTION_DAYS` nếu đã có bản sao ngoài máy. |
 | Hệ thống chậm | Thiếu RAM, nhiều kết nối CSDL | `docker stats`; tăng RAM máy chủ hoặc `DB_POOL_MAX` (tổng < 100). |
