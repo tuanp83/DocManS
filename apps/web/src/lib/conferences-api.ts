@@ -179,3 +179,28 @@ export async function uploadProceedings(id: string, file: File, input: { isbn?: 
   return apiRequest<ProgramState>(`${conferencePath(id)}/proceedings`, { method: "POST", body: form }, "Không tải được kỷ yếu lên.");
 }
 export function proceedingsDownloadUrl(id: string, proceedingsId: string) { return `${getApiBaseUrl()}${conferencePath(id)}/proceedings/${encodeURIComponent(proceedingsId)}/download`; }
+
+// ---- Thống kê ----
+
+export type ConferenceStatsFilters = { year?: string; hostUnitId?: string; level?: string };
+type StatsBucket = { key: string; label: string; count: number };
+type StatsCounts = { invited: number; accepted: number; declined: number; awaiting: number; speakers: number; abstracts: number; fullPapers: number; scheduled: number; withdrawn: number };
+export type ConferenceStats = { visible: false } | {
+  visible: true;
+  options: { years: number[]; hostUnits: Array<{ id: string; name: string }>; levels: ConferenceLevel[] };
+  totals: StatsCounts & { conferences: number; active: number; completed: number; acceptanceRate: number | null; fullPaperRate: number | null; scheduledRate: number | null };
+  byStatus: StatsBucket[]; byLevel: StatsBucket[]; byYear: StatsBucket[]; byHostUnit: StatsBucket[]; speakersByUnit: StatsBucket[];
+  perConference: Array<StatsCounts & { id: string; code: string; title: string; level: ConferenceLevel; status: ConferenceStatus; startsAt: string; hostUnitName: string; sessions: number; acceptanceRate: number | null; fullPaperRate: number | null }>;
+  tracks: Array<{ conferenceId: string; conferenceCode: string; kind: "plenary" | "track"; name: string; papers: number }>;
+};
+
+function statsQuery(filters: ConferenceStatsFilters) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value);
+  return query.size ? `?${query}` : "";
+}
+
+export async function getConferenceStats(filters: ConferenceStatsFilters = {}, signal?: AbortSignal) { return json<ConferenceStats>(`/conferences/stats${statsQuery(filters)}`, { signal }); }
+export function conferenceStatsExportUrl(filters: ConferenceStatsFilters = {}) { return `${getApiBaseUrl()}/conferences/stats/export.xlsx${statsQuery(filters)}`; }
+export const CONFERENCE_STATUS_LABELS: Record<ConferenceStatus, string> = { draft: "Nháp", preparing: "Đang chuẩn bị", inviting: "Đang mời, nhận bài", submission_closed: "Đã đóng nhận bài", program_published: "Đã gửi chương trình", completed: "Đã kết thúc", cancelled: "Đã huỷ" };
+export function formatRate(value: number | null) { return value === null ? "—" : `${value.toLocaleString("vi-VN")}%`; }

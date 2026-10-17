@@ -169,3 +169,54 @@ test("session input keeps breaks inside the session", () => {
   assert.throws(() => sessionInputPipe.transform({ ...base, kind: "room" }), /phiên toàn thể hoặc tiểu ban/);
   assert.throws(() => sessionInputPipe.transform({ ...base, slotMinutes: 0 }), /từ 1 đến 240/);
 });
+
+// ---- Thống kê ----
+import { computeConferenceStats, rate } from "../dist/apps/api/conferences/conference-stats.js";
+import { readStatsFilters } from "../dist/apps/api/conferences/conferences.dto.js";
+
+const inv = (kind, status, paper = null, extra = {}) => ({ kind, status, unitName: "Khoa Nội", isInternal: true, paper, ...extra });
+const statsConference = (overrides = {}) => ({ id: "c1", code: "HN-2030-001", title: "HN 1", level: "academy", status: "program_published", startsAt: new Date("2030-03-01T17:00:00Z"), hostUnitId: "u1", hostUnitName: "Phòng KHQS", invitations: [], sessions: [], ...overrides });
+
+test("conference stats count sent invitations, active speakers and rates; cancelled conferences only appear by status", () => {
+  const c1 = statsConference({
+    invitations: [
+      inv("speaker", "accepted", { status: "scheduled", hasAbstract: true, hasFullPaper: true }),
+      inv("speaker", "accepted", { status: "abstract_submitted", hasAbstract: true, hasFullPaper: false }, { isInternal: false, unitName: null }),
+      inv("speaker", "accepted", { status: "withdrawn", hasAbstract: true, hasFullPaper: true }),
+      inv("delegate", "declined"),
+      inv("delegate", "sent"),
+      inv("speaker", "draft"),
+      inv("delegate", "revoked")
+    ],
+    sessions: [{ kind: "plenary", name: "Toàn thể", papers: 1 }]
+  });
+  const cancelled = statsConference({ id: "c2", code: "HN-2030-002", status: "cancelled", invitations: [inv("delegate", "accepted")] });
+  const stats = computeConferenceStats([c1, cancelled]);
+  assert.equal(stats.totals.conferences, 2);
+  assert.equal(stats.totals.active, 1);
+  assert.deepEqual({ invited: stats.totals.invited, accepted: stats.totals.accepted, declined: stats.totals.declined, awaiting: stats.totals.awaiting }, { invited: 5, accepted: 3, declined: 1, awaiting: 1 }, "chưa gửi và đã huỷ không tính; hội nghị huỷ không tính");
+  assert.deepEqual({ speakers: stats.totals.speakers, abstracts: stats.totals.abstracts, fullPapers: stats.totals.fullPapers, scheduled: stats.totals.scheduled, withdrawn: stats.totals.withdrawn }, { speakers: 2, abstracts: 2, fullPapers: 1, scheduled: 1, withdrawn: 1 });
+  assert.equal(stats.totals.acceptanceRate, 60);
+  assert.equal(stats.totals.fullPaperRate, 50);
+  assert.deepEqual(stats.speakersByUnit.map((row) => [row.label, row.count]), [["Khoa Nội", 1], ["Ngoài Học viện", 1]]);
+  assert.deepEqual(stats.byStatus.map((row) => row.key).sort(), ["cancelled", "program_published"]);
+  assert.equal(stats.tracks.length, 1, "phiên của hội nghị huỷ không tính");
+  assert.equal(stats.perConference.find((row) => row.id === "c2").acceptanceRate, 100, "bảng theo hội nghị vẫn hiện số của hội nghị huỷ");
+  assert.equal(rate(0, 0), null, "không có mẫu số thì không phải 0%");
+});
+
+test("conference stats filter by Vietnamese year, host unit and level, with options from the unfiltered set", () => {
+  // 31/12/2030 23:00 giờ Việt Nam là năm 2030 dù theo UTC vẫn là 31/12.
+  const late = statsConference({ id: "a", startsAt: new Date("2030-12-31T16:00:00Z") });
+  const next = statsConference({ id: "b", startsAt: new Date("2030-12-31T17:30:00Z"), hostUnitId: "u2", hostUnitName: "Khoa Nội", level: "national" });
+  assert.deepEqual(computeConferenceStats([late, next], { year: 2030 }).perConference.map((row) => row.id), ["a"]);
+  assert.deepEqual(computeConferenceStats([late, next], { year: 2031 }).perConference.map((row) => row.id), ["b"]);
+  assert.deepEqual(computeConferenceStats([late, next], { hostUnitId: "u2" }).perConference.map((row) => row.id), ["b"]);
+  const filtered = computeConferenceStats([late, next], { level: "academy" });
+  assert.deepEqual(filtered.perConference.map((row) => row.id), ["a"]);
+  assert.deepEqual(filtered.options.years, [2031, 2030]);
+  assert.equal(filtered.options.hostUnits.length, 2);
+  assert.deepEqual(readStatsFilters({ year: "2030", unitId: "u1", level: "national" }), { year: 2030, hostUnitId: "u1", level: "national" });
+  assert.throws(() => readStatsFilters({ year: "abc" }), /Năm không hợp lệ/);
+  assert.throws(() => readStatsFilters({ level: "galaxy" }), /Cấp hội nghị/);
+});

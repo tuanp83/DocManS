@@ -33,6 +33,7 @@ import { getProposalLevelLabel } from "@/lib/proposal-classification";
 import { projectStatusLabel } from "@/lib/projects-api";
 import { loadProposalCatalogs } from "@/lib/research-proposals-api";
 import { statusMeta } from "@/lib/status";
+import { DashboardConferenceSection } from "@/components/conferences/conference-stats";
 import { DrillDownPanel, type DashboardLabels, type DrillRequest } from "./drill-down-panel";
 import { UnitHealthHeatmap } from "./unit-health-heatmap";
 import { ChartCard, HBarChart, LineChart, StackedColumnChart, StackedHBarChart, type HBarRow, type Series } from "./viz";
@@ -513,6 +514,8 @@ export function DashboardAnalytics() {
           </div>
         </div>
       ) : null}
+
+      <DashboardConferenceSection year={filters.year} unitId={filters.unitId} />
 
       {drill ? <DrillDownPanel key={drill.id} request={drill} labels={labels} onClose={() => setDrill(null)} /> : null}
     </div>

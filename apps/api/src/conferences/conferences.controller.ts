@@ -21,6 +21,7 @@ import {
   slotTimePipe,
   invitationTokenPipe,
   publicInvitationResponsePipe,
+  readStatsFilters,
   reasonPipe,
   readSubmitPaper,
   revisionRequestPipe,
@@ -80,6 +81,15 @@ export class ConferencesController {
 
   @Get("officer-candidates")
   async officerCandidates(@Req() req: RequestWithCurrentUser) { return { users: await this.conferences.officerCandidates(req.currentUser!) }; }
+
+  /** Thống kê hội nghị trong phạm vi người xem: ?year=&hostUnitId=&level= (unitId cũng nhận, theo dashboard). */
+  @Get("stats")
+  async stats(@Req() req: RequestWithCurrentUser, @Query() query: Record<string, unknown>) { return this.conferences.stats(req.currentUser!, readStatsFilters(query)); }
+
+  @Get("stats/export.xlsx")
+  async statsExport(@Req() req: RequestWithCurrentUser, @Query() query: Record<string, unknown>, @Res() response: DownloadResponse) {
+    sendXlsx(response, "Thong_ke_hoi_nghi.xlsx", await this.conferences.statsXlsx(req.currentUser!, readStatsFilters(query)));
+  }
 
   @Get("invitation-template.xlsx")
   async template(@Res() response: DownloadResponse) { sendXlsx(response, "Mau_khach_moi_hoi_nghi.xlsx", await this.invitations.importTemplate()); }
