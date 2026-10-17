@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, startTransition } from "react";
 import { useRouter } from "next/navigation";
 import { getCurrentUser, logoutSession } from "@/lib/auth-api";
-import { toShellAccount, type ShellAccount } from "@/lib/session";
+import { isPublicRoute, toShellAccount, type ShellAccount } from "@/lib/session";
 
 type SessionContextValue = {
   account: ShellAccount | null;
@@ -25,7 +25,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setAccount(shellAccount);
     setIsLoading(false);
 
-    if (!user && window.location.pathname !== "/login") {
+    // Trang công khai (đặt mật khẩu, trả lời thư mời) không cần phiên đăng nhập.
+    if (!user && !isPublicRoute(window.location.pathname)) {
       startTransition(() => {
         router.replace("/login");
         router.refresh();

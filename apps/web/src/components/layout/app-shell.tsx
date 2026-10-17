@@ -11,12 +11,13 @@ import { NavLink } from "@/components/layout/nav-link";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { QuickSearch } from "@/components/layout/quick-search";
 import { getHomeRoute, getNavigationItems } from "@/lib/navigation";
+import { isPublicRoute } from "@/lib/session";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { account, isLoading } = useSession();
 
-  if (pathname === "/login" || pathname === "/password-reset") {
+  if (isPublicRoute(pathname)) {
     return <>{children}</>;
   }
 

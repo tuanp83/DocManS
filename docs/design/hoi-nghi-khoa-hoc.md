@@ -1,7 +1,7 @@
 # Thiết kế: Quản lý Hội nghị Khoa học
 
 Phạm vi: module lớn mới, ngang hàng với **Đề xuất đề tài** (`research-proposals`, `proposal-intake-periods`).
-Tài liệu mô tả 3 đợt; chưa hiện thực đợt nào. Các quyết định nghiệp vụ đã chốt ở mục 11.
+Tài liệu mô tả 3 đợt; **Đợt 1 đã hiện thực** (module `apps/api/src/conferences`, trang `/conferences`, `/my-conferences`, `/conference-invitation`). Các quyết định nghiệp vụ đã chốt ở mục 11.
 
 Đáp ứng thuyết minh: 2.6 ("quản lý văn bản liên quan đề tài, hội nghị theo thời gian thực"), 2.5 (dashboard, báo cáo).
 
