@@ -1,7 +1,7 @@
 # Thiết kế: Quản lý Hội nghị Khoa học
 
 Phạm vi: module lớn mới, ngang hàng với **Đề xuất đề tài** (`research-proposals`, `proposal-intake-periods`).
-Tài liệu mô tả 3 đợt; **Đợt 1 và Đợt 2 đã hiện thực** (module `apps/api/src/conferences`, trang `/conferences`, `/my-conferences`, `/conference-invitation`). Đợt 3 chưa làm. Các quyết định nghiệp vụ đã chốt ở mục 11.
+Tài liệu mô tả 3 đợt; **Đợt 1, Đợt 2 và phần thống kê của Đợt 3 đã hiện thực** (module `apps/api/src/conferences`, trang `/conferences`, `/my-conferences`, `/conference-invitation`, mục Hội nghị trên `/dashboard` và tab Hội nghị trên `/reports`). Các mục còn lại của Đợt 3 không làm theo quyết định của chủ sản phẩm. Các quyết định nghiệp vụ đã chốt ở mục 11.
 
 Đáp ứng thuyết minh: 2.6 ("quản lý văn bản liên quan đề tài, hội nghị theo thời gian thực"), 2.5 (dashboard, báo cáo).
 
@@ -281,12 +281,21 @@ Dùng hộp xác nhận, thông báo, nhập lý do của hệ thống (commit `
 5. Tải kỷ yếu lên, gửi khách mời.
 6. Kết thúc hội nghị (kỷ yếu vẫn tải và gửi được sau khi kết thúc).
 
-Chưa làm, chuyển sang Đợt 3: thống kê hội nghị trên dashboard và trong `/reports`.
+### Đợt 3: Thống kê (đã làm)
 
-### Đợt 3: Mở rộng khi có nhu cầu
+Chủ sản phẩm chốt: Đợt 3 chỉ làm thống kê. Phản biện báo cáo, điểm danh, giấy chứng nhận, giải thưởng, liên kết lý
+lịch khoa học và sản phẩm đề tài **không làm**.
 
-Thống kê trên dashboard và `/reports`, phản biện báo cáo, điểm danh, giấy chứng nhận, giải thưởng, liên kết lý lịch
-khoa học và sản phẩm đề tài.
+- `GET /conferences/stats?year=&hostUnitId=&level=` (và `.../stats/export.xlsx`): đếm trên đúng các hội nghị người
+  xem được đọc bản quản lý, cùng điều kiện với danh sách hội nghị; người không có hội nghị nào nhận `visible: false`.
+  Công thức nằm ở `conference-stats.ts` (hàm thuần, có test).
+- Quy ước: "đã mời" là lời mời đã gửi thư; tỉ lệ nhận lời = nhận lời / đã mời; tỉ lệ nộp toàn văn = báo cáo viên đã
+  có toàn văn / báo cáo viên đã nhận lời (không tính báo cáo đã rút); hội nghị đã huỷ chỉ có mặt trong phân bố theo
+  trạng thái và bảng theo hội nghị; năm là năm (giờ Việt Nam) của ngày bắt đầu; tỉ lệ không có mẫu số hiện "—".
+- Dashboard: mục "Hội nghị khoa học" (ô số, hội nghị theo năm, báo cáo viên theo đơn vị) theo bộ lọc Năm và Đơn vị
+  của dashboard (đơn vị là đơn vị chủ trì); ẩn với người không có hội nghị nào.
+- Trang Báo cáo, tab "Hội nghị khoa học": bộ lọc năm, đơn vị chủ trì, cấp; theo trạng thái, cấp, đơn vị chủ trì,
+  báo cáo viên theo đơn vị; bảng theo từng hội nghị và theo phiên/tiểu ban; xuất Excel ba trang tính.
 
 ---
 

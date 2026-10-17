@@ -358,3 +358,20 @@ export function readProceedingsInput(value: unknown): ProceedingsInputDto {
   const input = record(value ?? {});
   return { isbn: readOptional(input.isbn, "ISBN", 40), note: readOptional(input.note, "Ghi chú", 1000) };
 }
+
+// ---- Thống kê ----
+
+/** Bộ lọc thống kê từ query string: ?year=&hostUnitId=&level=. Giá trị lạ bị từ chối thay vì bỏ qua lặng lẽ. */
+export function readStatsFilters(query: Record<string, unknown>) {
+  const filters: { year?: number; hostUnitId?: string; level?: string } = {};
+  if (query.year !== undefined && query.year !== "") {
+    const year = Number(query.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) throw new BadRequestException({ message: "Năm không hợp lệ." });
+    filters.year = year;
+  }
+  // Dashboard dùng khoá unitId cho đơn vị; ở hội nghị đó là đơn vị chủ trì.
+  const unit = query.hostUnitId ?? query.unitId;
+  if (unit !== undefined && unit !== "") filters.hostUnitId = readRequired(unit, "Đơn vị", 80);
+  if (query.level !== undefined && query.level !== "") filters.level = readLevel(query.level);
+  return filters;
+}

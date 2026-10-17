@@ -28,6 +28,7 @@ import {
   vietnamYear,
   type ConferenceRecord
 } from "./conference-support.js";
+import { computeConferenceStats, type StatsConference, type StatsFilters } from "./conference-stats.js";
 import { CONFERENCE_STATUS_LABELS, CONFERENCE_TRANSITIONS, type ConferenceStatus, type ConferenceTransition } from "./conference-workflow.js";
 import { assertConferenceDates, type AssignOfficerDto, type ConferenceInfoDto, type UpdateConferenceDto, type VersionedReasonDto } from "./conferences.dto.js";
 
@@ -337,6 +338,67 @@ export class ConferencesService {
     if (!canCreateConference(actor)) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED" });
     const ids = actor.organizationScopes.map((scope) => scope.id);
     return this.prisma.organizationUnit.findMany({ where: { id: { in: ids }, status: "active" }, select: { id: true, code: true, name: true }, orderBy: { name: "asc" } });
+  }
+
+  // ---- Thống kê ----
+
+  /**
+   * Thống kê trên đúng các hội nghị người xem được đọc bản quản lý (cùng điều kiện với danh sách). Người không có
+   * quyền xem hội nghị nào nhận `visible: false` để giao diện ẩn mục thống kê.
+   */
+  async stats(actor: SafeUserContext, filters: StatsFilters) {
+    const where = conferenceManagementFilter(actor);
+    if (!where) return { visible: false as const };
+    const rows = await this.prisma.scientificConference.findMany({
+      where,
+      include: {
+        ...CONFERENCE_INCLUDE,
+        invitations: { select: { kind: true, status: true, isInternal: true, organizationUnit: { select: { name: true } }, paper: { select: { status: true, versions: { select: { kind: true } } } } } },
+        sessions: { select: { kind: true, name: true, _count: { select: { slots: true } } } }
+      },
+      take: 2000
+    });
+    const readable: StatsConference[] = rows.filter((row) => canReadConferenceManagement(actor, conferenceFacts(row))).map((row) => ({
+      id: row.id, code: row.code, title: row.title, level: row.level, status: row.status, startsAt: row.startsAt,
+      hostUnitId: row.hostOrganizationUnitId, hostUnitName: row.hostOrganizationUnit.name,
+      invitations: row.invitations.map((invitation) => ({
+        kind: invitation.kind, status: invitation.status, isInternal: invitation.isInternal, unitName: invitation.organizationUnit?.name ?? null,
+        paper: invitation.paper ? { status: invitation.paper.status, hasAbstract: invitation.paper.versions.some((version) => version.kind === "abstract"), hasFullPaper: invitation.paper.versions.some((version) => version.kind === "full_paper") } : null
+      })),
+      sessions: row.sessions.map((session) => ({ kind: session.kind, name: session.name, papers: session._count.slots }))
+    }));
+    return { visible: true as const, ...computeConferenceStats(readable, filters) };
+  }
+
+  async statsXlsx(actor: SafeUserContext, filters: StatsFilters) {
+    const result = await this.stats(actor, filters);
+    if (!result.visible) throw new ForbiddenException({ code: "ACTION_NOT_GRANTED", message: "Không có hội nghị nào trong phạm vi của bạn." });
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "DocManS";
+    workbook.created = new Date();
+    const header = (sheet: ExcelJS.Worksheet) => { sheet.getRow(1).font = { bold: true }; sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9D9D9" } }; };
+    const day = (value: Date) => new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" }).format(value);
+    const percent = (value: number | null) => (value === null ? "" : `${value}%`);
+    const sheet = workbook.addWorksheet("Theo_hoi_nghi");
+    sheet.columns = [
+      { header: "STT", key: "stt", width: 5 }, { header: "Mã", key: "code", width: 14 }, { header: "Tên hội nghị", key: "title", width: 45 }, { header: "Ngày bắt đầu", key: "startsAt", width: 14 },
+      { header: "Đơn vị chủ trì", key: "host", width: 28 }, { header: "Trạng thái", key: "status", width: 18 }, { header: "Đã mời", key: "invited", width: 10 }, { header: "Nhận lời", key: "accepted", width: 10 },
+      { header: "Từ chối", key: "declined", width: 10 }, { header: "Tỉ lệ nhận lời", key: "acceptanceRate", width: 14 }, { header: "Báo cáo viên", key: "speakers", width: 12 },
+      { header: "Đã nộp tóm tắt", key: "abstracts", width: 14 }, { header: "Đã nộp toàn văn", key: "fullPapers", width: 15 }, { header: "Tỉ lệ nộp toàn văn", key: "fullPaperRate", width: 16 },
+      { header: "Đã xếp lịch", key: "scheduled", width: 12 }, { header: "Số phiên", key: "sessions", width: 10 }
+    ];
+    header(sheet);
+    result.perConference.forEach((row, index) => sheet.addRow({ ...row, stt: index + 1, startsAt: day(row.startsAt), host: row.hostUnitName, status: CONFERENCE_STATUS_LABELS[row.status as ConferenceStatus] ?? row.status, acceptanceRate: percent(row.acceptanceRate), fullPaperRate: percent(row.fullPaperRate) }));
+    const units = workbook.addWorksheet("Bao_cao_vien_theo_don_vi");
+    units.columns = [{ header: "Đơn vị", key: "label", width: 40 }, { header: "Số báo cáo viên", key: "count", width: 16 }];
+    header(units);
+    result.speakersByUnit.forEach((row) => units.addRow(row));
+    const tracks = workbook.addWorksheet("Theo_phien");
+    tracks.columns = [{ header: "Hội nghị", key: "conferenceCode", width: 14 }, { header: "Loại", key: "kind", width: 16 }, { header: "Phiên", key: "name", width: 40 }, { header: "Số báo cáo", key: "papers", width: 12 }];
+    header(tracks);
+    result.tracks.forEach((row) => tracks.addRow({ ...row, kind: row.kind === "plenary" ? "Phiên toàn thể" : "Tiểu ban" }));
+    await this.auditLog.record({ action: "export-conference-stats", result: "success", actorId: actor.id, targetEntity: "scientific-conference", targetEntityId: "stats", username: actor.username, afterFacts: { ...filters, conferences: result.perConference.length } });
+    return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
   // ---- Xuất Excel ----

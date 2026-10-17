@@ -331,6 +331,24 @@ describe("Scientific conferences on real PostgreSQL", () => {
     await assert.rejects(program.downloadProceedings(otherStaff, created.id, book.id), /Không tìm thấy/);
   });
 
+  it("conference stats follow the same visibility as the conference list", async () => {
+    const draft = await newConference();
+    const assigned = await newConference();
+    await conferences.assignOfficer(head, assigned.id, { version: assigned.version, userId: officer.id });
+    const ids = (stats) => stats.perConference.map((row) => row.id);
+    const headStats = await conferences.stats(head, {});
+    assert.ok(ids(headStats).includes(draft.id) && ids(headStats).includes(assigned.id), "Trưởng phòng thấy cả bản nháp");
+    const leaderStats = await conferences.stats(leader, {});
+    assert.ok(!ids(leaderStats).includes(draft.id) && ids(leaderStats).includes(assigned.id), "Ban giám đốc không thấy bản nháp");
+    assert.ok(ids(await conferences.stats(officer, {})).includes(assigned.id));
+    assert.ok(!ids(await conferences.stats(otherStaff, {})).includes(assigned.id), "chuyên viên khác không thấy hội nghị không được giao");
+    assert.deepEqual(await conferences.stats(researcher, {}), { visible: false });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await conferences.statsXlsx(head, { hostUnitId: orgA.id }));
+    assert.deepEqual(workbook.worksheets.map((sheet) => sheet.name), ["Theo_hoi_nghi", "Bao_cao_vien_theo_don_vi", "Theo_phien"]);
+    await assert.rejects(conferences.statsXlsx(researcher, {}), /Không có hội nghị/);
+  });
+
   it("imports invitees from Excel all-or-nothing and reports bad rows", async () => {
     const created = await newConference();
     await conferences.assignOfficer(head, created.id, { version: created.version, userId: officer.id });
