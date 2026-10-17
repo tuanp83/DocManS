@@ -39,7 +39,7 @@ const MANAGEMENT_DETAIL_INCLUDE = {
   invitations: {
     include: {
       organizationUnit: { select: { id: true, name: true } },
-      user: { select: { id: true, displayName: true, status: true } },
+      user: { select: { id: true, displayName: true, status: true, unit: true } },
       paper: {
         include: {
           versions: { select: { id: true, kind: true, versionNumber: true, title: true, abstractText: true, submittedAt: true, file: { select: { id: true, originalFileName: true, sizeBytes: true } } }, orderBy: { versionNumber: "desc" } },
@@ -296,7 +296,8 @@ export class ConferencesService {
         email: invitation.email,
         isInternal: invitation.isInternal,
         organizationUnit: invitation.organizationUnit,
-        externalOrganization: invitation.externalOrganization,
+        // Tài khoản phạm vi toàn Học viện không có đơn vị chính: hiện đơn vị ghi trên tài khoản.
+        externalOrganization: invitation.externalOrganization ?? (!invitation.organizationUnit && invitation.user?.unit ? invitation.user.unit : null),
         hasAccount: !!invitation.userId,
         accountStatus: invitation.user?.status ?? null,
         status: invitation.status,
@@ -353,7 +354,7 @@ export class ConferencesService {
       where,
       include: {
         ...CONFERENCE_INCLUDE,
-        invitations: { select: { kind: true, status: true, isInternal: true, organizationUnit: { select: { name: true } }, paper: { select: { status: true, versions: { select: { kind: true } } } } } },
+        invitations: { select: { kind: true, status: true, isInternal: true, organizationUnit: { select: { name: true } }, user: { select: { unit: true } }, paper: { select: { status: true, versions: { select: { kind: true } } } } } },
         sessions: { select: { kind: true, name: true, _count: { select: { slots: true } } } }
       },
       take: 2000
@@ -362,7 +363,7 @@ export class ConferencesService {
       id: row.id, code: row.code, title: row.title, level: row.level, status: row.status, startsAt: row.startsAt,
       hostUnitId: row.hostOrganizationUnitId, hostUnitName: row.hostOrganizationUnit.name,
       invitations: row.invitations.map((invitation) => ({
-        kind: invitation.kind, status: invitation.status, isInternal: invitation.isInternal, unitName: invitation.organizationUnit?.name ?? null,
+        kind: invitation.kind, status: invitation.status, isInternal: invitation.isInternal, unitName: invitation.organizationUnit?.name ?? invitation.user?.unit ?? null,
         paper: invitation.paper ? { status: invitation.paper.status, hasAbstract: invitation.paper.versions.some((version) => version.kind === "abstract"), hasFullPaper: invitation.paper.versions.some((version) => version.kind === "full_paper") } : null
       })),
       sessions: row.sessions.map((session) => ({ kind: session.kind, name: session.name, papers: session._count.slots }))
@@ -436,7 +437,7 @@ export class ConferencesService {
         stt: index + 1,
         fullName: invitation.fullName,
         academicTitle: invitation.academicTitle ?? "",
-        unit: invitation.organizationUnit?.name ?? invitation.externalOrganization ?? "",
+        unit: invitation.organizationUnit?.name ?? invitation.externalOrganization ?? invitation.user?.unit ?? "",
         email: invitation.email ?? "",
         kind: invitation.kind === "speaker" ? "Báo cáo viên" : "Đại biểu",
         status: INVITATION_STATUS_LABELS[invitation.status] ?? invitation.status,

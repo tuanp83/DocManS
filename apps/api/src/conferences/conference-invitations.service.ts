@@ -51,6 +51,15 @@ function mailFacts(conference: ConferenceRecord): ConferenceMailFacts {
   };
 }
 
+/**
+ * Đơn vị của người được mời có tài khoản: phạm vi chính, hoặc phạm vi duy nhất. Tài khoản nhiều phạm vi mà không có
+ * phạm vi chính (lãnh đạo, chuyên viên phạm vi toàn Học viện) để trống: không tự chọn bừa một đơn vị. Đơn vị chỉ để
+ * hiển thị và thống kê; tài khoản có sẵn không đổi.
+ */
+export function accountUnitId(scopes: Array<{ organizationUnitId: string; isPrimary: boolean }>) {
+  return scopes.find((scope) => scope.isPrimary)?.organizationUnitId ?? (scopes.length === 1 ? scopes[0].organizationUnitId : null);
+}
+
 function uniqueViolation(error: unknown) {
   return (error as { code?: string })?.code === "P2002";
 }
@@ -108,12 +117,12 @@ export class ConferenceInvitationsService {
   /** Chuẩn hoá một khách mời: người có tài khoản lấy họ tên, email, đơn vị từ tài khoản. */
   private async resolveInvitee(tx: Prisma.TransactionClient, input: InvitationInputDto) {
     if (input.userId) {
-      const user = await tx.user.findUnique({ where: { id: input.userId }, include: { organizationScopes: { where: { isPrimary: true }, take: 1 } } });
+      const user = await tx.user.findUnique({ where: { id: input.userId }, include: { organizationScopes: { select: { organizationUnitId: true, isPrimary: true } } } });
       if (!user || !["active", "pending_activation"].includes(user.status) || user.systemRole === "SYSTEM_ADMIN") throw new BadRequestException({ message: "Tài khoản được mời không hợp lệ hoặc đã ngừng hoạt động." });
       const isInternal = user.systemRole !== "EXTERNAL_RESEARCHER_USER";
       return {
         kind: input.kind, userId: user.id, fullName: user.displayName, academicTitle: null, email: user.credentialEmail?.toLowerCase() ?? null,
-        isInternal, organizationUnitId: isInternal ? user.organizationScopes[0]?.organizationUnitId ?? null : null, externalOrganization: isInternal ? null : user.unit || null
+        isInternal, organizationUnitId: isInternal ? accountUnitId(user.organizationScopes) : null, externalOrganization: isInternal ? null : user.unit || null
       };
     }
     if (input.isInternal && input.organizationUnitId) {
