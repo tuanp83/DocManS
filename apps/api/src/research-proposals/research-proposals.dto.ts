@@ -174,6 +174,22 @@ export const revokeProposalManagementOfficerPipe: PipeTransform<unknown, RevokeP
   }
 };
 
+export type UpdateProposalCodeDto = { code: string; reason: string; contextVersion: unknown };
+
+/** Mã số đề tài: chữ (cả tiếng Việt), số, dấu chấm, gạch ngang, gạch dưới; không dấu cách hay "/" (mã còn dùng làm tên tệp). */
+const PROPOSAL_CODE_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}._-]{0,49}$/u;
+
+export const updateProposalCodePipe: PipeTransform<unknown, UpdateProposalCodeDto> = {
+  transform(value: unknown) {
+    const input = assertRecord(value);
+    const code = typeof input.code === "string" ? input.code.trim().normalize("NFC") : "";
+    if (!PROPOSAL_CODE_PATTERN.test(code)) {
+      throw new BadRequestException({ code: "PROPOSAL_CODE_INVALID", field: "code", message: "Mã số đề tài gồm tối đa 50 ký tự chữ, số, dấu chấm, gạch ngang hoặc gạch dưới, không có dấu cách." });
+    }
+    return { code, reason: readText(input.reason, "Lý do sửa mã số", 500), contextVersion: readContextVersion(input) };
+  }
+};
+
 /** Chuyên viên xác nhận hồ sơ đầy đủ theo danh sách kiểm tra: chỉ cần phiên bản hồ sơ đang xem. */
 export const completeProposalCheckPipe: PipeTransform<unknown, { contextVersion: unknown }> = {
   transform(value: unknown) {

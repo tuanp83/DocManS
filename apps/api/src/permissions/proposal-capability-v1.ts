@@ -43,6 +43,7 @@ const ACTIONS: PermissionActionV1[] = [
   "proposal.review.submit",
   "proposal.supplement.request",
   "proposal.completeness.check",
+  "proposal.code.update",
   "proposal.management-officer.assign",
   "proposal.management-officer.revoke",
   "proposal.decision.approve",
@@ -181,7 +182,7 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
   }
 
   // Protected management actions: role, scope, resolved context and no conflict, in that order.
-  // Kiểm tra đầy đủ, yêu cầu bổ sung: chuyên viên phụ trách hồ sơ, hoặc Trưởng ban QLKH trong phạm vi đơn vị.
+  // Kiểm tra đầy đủ, yêu cầu bổ sung, sửa mã số: chuyên viên phụ trách hồ sơ, hoặc Trưởng ban QLKH trong phạm vi đơn vị.
   if (STAFF_ACTIONS.includes(action) && !isResearchManagementStaff(input.actor) && !isResearchBoardHead(input.actor)) return blocked("ACTION_NOT_GRANTED");
   // Giao / thu hồi chuyên viên phụ trách hồ sơ: Trưởng phòng hoặc Trưởng ban QLKH.
   if (HEAD_ACTIONS.includes(action) && !isResearchManagementHead(input.actor) && !isResearchBoardHead(input.actor)) return blocked("ACTION_NOT_GRANTED");
@@ -193,6 +194,8 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
 
   if (STAFF_ACTIONS.includes(action)) {
     if (!isResearchBoardHead(input.actor) && !isCurrentOfficer(input)) return blocked("ACTION_NOT_GRANTED");
+    // Mã số sửa được tới trước khi lãnh đạo quyết định: sau đó mã đã in trên quyết định phê duyệt.
+    if (action === "proposal.code.update") return PROPOSAL_CODE_EDITABLE_STATUSES.includes(input.proposal.status) ? null : blocked("WORKFLOW_STATE_DENIED");
     if (action === "proposal.completeness.check" && input.completenessCheckCompleted) return blocked("WORKFLOW_STATE_DENIED");
     return ["submitted", "resubmitted"].includes(input.proposal.status) ? null : blocked("WORKFLOW_STATE_DENIED");
   }
@@ -207,7 +210,8 @@ function blockFor(action: PermissionActionV1, input: ProposalCapabilityInput): {
   return null;
 }
 
-const STAFF_ACTIONS: PermissionActionV1[] = ["proposal.completeness.check", "proposal.supplement.request"];
+const STAFF_ACTIONS: PermissionActionV1[] = ["proposal.completeness.check", "proposal.supplement.request", "proposal.code.update"];
+export const PROPOSAL_CODE_EDITABLE_STATUSES = ["submitted", "resubmitted", "supplement_requested", "under_review", "ready_for_approval"];
 const SUMMARY_ACTIONS: PermissionActionV1[] = ["proposal.review.consolidate", "proposal.review.finalize", "proposal.review.submit-package"];
 const HEAD_ACTIONS: PermissionActionV1[] = ["proposal.management-officer.assign", "proposal.management-officer.revoke"];
 const DECISION_ACTIONS: PermissionActionV1[] = ["proposal.decision.approve", "proposal.decision.reject"];

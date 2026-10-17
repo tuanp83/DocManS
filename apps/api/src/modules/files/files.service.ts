@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { AuditLogService } from "../../auth/audit-log.service.js";
 import type { SafeUserContext } from "../../auth/auth.types.js";
-import type { ObjectStorage } from "../../infrastructure/minio/minio-object-storage.service.js";
+import { storageReadFailure, type ObjectStorage } from "../../infrastructure/minio/minio-object-storage.service.js";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import { canReadAllProjectFiles } from "../../approved-projects/project-roles.js";
 import { assertHasOrganizationScope, isInternalResearcherEligible } from "../../proposals-shared/proposal-access.js";
@@ -257,8 +257,8 @@ export class FilesService {
     let content: Awaited<ReturnType<ObjectStorage["getObject"]>>;
     try {
       content = await this.objectStorage.getObject(record.storageObjectKey);
-    } catch {
-      throw new NotFoundException({ message: "Không tìm thấy nội dung tệp." });
+    } catch (error) {
+      throw storageReadFailure(error);
     }
 
     await this.auditLog.record({

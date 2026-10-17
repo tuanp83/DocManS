@@ -11,6 +11,8 @@ import {
   type AssignProposalManagementOfficerDto,
   type RevokeProposalManagementOfficerDto,
   updateResearchProposalDraftPipe,
+  updateProposalCodePipe,
+  type UpdateProposalCodeDto,
   type CreateResearchProposalDraftDto,
   type RequestProposalSupplementDto,
   type UpdateResearchProposalDraftDto,
@@ -74,6 +76,11 @@ export class ResearchProposalsController {
   @Post(":id/checks/complete")
   async completeCheck(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(completeProposalCheckPipe) body: { contextVersion: unknown }) {
     return { proposal: await this.proposalsService.completeCheck(request.currentUser!, id, body) };
+  }
+
+  @Post(":id/code")
+  async updateCode(@Req() request: RequestWithCurrentUser, @Param("id") id: string, @Body(updateProposalCodePipe) body: UpdateProposalCodeDto) {
+    return { proposal: await this.proposalsService.updateCode(request.currentUser!, id, body) };
   }
 
   @Post(":id/resubmit")

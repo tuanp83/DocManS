@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Download, FileText, Pencil, Save, Send, Trash2, UploadCloud, X } from "lucide-react";
 import { useSession } from "@/components/auth/session-provider";
 import { ProposalDecisionPanel } from "@/components/research-proposals/proposal-decision-panel";
+import { ProposalCodeCard } from "@/components/research-proposals/proposal-code-card";
 import { ProposalEvaluationPanel } from "@/components/research-proposals/proposal-evaluation-panel";
 import { ProposalReviewForm } from "@/components/research-proposals/proposal-review-form";
 import { ReviewInvitationActions } from "@/components/research-proposals/review-invitation-actions";
@@ -525,6 +526,9 @@ export function ProposalDetailWorkspace({ proposalId }: { proposalId: string }) 
             </button>
             {!canPerformProposalAction(capabilityState, "proposal.completeness.check") ? <p className="record-meta">{blockedProposalAction(capabilityState, "proposal.completeness.check")?.reason}</p> : null}
           </SectionCard>
+        ) : null}
+        {shouldRenderAction("proposal.code.update") ? (
+          <ProposalCodeCard key={proposal.code ?? ""} proposal={proposal} capabilityState={capabilityState} onSaved={async (text) => { await refreshWorkflowState(); setMessage(text); }} />
         ) : null}
         {proposal.versions?.length ? <SectionCard title="Phiên bản đã nộp" subtitle="Nội dung đã khóa được giữ nguyên"><div>{proposal.versions.map((version) => <details key={version.id}><summary>Phiên bản {version.version} — {formatDate(version.submittedAt)}</summary><h3>{version.content.title}</h3><p style={{ whiteSpace: "pre-wrap" }}>{version.content.objectives}</p><p style={{ whiteSpace: "pre-wrap" }}>{version.content.summary}</p><ul>{version.content.attachments?.map((file) => <li key={file.id}><a href={getProposalAttachmentDownloadUrl(file.id)}>{file.fileName}</a></li>)}</ul></details>)}</div></SectionCard> : null}
         {proposal.viewerParticipation?.isOwner ? (

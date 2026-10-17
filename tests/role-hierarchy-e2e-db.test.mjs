@@ -105,9 +105,21 @@ test("a proposal goes from submission to the Director's approval through every r
     militaryScope: "military", startDate: "2027-01-01", endDate: "2027-12-31", objectives: "Mục tiêu", summary: "Tóm tắt", budgetMetadata: { amount: 150000000, currency: "VND" }
   });
   await s.proposals.submitProposal(pi, draft.id);
+  const vnYear = new Date(Date.now() + 7 * 3_600_000).getUTCFullYear();
+  assert.equal((await db.researchProposal.findUnique({ where: { id: draft.id } })).code, `${vnYear}-KHOA-E2E-001`, "nộp lần đầu được cấp mã số");
   const officerRow = await db.proposalManagementOfficer.findFirst({ where: { proposalId: draft.id, status: "ACTIVE" } });
   assert.equal(officerRow.officerUserId, officer.id, "tự giao theo mảng Cơ sở");
   const id = draft.id;
+
+  // Mã số: chuyên viên phụ trách sửa được kèm lý do (ghi nhật ký); chuyên viên khác, chủ nhiệm bị chặn; không trùng mã.
+  await assert.rejects(() => s.proposals.updateCode(otherStaff, id, { code: "DT-E2E-01", reason: "Sửa theo sổ đăng ký" }), { status: 403 });
+  await assert.rejects(() => s.proposals.updateCode(pi, id, { code: "DT-E2E-01", reason: "Sửa theo sổ đăng ký" }), { status: 403 });
+  await s.proposals.updateCode(officer, id, { code: "ĐT.HVQY.2026-01", reason: "Sửa theo sổ đăng ký" });
+  assert.equal((await db.researchProposal.findUnique({ where: { id } })).code, "ĐT.HVQY.2026-01");
+  const codeAudit = await db.auditLog.findFirst({ where: { action: "update-proposal-code", targetEntityId: id } });
+  assert.equal(codeAudit.reason, "Sửa theo sổ đăng ký");
+  const other = await db.researchProposal.create({ data: { intakePeriodId: intake.id, ownerId: pi.id, hostOrganizationUnitId: khoa.id, title: "Hồ sơ khác", status: "submitted", code: "TRUNG-MA" } });
+  await assert.rejects(() => s.proposals.updateCode(officer, id, { code: other.code, reason: "Thử trùng" }), { status: 409 });
 
   // Chỉ chuyên viên phụ trách điều phối; chuyên viên khác bị chặn; Phó phòng và Trưởng ban xem được (chỉ xem).
   await s.proposals.completeCheck(officer, id, {});

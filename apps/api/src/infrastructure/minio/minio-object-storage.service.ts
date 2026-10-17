@@ -1,6 +1,17 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { Client } from "minio";
 import { Readable } from "node:stream";
+
+const MISSING_OBJECT_CODES = new Set(["NoSuchKey", "NotFound"]);
+const STORAGE_UNAVAILABLE_MESSAGE = "Kho tệp tạm thời không truy cập được, tệp vẫn được lưu giữ. Vui lòng thử lại sau ít phút.";
+
+/**
+ * Lỗi khi đọc nội dung tệp: kho tệp không truy cập được thì giữ 503 (người dùng không tưởng tệp đã mất),
+ * còn lại (không có đối tượng) là 404.
+ */
+export function storageReadFailure(error: unknown) {
+  return error instanceof ServiceUnavailableException ? error : new NotFoundException({ message: "Không tìm thấy nội dung tệp." });
+}
 
 export type PutObjectInput = {
   objectKey: string;
@@ -45,7 +56,12 @@ export class MinioObjectStorageService implements ObjectStorage {
   }
 
   async getObject(objectKey: string) {
-    return this.getClient().getObject(this.getBucketName(), objectKey);
+    try {
+      return await this.getClient().getObject(this.getBucketName(), objectKey);
+    } catch (error) {
+      if (MISSING_OBJECT_CODES.has((error as { code?: string })?.code ?? "")) throw error;
+      throw new ServiceUnavailableException({ code: "STORAGE_UNAVAILABLE", message: STORAGE_UNAVAILABLE_MESSAGE });
+    }
   }
 
   async deleteObject(objectKey: string) {
