@@ -262,7 +262,8 @@ export class ApprovedProjectsService {
         id: report.id, projectId: report.projectId, checkpointId: report.checkpointId, revision: report.revision, status: report.status,
         reportingPeriodStart: report.reportingPeriodStart?.toISOString?.() ?? null, reportingPeriodEnd: report.reportingPeriodEnd?.toISOString?.() ?? null, deadline: report.deadline?.toISOString?.() ?? null,
         progressResults: report.progressResults, issuesRecommendations: report.issuesRecommendations, milestoneContext: report.milestoneContext, author: report.author,
-        reviewedBy: report.reviewedBy, reviewReason: actor && (isProjectStaff(actor) || canDecideProjectExtension(actor)) ? report.reviewReason : undefined,
+        // Chủ nhiệm cần thấy lý do yêu cầu bổ sung hoặc nhận xét của chuyên viên để sửa báo cáo.
+        reviewedBy: report.reviewedBy, reviewReason: report.reviewReason,
         responseDeadline: report.responseDeadline?.toISOString?.() ?? null, submittedAt: report.submittedAt?.toISOString?.() ?? null,
         evidence: (report.evidence ?? []).map((item) => ({ id: item.id, fileRecordId: item.fileRecordId, file: item.fileRecord ? { id: item.fileRecord.id, originalFileName: item.fileRecord.originalFileName, mimeType: item.fileRecord.mimeType, sizeBytes: item.fileRecord.sizeBytes, status: item.fileRecord.status } : null }))
       }) : ({ id: report.id, checkpointId: report.checkpointId, status: report.status, revision: report.revision, deadline: report.deadline?.toISOString?.() ?? null, submittedAt: report.submittedAt?.toISOString?.() ?? null })),
@@ -628,7 +629,10 @@ export class ApprovedProjectsService {
       if (report.authorId !== currentActor.id || report.status !== REPORT_DRAFT) throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Chỉ bản nháp của PI mới được nộp." });
       if (report.checkpointId && report.checkpoint?.status !== "open") throw new BadRequestException({ code: "WORKFLOW_STATE_DENIED", message: "Mốc báo cáo đã đóng." });
       this.assertReportPeriod(project, report.checkpointId, report.reportingPeriodStart, report.reportingPeriodEnd, report.id);
+      // Báo cáo nộp phải có nội dung kết quả, tiến độ và tệp báo cáo đính kèm; bản nháp thì chưa bắt buộc tệp.
+      if (!report.progressResults?.trim()) throw new BadRequestException({ code: "REPORT_INCOMPLETE", field: "progressResults", message: "Báo cáo chưa có nội dung kết quả và tiến độ. Hãy cập nhật bản nháp trước khi nộp." });
       const fileIds = Array.isArray(input.evidenceFileIds) ? input.evidenceFileIds : [];
+      if (!fileIds.length) throw new BadRequestException({ code: "REPORT_INCOMPLETE", field: "evidenceFileIds", message: "Cần đính kèm ít nhất một tệp báo cáo hoặc minh chứng trước khi nộp." });
       const files = await this.assertUsableEvidence(tx, project.id, fileIds, report.id);
       const now = await readTransactionClockV1(tx);
       const updated = await tx.projectReportRevision.update({ where: { id: report.id }, data: { status: REPORT_SUBMITTED, submittedAt: now, submittedContextVersion: projectContextVersion(project) } });
