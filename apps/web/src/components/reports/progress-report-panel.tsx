@@ -24,7 +24,7 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { loadResearchProposals, type ResearchProposal } from "@/lib/research-proposals-api";
-import { HEALTH_LABELS, listProjects, type ProjectRecord } from "@/lib/projects-api";
+import { HEALTH_LABELS, listProjects, projectStatusLabel, type ProjectRecord } from "@/lib/projects-api";
 import { useSession } from "@/components/auth/session-provider";
 import {
   PROPOSAL_LEVEL_LABELS,
@@ -37,7 +37,10 @@ import { downloadXlsxReport } from "@/lib/xlsx-export";
 
 type LoadState = "loading" | "ready" | "error";
 
-type ProgressAssessment = "on_track" | "ending_soon" | "overdue" | "not_started" | "unknown";
+type ProgressAssessment = "on_track" | "ending_soon" | "overdue" | "not_started" | "finished" | "unknown";
+
+/** Đề tài còn trong thời gian thực hiện; trạng thái khác (chờ nghiệm thu, đã nghiệm thu, đã đóng…) không xét hạn. */
+const DEADLINE_TRACKED_STATUSES = ["preparing", "executing", "paused"];
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -166,6 +169,7 @@ export function ProgressReportPanel() {
       } else if (project.approaching && assessment === "on_track") {
         assessment = "ending_soon";
       }
+      if (project && !DEADLINE_TRACKED_STATUSES.includes(project.status)) assessment = "finished";
 
       // Dữ liệu Tài chính & Giải ngân
       // Kinh phí do máy chủ xác định (theo đề tài khi đã lập đề tài); không dùng số mặc định giả.
@@ -194,6 +198,7 @@ export function ProgressReportPanel() {
         startDate,
         endDate,
         hasProject: Boolean(project),
+        projectStatus: project?.status ?? null,
         plannedPercent: summary?.plannedPercent ?? null,
         spi: summary?.spi ?? null,
         healthLevel: summary?.level ?? null,
@@ -231,6 +236,7 @@ export function ProgressReportPanel() {
     let endingSoonCount = 0;
     let overdueCount = 0;
     let notStartedCount = 0;
+    let finishedCount = 0;
     let unknownCount = 0;
     let totalBudgetSum = 0;
     let totalDisbursedSum = 0;
@@ -247,6 +253,7 @@ export function ProgressReportPanel() {
       else if (p.assessment === "ending_soon") endingSoonCount++;
       else if (p.assessment === "overdue") overdueCount++;
       else if (p.assessment === "not_started") notStartedCount++;
+      else if (p.assessment === "finished") finishedCount++;
       else unknownCount++;
     });
 
@@ -259,6 +266,7 @@ export function ProgressReportPanel() {
       endingSoonCount,
       overdueCount,
       notStartedCount,
+      finishedCount,
       unknownCount,
       totalBudgetSum,
       totalDisbursedSum,
@@ -306,6 +314,9 @@ export function ProgressReportPanel() {
       } else if (p.assessment === "not_started") {
         assessLabel = p.hasProject ? "Chưa đến thời gian bắt đầu" : "Chưa lập đề tài";
         timeNote = p.hasProject ? `Bắt đầu sau ${Math.abs(p.elapsedDays)} ngày` : "—";
+      } else if (p.assessment === "finished") {
+        assessLabel = "Đã kết thúc thực hiện";
+        timeNote = projectStatusLabel(p.projectStatus ?? "");
       }
 
       const irbText = p.irbStatus === "APPROVED" ? `Đã cấp (${p.irbCert || "IRB-HVQY"})` : "Chưa phê duyệt";
@@ -673,6 +684,7 @@ export function ProgressReportPanel() {
               <option value="ending_soon">Sắp đến hạn (&lt; 60 ngày)</option>
               <option value="overdue">Chậm tiến độ / Quá hạn</option>
               <option value="not_started">Chưa đến ngày bắt đầu</option>
+              <option value="finished">Đã kết thúc thực hiện</option>
             </select>
           </div>
           <div className="filter-field">
@@ -931,6 +943,10 @@ export function ProgressReportPanel() {
                         ) : p.assessment === "not_started" ? (
                           <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
                             {p.hasProject ? `Bắt đầu sau ${Math.abs(p.elapsedDays)} ngày` : "Chưa lập đề tài"}
+                          </span>
+                        ) : p.assessment === "finished" ? (
+                          <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
+                            {projectStatusLabel(p.projectStatus ?? "")}
                           </span>
                         ) : (
                           <span style={{ color: "var(--text-secondary)", fontStyle: "italic", fontSize: "12px" }}>
