@@ -220,3 +220,12 @@ test("conference stats filter by Vietnamese year, host unit and level, with opti
   assert.throws(() => readStatsFilters({ year: "abc" }), /Năm không hợp lệ/);
   assert.throws(() => readStatsFilters({ level: "galaxy" }), /Cấp hội nghị/);
 });
+
+import { accountUnitId } from "../dist/apps/api/conferences/conference-invitations.service.js";
+
+test("an invited account's unit is its primary scope, its only scope, or none (no arbitrary pick)", () => {
+  assert.equal(accountUnitId([{ organizationUnitId: "a", isPrimary: false }, { organizationUnitId: "b", isPrimary: true }]), "b");
+  assert.equal(accountUnitId([{ organizationUnitId: "a", isPrimary: false }]), "a");
+  assert.equal(accountUnitId([{ organizationUnitId: "a", isPrimary: false }, { organizationUnitId: "b", isPrimary: false }]), null);
+  assert.equal(accountUnitId([]), null);
+});

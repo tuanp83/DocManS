@@ -331,6 +331,32 @@ describe("Scientific conferences on real PostgreSQL", () => {
     await assert.rejects(program.downloadProceedings(otherStaff, created.id, book.id), /Không tìm thấy/);
   });
 
+  it("invites leaders whose accounts span many units without a primary one (Trưởng phòng, Trưởng ban)", async () => {
+    const created = await newConference();
+    await conferences.assignOfficer(head, created.id, { version: created.version, userId: officer.id });
+    // Tài khoản phạm vi nhiều đơn vị, không có phạm vi chính: trước đây làm lỗi ràng buộc đơn vị (500).
+    const name = unique("board-head");
+    const boardHead = authStore.toSafeUser(await authStore.findUserById((await db.user.create({ data: {
+      username: name, usernameKey: name, displayName: "Trưởng ban QLKH", passwordHash: "not-used", status: "active", systemRole: "RESEARCH_BOARD_HEAD", unit: "Ban QLKH, Phòng KHQS",
+      organizationScopes: { create: [{ organizationUnitId: orgA.id, isPrimary: false }, { organizationUnitId: orgB.id, isPrimary: false }] }
+    } })).id));
+    await invitations.addInvitations(officer, created.id, [{ kind: "speaker", userId: boardHead.id }, { kind: "delegate", userId: head.id }]);
+    const detail = (await conferences.detail(officer, created.id)).conference;
+    const row = detail.invitations.find((item) => item.fullName === "Trưởng ban QLKH");
+    assert.equal(row.isInternal, true);
+    assert.equal(row.organizationUnit, null, "không tự chọn một đơn vị trong nhiều phạm vi");
+    assert.equal(row.externalOrganization, "Ban QLKH, Phòng KHQS", "hiển thị đơn vị ghi trên tài khoản");
+    await invitations.sendMailing(officer, created.id, { kind: "invitation", invitationIds: detail.invitations.map((item) => item.id) });
+    const mine = (await papers.myConferences(boardHead)).find((item) => item.conference.id === created.id);
+    await invitations.respondInApp(boardHead, mine.invitation.id, { decision: "accept" });
+    const paper = (await papers.myConferences(boardHead)).find((item) => item.conference.id === created.id).paper;
+    await papers.submit(boardHead, paper.id, { version: paper.version, kind: "abstract", title: "Báo cáo của Trưởng ban", abstractText: "Tóm tắt" });
+    const stats = await conferences.stats(head, {});
+    assert.ok(stats.speakersByUnit.some((bucket) => bucket.label === "Ban QLKH, Phòng KHQS"), "thống kê theo đơn vị ghi trên tài khoản");
+    // Người chưa có tài khoản vẫn phải chọn đơn vị khi là người trong Học viện.
+    await assert.rejects(db.conferenceInvitation.create({ data: { conferenceId: created.id, kind: "delegate", fullName: "X", email: `${unique("x")}@x.vn`, isInternal: true, createdById: officer.id } }), /internal_unit_check/);
+  });
+
   it("conference stats follow the same visibility as the conference list", async () => {
     const draft = await newConference();
     const assigned = await newConference();
