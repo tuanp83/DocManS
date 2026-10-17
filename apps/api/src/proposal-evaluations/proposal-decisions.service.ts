@@ -1,4 +1,5 @@
 import { assertCurrentCompletenessEvidence, currentRoundAssignments, currentRoundReviews, sameEvidenceIds } from "../proposals-shared/submission-evidence.js";
+import { formatAcademicTitle } from "../researcher-profiles/researcher-display-name.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { councilCompositionProblems, councilMetadataProblems, councilMetadataRoleToAssignmentRole, councilRoleOf } from "../proposals-shared/evaluation-council-rules.js";
 import { AuditLogService } from "../auth/audit-log.service.js";
@@ -593,7 +594,7 @@ export class ProposalDecisionsService {
     })) as Array<{
       id: string; linkedUserId: string | null; fullName: string; title?: string | null; militaryRank?: string | null; position?: string | null; profileType?: string | null;
       managementOrganizationUnitId?: string | null; managementOrganizationUnit?: { name: string } | null;
-      academicRankCatalogItem?: { name: string } | null; academicDegreeCatalogItem?: { name: string } | null;
+      academicRankCatalogItem?: { code: string; name: string } | null; academicDegreeCatalogItem?: { code: string; name: string } | null;
       linkedUser?: { username: string | null; systemRole: string | null; unit: string | null; unitPositions?: Array<{ positionCode: string; organizationUnit: { name: string; unitType: string; status: string } }> } | null;
     }>;
 
@@ -630,7 +631,8 @@ export class ProposalDecisionsService {
         fullName: p.fullName,
         username: p.linkedUser?.username || "",
         systemRole: p.linkedUser?.systemRole || "",
-        academicTitle: p.title || p.academicRankCatalogItem?.name || p.academicDegreeCatalogItem?.name || "Nhà khoa học",
+        // Cùng cách ghi với lúc lý lịch đổi học hàm, học vị (title-propagation): "PGS. TS.".
+        academicTitle: formatAcademicTitle(p) || "Nhà khoa học",
         unit: p.managementOrganizationUnit?.name || p.linkedUser?.unit || (p.profileType === "EXTERNAL" ? "Đơn vị ngoài" : "Học viện Quân y"),
         militaryRank: p.militaryRank || "",
         position: p.position || "",

@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { formatAcademicTitle } from "../researcher-profiles/researcher-display-name.js";
 import { jsonValue } from "../proposals-shared/prisma-json.js";
 import { joinedTransaction } from "../proposals-shared/proposal-mutation.js";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable } from "@nestjs/common";
@@ -696,14 +697,14 @@ export class ProjectClosureService {
   }
 
   private async resolveProfiles(tx: Prisma.TransactionClient, project: LoadedProject, requested: Array<{ profileId: string; role: string }>, body: string) {
-    const profiles = (await tx.researcherProfile.findMany({ where: { id: { in: requested.map((member) => member.profileId) } }, select: { id: true, fullName: true, title: true, status: true, linkedUserId: true, managementOrganizationUnit: { select: { name: true } } } }));
+    const profiles = (await tx.researcherProfile.findMany({ where: { id: { in: requested.map((member) => member.profileId) } }, select: { id: true, fullName: true, title: true, status: true, linkedUserId: true, managementOrganizationUnit: { select: { name: true } }, academicRankCatalogItem: { select: { code: true, name: true } }, academicDegreeCatalogItem: { select: { code: true, name: true } } } }));
     const byId = new Map(profiles.map((profile) => [profile.id, profile]));
     const teamUserIds = new Set((project.members ?? []).map((member) => member.userId).filter(Boolean));
     return requested.map((member) => {
       const profile = byId.get(member.profileId);
       if (!profile || profile.status !== "ACTIVE") throw new BadRequestException({ code: "ACCEPTANCE_INVALID", message: `Có thành viên ${body} không tồn tại hoặc hồ sơ đã ngừng hoạt động.` });
       if (profile.linkedUserId && teamUserIds.has(profile.linkedUserId)) throw new ForbiddenException({ code: "CONFLICT_DENIED", message: `${profile.fullName} là chủ nhiệm hoặc thành viên đề tài nên không thể tham gia ${body}.` });
-      return { profileId: profile.id as string, fullName: profile.fullName as string, academicTitle: (profile.title ?? undefined) as string | undefined, unit: (profile.managementOrganizationUnit?.name ?? undefined) as string | undefined, userId: (profile.linkedUserId ?? undefined) as string | undefined, role: member.role };
+      return { profileId: profile.id as string, fullName: profile.fullName as string, academicTitle: (formatAcademicTitle(profile) || undefined) as string | undefined, unit: (profile.managementOrganizationUnit?.name ?? undefined) as string | undefined, userId: (profile.linkedUserId ?? undefined) as string | undefined, role: member.role };
     });
   }
 

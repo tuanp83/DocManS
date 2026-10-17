@@ -229,3 +229,22 @@ test("an invited account's unit is its primary scope, its only scope, or none (n
   assert.equal(accountUnitId([{ organizationUnitId: "a", isPrimary: false }, { organizationUnitId: "b", isPrimary: false }]), null);
   assert.equal(accountUnitId([]), null);
 });
+
+import { formatAcademicTitle } from "../dist/apps/api/researcher-profiles/researcher-display-name.js";
+import { isEditableCouncilStatus, replaceMembers } from "../dist/apps/api/researcher-profiles/title-propagation.js";
+
+test("academic titles: catalog first, then typed title, then titles typed before the name; never the military rank", () => {
+  assert.equal(formatAcademicTitle({ fullName: "Lê A", militaryRank: "Đại tá", academicRankCatalogItem: { code: "professor" }, academicDegreeCatalogItem: { code: "doctor" } }), "GS. TS.");
+  assert.equal(formatAcademicTitle({ fullName: "Lê A", title: "BSCKII" }), "BSCKII");
+  assert.equal(formatAcademicTitle({ fullName: "PGS. TS. Lê A" }), "PGS. TS.");
+  assert.equal(formatAcademicTitle({ fullName: "Lê A", militaryRank: "Đại tá" }), "");
+});
+
+test("title propagation only touches matching members of editable councils", () => {
+  const members = [{ userId: "a", displayName: "A", academicTitle: "ThS." }, { userId: "b", displayName: "B", academicTitle: "TS." }];
+  assert.deepEqual(replaceMembers(members, (item) => item.userId === "a", { displayName: "A", academicTitle: "TS." }), [{ userId: "a", displayName: "A", academicTitle: "TS." }, members[1]]);
+  assert.equal(replaceMembers(members, (item) => item.userId === "a", { displayName: "A", academicTitle: "ThS." }), null, "không đổi thì không ghi");
+  assert.equal(replaceMembers(undefined, () => true, {}), null);
+  for (const status of [undefined, "", "draft", "rejected"]) assert.equal(isEditableCouncilStatus(status), true, String(status));
+  for (const status of ["submitted", "approved"]) assert.equal(isEditableCouncilStatus(status), false, status);
+});
