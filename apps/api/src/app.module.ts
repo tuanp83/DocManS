@@ -15,6 +15,7 @@ import { MailModule } from "./mail/mail.module.js";
 import { DashboardModule } from "./dashboard/dashboard.module.js";
 import { ApprovedProjectsModule } from "./approved-projects/approved-projects.module.js";
 import { StudentResearchModule } from "./student-research/student-research.module.js";
+import { ConferencesModule } from "./conferences/conferences.module.js";
 
 import { PrismaModule } from "./infrastructure/prisma/prisma.module.js";
 import { HealthController } from "./infrastructure/health/health.controller.js";
@@ -41,6 +42,7 @@ import { ApprovalsModule } from "./approvals/approvals.module.js";
     DashboardModule,
     ApprovedProjectsModule,
     StudentResearchModule,
+    ConferencesModule,
     TasksModule
   ],
   controllers: [HealthController],
