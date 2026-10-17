@@ -63,3 +63,14 @@ export function formatResearcherDisplayName(source: DisplayNameSource) {
   const militaryRank = rank.charAt(0).toLocaleUpperCase("vi") + rank.slice(1);
   return titles ? `${militaryRank}, ${withTitles}` : `${militaryRank} ${withTitles}`;
 }
+
+export type AcademicTitleSource = DisplayNameSource & { title?: string | null };
+
+/**
+ * Học hàm, học vị viết tắt để ghi ở cột riêng (danh sách hội đồng, biên bản), ví dụ "PGS. TS.". Theo lý lịch nếu đã
+ * chọn; chưa chọn thì dùng chức danh khoa học đã gõ, rồi phần gõ sẵn trước họ tên. Không gồm quân hàm.
+ */
+export function formatAcademicTitle(source: AcademicTitleSource) {
+  const fromCatalog = [abbreviation(source.academicRankCatalogItem, ACADEMIC_RANK_ABBREVIATIONS), abbreviation(source.academicDegreeCatalogItem, ACADEMIC_DEGREE_ABBREVIATIONS)].filter(Boolean).join(" ");
+  return fromCatalog || source.title?.trim() || splitTypedTitles(source.fullName).typedTitles;
+}

@@ -8,6 +8,7 @@ import type { ContextVersionTokenV1 } from "@rtms/permissions";
 import { AuditLogService } from "../auth/audit-log.service.js";
 import type { SafeUserContext } from "../auth/auth.types.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
+import { propagateScientistTitles } from "./title-propagation.js";
 import { formatResearcherDisplayName } from "./researcher-display-name.js";
 import { assertResearcherProfileAction, canEditOwnResearcherProfile, canReadAllResearcherProfiles, canViewResearcherProfiles, canHoldResearcherProfile, canManageResearcherProfiles, hasResearcherProfileScope, profileAccountRoles, projectResearcherProfileAuthorization } from "./researcher-profile-access.js";
 import type { CreateResearcherProfileDto, ResearcherProfileParticipationInput, ResearcherProfilePublicationInput, UpdateResearcherProfileDto, ResearcherAccountInput } from "./researcher-profiles.dto.js";
@@ -222,6 +223,7 @@ export class ResearcherProfilesService {
       for (const action of ["provision-researcher-account", "link-researcher-account", "issue-researcher-activation"]) await this.auditLog.record({ action, result: "success", actorId: actor.id, targetEntity: "researcher-profile", targetEntityId: created.id, correlationId, afterFacts: { userId: user.id, systemRole, organizationUnitId: created.managementOrganizationUnitId, deliveryId: delivery.id, expiresAt: activation.expiresAt.toISOString() } }, tx);
       await this.writeProfileHistory(tx, created.id, actor.id, "ACCOUNT_CREATED", { linkedUserId: null }, { linkedUserId: user.id });
       await this.syncLinkedDisplayName(tx, created.id, actor.id, correlationId);
+      await this.propagateTitles(tx, created.id, actor.id, correlationId);
       const withAccount = (await tx.researcherProfile.findUnique({ where: { id: created.id }, include: profileInclude })) as ProfileWithRelations;
       return { profile: withAccount, duplicateCandidates, activation: { deliveryId: delivery.id, email: email!, displayName: user.displayName, token: activation.token, expiresAt: activation.expiresAt } };
     });
@@ -259,6 +261,7 @@ export class ResearcherProfilesService {
       await this.syncPublications(tx, id, input.publications, actor.id);
       await this.syncParticipations(tx, id, input.participations, actor.id);
       await this.syncLinkedDisplayName(tx, id, actor.id, correlationId);
+      await this.propagateTitles(tx, id, actor.id, correlationId);
       const withChildren = (await tx.researcherProfile.findUnique({ where: { id }, include: profileInclude })) as ProfileWithRelations;
       await this.auditLog.record({
         action: "update-researcher-profile",
@@ -432,6 +435,7 @@ export class ResearcherProfilesService {
         await this.syncPublications(tx, profile.id, safeInput.publications, actor.id);
         await this.syncParticipations(tx, profile.id, safeInput.participations, actor.id);
         await this.syncLinkedDisplayName(tx, profile.id, actor.id, correlationId);
+        await this.propagateTitles(tx, profile.id, actor.id, correlationId);
       }
       if (input.username !== undefined && input.username !== activeUser.username) {
         if (input.username) {
@@ -472,6 +476,13 @@ export class ResearcherProfilesService {
     if (!displayName || displayName === before) return;
     await tx.user.update({ where: { id: profile.linkedUserId }, data: { displayName } });
     await this.auditLog.record({ action: "sync-display-name-from-researcher-profile", result: "success", actorId, targetEntity: "user", targetEntityId: profile.linkedUserId, correlationId, beforeFacts: { displayName: before }, afterFacts: { displayName } }, tx);
+  }
+
+  /** Danh sách đang dùng đã chép tên người này (thành viên, khách mời, hội đồng chưa trình) đổi theo lý lịch. */
+  private async propagateTitles(tx: Prisma.TransactionClient, profileId: string, actorId: string, correlationId?: string) {
+    const changed = await propagateScientistTitles(tx, profileId);
+    if (!Object.values(changed).some((count) => count > 0)) return;
+    await this.auditLog.record({ action: "propagate-researcher-titles", result: "success", actorId, targetEntity: "researcher-profile", targetEntityId: profileId, correlationId, afterFacts: changed }, tx);
   }
 
   private async assertCurrentManager(tx: Prisma.TransactionClient, actor: SafeUserContext, organizationId: string, action: Parameters<typeof assertResearcherProfileAction>[1]) {
@@ -532,6 +543,7 @@ export class ResearcherProfilesService {
       for (const action of ["provision-researcher-account", "link-researcher-account", "issue-researcher-activation"]) await this.auditLog.record({ action, result: "success", actorId: actor.id, targetEntity: "researcher-profile", targetEntityId: profileId, correlationId, afterFacts: { userId: user.id, systemRole, organizationUnitId: profile.managementOrganizationUnitId, deliveryId: delivery.id, expiresAt: activation.expiresAt.toISOString() } }, tx);
       await this.writeProfileHistory(tx, profileId, actor.id, "ACCOUNT_CREATED", { linkedUserId: null }, { linkedUserId: user.id });
       await this.syncLinkedDisplayName(tx, profileId, actor.id, correlationId);
+      await this.propagateTitles(tx, profileId, actor.id, correlationId);
       return { user, delivery, activation };
     });
     const delivery = await this.deliverActivation(result.delivery.id, email, result.user.displayName, result.activation.token, result.activation.expiresAt, actor, correlationId);
@@ -552,6 +564,7 @@ export class ResearcherProfilesService {
       await this.auditLog.record({ action: "link-researcher-account", result: "success", actorId: actor.id, targetEntity: "researcher-profile", targetEntityId: profileId, correlationId, afterFacts: { userId: user.id } }, tx);
       await this.writeProfileHistory(tx, profileId, actor.id, "ACCOUNT_LINKED", { linkedUserId: null }, { linkedUserId: user.id }, input.reason);
       await this.syncLinkedDisplayName(tx, profileId, actor.id, correlationId);
+      await this.propagateTitles(tx, profileId, actor.id, correlationId);
     });
     return { profile: await this.getProfile(actor, profileId), correlationId };
   }

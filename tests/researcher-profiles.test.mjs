@@ -90,7 +90,13 @@ function createFakePrisma({ profiles = [], failAudit = false } = {}) {
   };
   const prisma = {
     store,
-    async $queryRaw() {},
+    // Danh sách hội đồng (JSON) khi đổi theo học hàm, học vị: không có dòng nào trong dữ liệu giả.
+    async $queryRaw() { return []; },
+    async $executeRaw() { return 0; },
+    // Danh sách đang dùng đã chép tên (title-propagation): dữ liệu giả không có dòng nào.
+    proposalMember: { async updateMany() { return { count: 0 }; } },
+    approvedProjectMember: { async updateMany() { return { count: 0 }; } },
+    conferenceInvitation: { async updateMany() { return { count: 0 }; } },
     organizationUnit: {
       async findFirst({ where }) { return where.id === "org-1" && where.status === "active" ? { id: "org-1", code: "ORG1", name: "Đơn vị 1", status: "active" } : null; }
     },
