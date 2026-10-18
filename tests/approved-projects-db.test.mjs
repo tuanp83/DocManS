@@ -28,6 +28,7 @@ let otherStaff;
 let outsiderStaff;
 let leader;
 let boardHead;
+let departmentHead;
 let researcher;
 let sequence = 0;
 
@@ -97,6 +98,7 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     outsiderStaff = await createUser("RESEARCH_MANAGEMENT_STAFF", orgB);
     leader = await createUser("LEADERSHIP_APPROVAL_AUTHORITY", orgB); // academy-wide, no scope on orgA
     boardHead = await createUser("RESEARCH_BOARD_HEAD", orgA); // giao / thu hồi chuyên viên phụ trách
+    departmentHead = await createUser("RESEARCH_MANAGEMENT_HEAD", orgA);
   });
 
   after(async () => {
@@ -170,6 +172,13 @@ describe("Approved project execution on real PostgreSQL (5-role model)", () => {
     const seenByPi = (await projects.getProject(pi, id)).reports.find((item) => item.id === second.id);
     assert.equal(seenByPi.status, "supplement_requested");
     assert.equal(seenByPi.reviewReason, "Thiếu số liệu thí nghiệm tháng 8");
+    // Trưởng phòng, Trưởng ban đọc được nội dung báo cáo; chuyên viên không phụ trách đề tài thì không.
+    for (const head of [departmentHead, boardHead]) {
+      const seen = (await projects.getProject(head, id)).reports.find((item) => item.id === second.id);
+      assert.equal(seen.progressResults, "Báo cáo bổ sung.", head.systemRole);
+      assert.equal(seen.reviewReason, "Thiếu số liệu thí nghiệm tháng 8", head.systemRole);
+    }
+    assert.equal((await projects.getProject(otherStaff, id)).reports.find((item) => item.id === second.id).progressResults, undefined);
 
     // Extension: the officer validates and prepares; only leadership decides.
     const extension = await projects.createExtension(pi, id, { contextVersion: await context(pi, id), proposedValues: { requestedEndDate: "2032-03-31" }, reason: "Cần thêm thời gian thử nghiệm" });

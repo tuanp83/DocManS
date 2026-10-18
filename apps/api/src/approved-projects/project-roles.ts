@@ -27,6 +27,11 @@ export function canAssignProjectOfficer(actor?: SafeUserContext) {
   return isResearchManagementHead(actor) || isResearchBoardHead(actor);
 }
 
+/** Lãnh đạo Phòng KHQS điều hành đề tài: Trưởng phòng KHQS, Trưởng ban QLKH (đọc nội dung báo cáo, đề nghị, lý do trong lịch sử). */
+export function isProjectDepartmentHead(actor?: SafeUserContext) {
+  return isResearchManagementHead(actor) || isResearchBoardHead(actor);
+}
+
 /** Quyết định gia hạn (không đổi kinh phí) và thành lập hội đồng nghiệm thu: Giám đốc hoặc Phó GĐ phụ trách Khoa học. */
 export function canDecideProjectExtension(actor?: SafeUserContext) {
   return isAcademyLeadership(actor);
