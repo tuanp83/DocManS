@@ -11,7 +11,7 @@ import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { readTransactionClockV1 } from "../permissions/authorization-v1.service.js";
 import { getOrganizationScopeIds } from "../proposals-shared/proposal-access.js";
 import { APPROVAL_KINDS, assertReadyForLeadership, boardReviewEvent, closeApprovalSubmission, openApprovalSubmission, pendingApprovalStages } from "../proposals-shared/approval-routing.js";
-import { canAssignProjectOfficer, canDecideProjectExtension, canMonitorProjects, isInProjectScope, isProjectStaff, readsAllProjects } from "./project-roles.js";
+import { canAssignProjectOfficer, canDecideProjectExtension, canMonitorProjects, isInProjectScope, isProjectDepartmentHead, isProjectStaff, readsAllProjects } from "./project-roles.js";
 import { isRelationshipActiveAt } from "../proposals-shared/proposal-participation.js";
 import { ProposalReviewAccessService } from "../proposals-shared/proposal-review-access.service.js";
 import { assertProposalContext } from "../proposals-shared/proposal-mutation.js";
@@ -232,7 +232,8 @@ export class ApprovedProjectsService {
     const isOfficer = !!actor && isProjectStaff(actor) && officer?.officerUserId === actor.id;
     // "isHead" của nhánh chính = người quyết định gia hạn; ở nhánh này là lãnh đạo.
     const isHead = !!actor && canDecideProjectExtension(actor);
-    const detailedCases = isPi || isOfficer || isHead;
+    // Nội dung báo cáo, đề nghị và lý do: chủ nhiệm, chuyên viên phụ trách, Ban giám đốc, Trưởng phòng KHQS và Trưởng ban QLKH.
+    const detailedCases = isPi || isOfficer || isHead || isProjectDepartmentHead(actor);
     const deadlines = [project.endDate, ...(project.checkpoints ?? []).filter((item) => item.status !== "completed").map((item) => item.dueDate), ...(project.milestones ?? []).filter((item) => item.status !== "completed").map((item) => item.dueDate)].filter((value): value is Date => value instanceof Date);
     const nearest = deadlines.sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
     // So sánh theo ngày lịch (giờ Việt Nam): mốc đến hạn hôm nay chưa bị coi là quá hạn.
