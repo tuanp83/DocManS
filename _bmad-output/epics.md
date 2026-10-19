@@ -5,7 +5,7 @@ stepsCompleted:
   - 3
   - 4
 status: complete
-updated: 2026-09-02
+updated: 2026-10-19
 inputDocuments:
   - "/Users/Super/DocManS/_bmad-output/prd.md"
   - "/Users/Super/DocManS/_bmad-output/architecture.md"
@@ -136,6 +136,13 @@ disclosure; unresolved context fails closed and important changes are audited.
 - FR67a: The system can enforce conflict-of-interest and separation-of-duty rules when assigning participation, reviewer, council, secretary, or approval roles, including blocking self-review, self-approval, and unauthorized secretary decision actions within the same business record.
 - FR68: Users can search and filter researcher profiles by name, unit, field, expertise, status, participation history, and other authorized business attributes.
 - FR69: The system can preserve researcher profile history and audit important profile changes according to role and data-scope permissions.
+- FR70–FR80: Scientific conference management (create, officer, invitations and account provisioning, abstract/full-paper submission, program scheduling and publication, proceedings, "Hội nghị của tôi", statistics, controlled states). Full text in PRD section "Scientific Conference Management — 2026-10-17".
+- FR81: A progress report can be submitted only with result content, progress content and at least one report or evidence file; drafts may be saved without files.
+- FR82: The PI sees the staff reason on a report, labelled by state.
+- FR83: The Head of the Scientific Research Management Department and the Head of the Research Management Board can read progress-report content, change requests and history reasons in scope.
+- FR84: Deadline flags apply only to projects still being executed; finished projects have their own report filter.
+- FR85: Proposal code `<year>-<unit code>-<sequence>` is assigned at first submission and can be corrected with a reason before the leadership decision.
+- FR86: Researcher title changes propagate to lists still in use; submitted, signed or issued evidence keeps the original title.
 
 ### NonFunctional Requirements
 
@@ -285,6 +292,12 @@ disclosure; unresolved context fails closed and important changes are audited.
 - FR67a: Epic 2 — Xung đột lợi ích và phân tách nhiệm vụ.
 - FR68: Epic 2 — Tìm kiếm hồ sơ nhà khoa học.
 - FR69: Epic 2 — Lịch sử và audit hồ sơ nhà khoa học.
+- FR70–FR80: Epic 13 — Hội nghị khoa học.
+- FR81, FR82: Epic 6 — Điều kiện nộp và lý do xét báo cáo tiến độ (Story 6.11).
+- FR83: Epic 6 — Lãnh đạo Phòng KHQS đọc nội dung báo cáo (Story 6.12).
+- FR84: Epic 6 — Cờ hạn chỉ cho đề tài đang thực hiện (Story 6.13).
+- FR85: Epic 4 — Cấp và sửa mã số đề tài (Story 4.7).
+- FR86: Epic 2 — Danh xưng đổi theo lý lịch (Story 2.7).
 
 ## Canonical UX/UI Delivery Epics
 
@@ -1197,7 +1210,9 @@ state.
 6. `[Should have]` Supporting seminar/student research and council/ethics
    slices, richer related documents, and broader cross-module reporting remain
    in the Phase 1 business scope and use the same contracts.
-7. `[Later / non-MVP]` Advanced report builder, saved filters, complex charts,
+7. `[Should have]` Epic 13 scientific conferences (legacy decomposition),
+   delivered 2026-10-17 on the same authorization, audit and file contracts.
+8. `[Later / non-MVP]` Advanced report builder, saved filters, complex charts,
    every-format preview, delegated approval, public portal, SSO/LDAP/OIDC/MFA,
    SMS, external integrations, digital signature, and native mobile workflows.
 
@@ -1256,7 +1271,7 @@ Người có thẩm quyền có thể quản lý hồ sơ nhà khoa học, liên
 lịch sử tham gia, tìm kiếm đúng phạm vi và ngăn xung đột lợi ích ngay từ nguồn
 định danh.
 
-**FRs covered:** FR65, FR66, FR67, FR67a, FR68, FR69.
+**FRs covered:** FR65, FR66, FR67, FR67a, FR68, FR69, FR86.
 
 ### Epic 3: Tệp nghiệp vụ, lịch sử và kiểm toán
 
@@ -1270,7 +1285,7 @@ phạm vi được phép, với metadata và phiên bản có khả năng truy v
 Chuyên viên có thể mở đợt tiếp nhận; chủ nhiệm có thể lập, kiểm tra và nộp một
 đề xuất đầy đủ cùng tệp và lịch sử nộp.
 
-**FRs covered:** FR9, FR10, FR11, FR12, FR13, FR14.
+**FRs covered:** FR9, FR10, FR11, FR12, FR13, FR14, FR85.
 
 ### Epic 5: Kiểm tra, đánh giá và phê duyệt đề xuất
 
@@ -1285,7 +1300,7 @@ Chủ nhiệm, thành viên, chuyên viên và người có thẩm quyền có t
 độ, báo cáo, điều chỉnh, gia hạn, hồ sơ nghiệm thu và quyết định cuối của đề
 tài.
 
-**FRs covered:** FR23, FR24, FR25, FR26, FR27, FR27a, FR28, FR29, FR30, FR30a, FR30b.
+**FRs covered:** FR23, FR24, FR25, FR26, FR27, FR27a, FR28, FR29, FR30, FR30a, FR30b, FR81, FR82, FR83, FR84.
 
 ### Epic 7: Giao việc và theo dõi thực hiện
 
@@ -1329,6 +1344,14 @@ Người dùng có thể tìm kiếm, theo dõi chỉ số, đi đến hồ sơ 
 trong đúng phạm vi được phép trên tất cả phân hệ đã hoàn thành.
 
 **FRs covered:** FR45, FR46, FR47, FR48, FR49.
+
+### Epic 13: Hội nghị khoa học
+
+Trưởng phòng KHQS tạo hội nghị và giao chuyên viên; chuyên viên mời khách, nhận
+bài, lập và gửi chương trình chi tiết, gửi kỷ yếu; khách mời trả lời, nộp bài và
+xem chương trình; lãnh đạo theo dõi thống kê.
+
+**FRs covered:** FR70, FR71, FR72, FR73, FR74, FR75, FR76, FR77, FR78, FR79, FR80.
 
 ## Epic 1: Truy cập hệ thống và quản trị phân quyền hợp nhất
 
@@ -1808,6 +1831,30 @@ So that tôi có thể truy vết ai đã thay đổi thông tin hoặc quan h�
 **Then** mutation không được hoàn tất một phần
 **And** hệ thống trả lỗi có correlation ID để hỗ trợ xử lý.
 
+### Story 2.7: Danh xưng đổi theo lý lịch nhà khoa học [FR86]
+
+_Đã hiện thực 2026-10-17 (commit `8fcdc61`)._
+
+As a chuyên viên hoặc nhà khoa học,
+I want khi quân hàm, học hàm, học vị trong lý lịch thay đổi thì các danh sách đang dùng hiện danh xưng mới,
+So that hồ sơ đang xử lý không còn danh xưng cũ, còn bằng chứng đã nộp, đã ký vẫn giữ nguyên.
+
+**Acceptance Criteria:**
+
+**Given** lý lịch được cập nhật (chuyên viên sửa, tự sửa, tạo hoặc liên kết tài khoản)
+**When** danh xưng thay đổi
+**Then** thành viên hồ sơ đề xuất và đề tài, khách mời hội nghị, hội đồng đánh giá và IRB trong tờ trình nháp hoặc bị trả lại, hội đồng nghiệm thu đang đề xuất được cập nhật
+**And** `updated_at` của hồ sơ, đề tài không đổi.
+
+**Given** tờ trình đang trình hoặc đã ký, hội đồng nghiệm thu đã thành lập, bản nộp hồ sơ, chương trình hội nghị đã chốt, tác giả bài báo cáo, nhật ký hoặc thông báo
+**When** danh xưng thay đổi
+**Then** các bản ghi này giữ nguyên danh xưng tại thời điểm đó.
+
+**Given** việc cập nhật có thay đổi
+**When** hoàn tất
+**Then** ghi một audit `propagate-researcher-titles` kèm số dòng đổi
+**And** không có thay đổi thì không ghi.
+
 ## Epic 3: Tệp nghiệp vụ, lịch sử và kiểm toán
 
 Người dùng có thể làm việc an toàn với tệp, lịch sử và audit của hồ sơ trong
@@ -2145,6 +2192,30 @@ So that tôi biết hồ sơ đã vào quy trình tiếp nhận.
 **When** họ cố submit hoặc resubmit proposal
 **Then** backend từ chối dù actor có profile link, cùng đơn vị hoặc draft relationship
 **And** không tạo submission history hoặc đổi trạng thái.
+
+### Story 4.7: Cấp và sửa mã số đề tài [FR85]
+
+_Đã hiện thực 2026-10-17 (commit `0c80cfa`, `c3d87c2`)._
+
+As a chuyên viên phụ trách hồ sơ,
+I want mã số đề tài được cấp tự động khi nộp và sửa được trước khi lãnh đạo quyết định,
+So that mã in trên quyết định là mã đúng.
+
+**Acceptance Criteria:**
+
+**Given** hồ sơ được nộp lần đầu
+**When** nộp thành công
+**Then** hệ thống cấp mã `<năm>-<mã đơn vị>-<số thứ tự>`
+**And** đề tài lập từ hồ sơ kế thừa mã này; hồ sơ đã nộp trước đây được cấp bù bằng migration.
+
+**Given** actor là chuyên viên phụ trách hoặc Trưởng ban QLKH trong phạm vi, không xung đột, và hồ sơ đã nộp nhưng chưa có quyết định của lãnh đạo
+**When** gửi `POST /research-proposals/:id/code` với mã mới, lý do và `contextVersion`
+**Then** mã được kiểm tra định dạng (chữ tiếng Việt, số, `.` `_` `-`, tối đa 50 ký tự) và không trùng hồ sơ hoặc đề tài khác
+**And** audit ghi mã cũ, mã mới và lý do.
+
+**Given** lãnh đạo đã quyết định hoặc actor không có `proposal.code.update`
+**When** cố sửa mã
+**Then** backend từ chối.
 
 ## Epic 5: Kiểm tra, đánh giá và phê duyệt đề xuất
 
@@ -2702,6 +2773,63 @@ So that các tích hợp sau có nguồn dữ liệu hoàn chỉnh và an toàn.
 **When** consumer yêu cầu list hoặc count
 **Then** source trả canonical failure code
 **And** không cung cấp partial data có thể làm sai queue hoặc dashboard.
+
+### Story 6.11: Điều kiện nộp và lý do xét báo cáo tiến độ [FR81, FR82]
+
+_Đã hiện thực 2026-10-17 (commit `0db09f1`)._
+
+As a chủ nhiệm đề tài,
+I want biết báo cáo cần gì để nộp và vì sao bị trả lại,
+So that không nộp báo cáo rỗng và sửa đúng yêu cầu.
+
+**Acceptance Criteria:**
+
+**Given** báo cáo thiếu nội dung kết quả, nội dung tiến độ hoặc chưa có tệp báo cáo/minh chứng nào
+**When** chủ nhiệm nộp
+**Then** backend từ chối với `REPORT_INCOMPLETE`
+**And** nút Nộp báo cáo bị khoá kèm lý do; bản nháp vẫn lưu được khi chưa có tệp.
+
+**Given** chuyên viên đã yêu cầu bổ sung hoặc nhận xét báo cáo
+**When** chủ nhiệm mở báo cáo
+**Then** API trả lý do xét (`reviewReason`) cho chủ nhiệm
+**And** giao diện ghi theo trạng thái: "Chuyên viên yêu cầu bổ sung (hạn …)" hoặc "Nhận xét của chuyên viên".
+
+### Story 6.12: Lãnh đạo Phòng KHQS đọc nội dung báo cáo tiến độ [FR83]
+
+_Đã hiện thực 2026-10-18 (commit `26bfdd8`)._
+
+As a Trưởng phòng KHQS hoặc Trưởng ban QLKH,
+I want đọc nội dung báo cáo, đề nghị điều chỉnh/gia hạn và lý do trong lịch sử của đề tài trong phạm vi,
+So that điều hành được đề tài không do mình trực tiếp phụ trách.
+
+**Acceptance Criteria:**
+
+**Given** actor là Trưởng phòng KHQS hoặc Trưởng ban QLKH và đề tài trong phạm vi
+**When** mở báo cáo tiến độ, đề nghị hoặc lịch sử
+**Then** thấy đầy đủ nội dung và lý do (`isProjectDepartmentHead`).
+
+**Given** actor là chuyên viên không phụ trách đề tài
+**When** mở cùng báo cáo
+**Then** chỉ thấy số phiên bản và trạng thái.
+
+### Story 6.13: Cờ hạn chỉ cho đề tài đang thực hiện [FR84]
+
+_Đã hiện thực 2026-10-17 (commit `f9b9c30`)._
+
+As a chuyên viên hoặc lãnh đạo,
+I want cảnh báo "sắp đến hạn" và "quá hạn" chỉ hiện với đề tài còn đang thực hiện,
+So that danh sách cảnh báo không lẫn đề tài đã kết thúc.
+
+**Acceptance Criteria:**
+
+**Given** đề tài ở trạng thái chuẩn bị, đang thực hiện hoặc tạm dừng
+**When** hạn kết thúc sắp tới hoặc đã qua
+**Then** đề tài được gắn cờ sắp đến hạn hoặc quá hạn.
+
+**Given** đề tài chờ nghiệm thu, đã nghiệm thu, không đạt hoặc đã đóng
+**When** tính cờ hạn và báo cáo tiến độ
+**Then** đề tài không bị gắn cờ, được xếp loại "Đã kết thúc thực hiện"
+**And** trang báo cáo có lựa chọn lọc tương ứng.
 
 ## Epic 7: Giao việc và theo dõi thực hiện
 
@@ -3685,6 +3813,189 @@ So that tôi sử dụng số liệu ngoài hệ thống mà vẫn đúng phạm
 **When** idempotency key đã có outcome
 **Then** hệ thống không tạo duplicate business export ngoài quy tắc
 **And** trạng thái success/failure/cancel cùng correlation ID có thể truy vết.
+
+## Epic 13: Hội nghị khoa học
+
+Trưởng phòng KHQS tạo hội nghị và giao chuyên viên; chuyên viên mời khách, nhận
+bài, lập và gửi chương trình chi tiết, gửi kỷ yếu; khách mời trả lời, nộp bài và
+xem chương trình; lãnh đạo theo dõi thống kê.
+
+Nguồn chi tiết: `docs/design/hoi-nghi-khoa-hoc.md`. Đợt 1 (Story 13.1–13.4), Đợt 2
+(Story 13.5–13.6) và thống kê Đợt 3 (Story 13.7) **đã hiện thực 2026-10-17**.
+Phản biện báo cáo, điểm danh, giấy chứng nhận, giải thưởng, liên kết lý lịch và sản
+phẩm đề tài không làm theo quyết định của chủ sản phẩm.
+
+### Story 13.1: Tạo hội nghị và giao chuyên viên phụ trách [FR70, FR71, FR80]
+
+_Commit `ec9bd77`, `df4aa7c`._
+
+As a Trưởng phòng KHQS,
+I want tạo hội nghị và giao một chuyên viên phụ trách,
+So that mỗi hội nghị có người chịu trách nhiệm rõ ràng.
+
+**Acceptance Criteria:**
+
+**Given** actor là Trưởng phòng KHQS
+**When** tạo hội nghị với tên, cấp, đơn vị chủ trì, địa điểm, thời gian, hạn nộp tóm tắt và toàn văn
+**Then** hệ thống cấp mã `HN-<năm>-<số>` và hội nghị ở trạng thái `draft`.
+
+**Given** hội nghị chưa kết thúc
+**When** Trưởng phòng giao, giao lại hoặc thu hồi chuyên viên
+**Then** tối đa một chuyên viên còn hiệu lực, lịch sử được giữ
+**And** giao lần đầu chuyển hội nghị sang `preparing`.
+
+**Given** chuyên viên khác hoặc người không phải Trưởng phòng
+**When** thao tác trên hội nghị không được giao
+**Then** backend từ chối; lãnh đạo chỉ được xem.
+
+**Given** hội nghị chưa `completed`
+**When** Trưởng phòng huỷ kèm lý do
+**Then** hội nghị chuyển `cancelled` và ghi lịch sử.
+
+### Story 13.2: Lập danh sách khách mời và gửi thư [FR72]
+
+_Commit `ec9bd77`, `df4aa7c`, `e268cee`._
+
+As a chuyên viên phụ trách,
+I want thêm báo cáo viên, đại biểu và gửi thư mời, thư nhắc, thông báo thay đổi,
+So that mọi người nhận đủ thông tin.
+
+**Acceptance Criteria:**
+
+**Given** chuyên viên phụ trách hội nghị
+**When** thêm khách mời từ tài khoản có sẵn, nhập tay hoặc nhập Excel theo mẫu
+**Then** khách mời được lưu với loại `speaker` hoặc `delegate`
+**And** chuyên viên phụ trách không thể đồng thời là khách mời (kiểm tra hai chiều).
+
+**Given** khách mời có tài khoản phạm vi toàn Học viện hoặc nhiều đơn vị
+**When** được mời
+**Then** đơn vị lấy theo phạm vi chính, phạm vi duy nhất, hoặc để trống; lời mời không lỗi.
+
+**Given** chuyên viên chọn người nhận và gửi thư
+**When** gửi thư mời
+**Then** thư ghi thời gian, địa điểm (báo cáo viên thêm hạn nộp); người có tài khoản nhận thông báo, người chưa có nhận email kèm đường link
+**And** đợt thư lưu nội dung, người nhận, kênh và kết quả gửi từng người; thư mời đầu tiên chuyển hội nghị sang `inviting`.
+
+### Story 13.3: Khách mời trả lời và được tạo tài khoản [FR73]
+
+_Commit `ec9bd77`, `df4aa7c`._
+
+As a người được mời,
+I want nhận lời hoặc từ chối từ thư mời,
+So that tham gia hội nghị mà không phải xin tài khoản riêng.
+
+**Acceptance Criteria:**
+
+**Given** người được mời có tài khoản
+**When** trả lời trong hệ thống
+**Then** lời mời chuyển `accepted` hoặc `declined`.
+
+**Given** người được mời chưa có tài khoản mở đường link trong email
+**When** nhận lời
+**Then** hệ thống tạo `RESEARCHER_INTERNAL_USER` theo đơn vị chuyên viên chọn (người trong Học viện) hoặc `EXTERNAL_RESEARCHER_USER` (người ngoài), rồi chuyển sang đặt mật khẩu
+**And** email trùng tài khoản có sẵn thì gắn vào tài khoản đó; từ chối không tạo tài khoản.
+
+**Given** mã trong đường link sai, hết hạn, đã dùng hoặc đã bị thay bằng mã mới
+**When** gọi `/api/v1/public/conference-invitations/lookup` hoặc `/respond`
+**Then** bị từ chối và không lộ thông tin hội nghị
+**And** mã lưu dạng băm, dùng một lần, đi trong thân yêu cầu.
+
+### Story 13.4: Nộp tóm tắt, toàn văn và yêu cầu sửa [FR74]
+
+_Commit `ec9bd77`, `df4aa7c`._
+
+As a báo cáo viên đã nhận lời,
+I want nộp tóm tắt và toàn văn trước hạn và sửa khi được yêu cầu,
+So that bài được đưa vào chương trình.
+
+**Acceptance Criteria:**
+
+**Given** báo cáo viên đã nhận lời và còn trước hạn
+**When** nộp tóm tắt hoặc toàn văn (kèm tác giả, tệp)
+**Then** mỗi lần nộp tạo một phiên bản bất biến; không có bước chấp nhận tóm tắt.
+
+**Given** chuyên viên yêu cầu sửa tóm tắt hoặc toàn văn kèm lý do và hạn
+**When** báo cáo viên nộp lại
+**Then** bản mới được ghi nhận; mỗi loại chỉ có một yêu cầu mở
+**And** sau hạn chỉ nộp được khi có yêu cầu sửa còn hạn.
+
+**Given** báo cáo chưa được xếp lịch
+**When** báo cáo viên rút hoặc chuyên viên huỷ kèm lý do
+**Then** báo cáo chuyển `withdrawn`.
+
+**Given** chuyên viên phụ trách
+**When** xuất Excel tình trạng nộp bài hoặc đóng nhận bài
+**Then** nhận tệp Excel; đóng nhận bài chuyển hội nghị sang `submission_closed`.
+
+### Story 13.5: Lập, xếp lịch và chốt chương trình chi tiết [FR75, FR76]
+
+_Commit `e50b840`, `be2a68c`._
+
+As a chuyên viên phụ trách,
+I want nhập phiên toàn thể, tiểu ban và để hệ thống tự xếp giờ báo cáo,
+So that có chương trình chính xác gửi khách mời.
+
+**Acceptance Criteria:**
+
+**Given** hội nghị đã đóng nhận bài
+**When** chuyên viên tạo phiên (phòng, chủ toạ, thư ký, khung giờ, giải lao, thời lượng) và gán báo cáo đã nộp toàn văn
+**Then** hệ thống xếp báo cáo theo thứ tự, bỏ qua giải lao, giữ giờ đặt tay
+**And** báo vượt khung kèm số phút thiếu, không tự cắt thời lượng.
+
+**Given** phiên toàn thể có phiên song song, hai phiên toàn thể một ngày, trùng phòng, báo cáo viên trùng giờ, vượt khung, hoặc giờ đặt tay ngoài phiên hay chồng giải lao
+**When** chốt chương trình
+**Then** bị chặn và hiện lỗi.
+
+**Given** không còn lỗi
+**When** chốt (xác nhận nếu còn bài toàn văn chưa xếp)
+**Then** tạo một phiên bản chương trình bất biến, báo cáo đã xếp chuyển `scheduled`, hội nghị chuyển `program_published` và chương trình gửi tới khách mời đã nhận lời
+**And** sửa sau khi chốt thì hệ thống báo cần chốt lại; bản đã chốt xuất được Word.
+
+### Story 13.6: Kỷ yếu, kết thúc và "Hội nghị của tôi" [FR77, FR78, FR80]
+
+_Commit `e50b840`, `be2a68c`._
+
+As a chuyên viên phụ trách và khách mời,
+I want gửi, nhận kỷ yếu và xem lại chương trình,
+So that hồ sơ hội nghị đầy đủ sau sự kiện.
+
+**Acceptance Criteria:**
+
+**Given** hội nghị ở `program_published` hoặc `completed`
+**When** chuyên viên tải kỷ yếu lên
+**Then** kỷ yếu được lưu theo phiên bản và gửi tới khách mời đã nhận lời.
+
+**Given** hội nghị đã diễn ra
+**When** chuyên viên kết thúc
+**Then** hội nghị chuyển `completed`.
+
+**Given** khách mời đã nhận lời
+**When** mở "Hội nghị của tôi"
+**Then** thấy hội nghị, bài của mình, yêu cầu sửa, chương trình đã chốt, bản Word và kỷ yếu.
+
+### Story 13.7: Thống kê hội nghị trên dashboard và trang Báo cáo [FR79]
+
+_Commit `1fae0f0`._
+
+As a Trưởng phòng, chuyên viên hoặc lãnh đạo,
+I want xem số liệu mời, nhận lời, nộp bài theo hội nghị và đơn vị,
+So that đánh giá được hiệu quả tổ chức.
+
+**Acceptance Criteria:**
+
+**Given** actor xem được ít nhất một hội nghị
+**When** mở dashboard hoặc tab "Hội nghị khoa học" của trang Báo cáo
+**Then** thấy đã mời, nhận lời, từ chối, chờ trả lời, báo cáo viên, tóm tắt, toàn văn, đã xếp lịch, tỉ lệ nhận lời và nộp toàn văn; theo trạng thái, cấp, năm, đơn vị chủ trì, đơn vị báo cáo viên, từng hội nghị và từng phiên
+**And** xuất được Excel.
+
+**Given** số liệu được tính
+**When** áp bộ lọc năm, đơn vị chủ trì, cấp
+**Then** chỉ đếm hội nghị actor được đọc, cùng điều kiện với danh sách
+**And** hội nghị đã huỷ không tính vào tỉ lệ.
+
+**Given** actor không xem được hội nghị nào
+**When** gọi `GET /conferences/stats`
+**Then** nhận `visible: false` và mục thống kê bị ẩn.
 
 
 ## Researcher Profile completion — 2026-09-15

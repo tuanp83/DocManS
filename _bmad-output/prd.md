@@ -28,7 +28,7 @@ documentCounts:
   projectDocs: 2
 outputFile: "/Users/Super/DocManS/_bmad-output/prd.md"
 created: "2026-04-27T22:31:49+0700"
-updated: "2026-08-26T00:00:00+0700"
+updated: "2026-10-19T00:00:00+0700"
 releaseMode: "single-release"
 classification:
   projectType: "web_app"
@@ -41,7 +41,7 @@ classification:
 
 **Author:** ThanhDaika
 **Created:** 2026-04-27
-**Updated:** 2026-08-26
+**Updated:** 2026-10-19
 
 ## Executive Summary
 
@@ -156,6 +156,7 @@ notification, file-metadata, and file-content disclosure.
 - Related-document management for governing, legal, planning, proposal, project, seminar, and council documents with metadata, version context, effective status, and permission-checked access.
 - Council and ethics management, including council plans, member roles, ethics dossier submission, completeness review, scoring, consolidation, and approval routing.
 - Researcher profile management, including scientist identity, academic information, unit, expertise, account linkage, participation links, search, history, and auditability.
+- Scientific conference management, including conference creation, officer assignment, invitations, invitee response and account provisioning, abstract and full-paper submission, detailed program scheduling, proceedings distribution, and conference statistics (see "Scientific Conference Management — 2026-10-17").
 - Role-based and scope-based authorization, audit logs, file management, in-app notifications, email notifications for important events, and export capabilities for core Excel/PDF reporting needs.
 
 ### Growth Features (Post-MVP)
@@ -859,3 +860,98 @@ credential delivery, migration compatibility and history retention.
   destination and role/scope remain administrative.
 - Profile/link/account/activation/username/account-status audit is preserved with
   safe transactional change facts.
+
+## Scientific Conference Management — 2026-10-17
+
+[Thiết kế: Quản lý Hội nghị Khoa học](../docs/design/hoi-nghi-khoa-hoc.md) is the
+current source of truth for this module, including lifecycles, data model, API,
+screens and the product-owner decisions in its section 11. Role names follow
+`docs/permission-matrix.md`.
+
+- FR70: The Head of the Scientific Research Management Department (Trưởng phòng
+  KHQS) can create, edit and cancel a scientific conference with name, level,
+  host unit, venue, dates, abstract deadline and full-paper deadline; the system
+  assigns a code `HN-<year>-<sequence>`.
+- FR71: The department head assigns, reassigns or revokes exactly one active
+  conference officer, with history. Only that officer manages invitees, mailings,
+  revision requests, the program, proceedings and completion; other staff cannot
+  act on an unassigned conference. The officer cannot also be an invitee.
+- FR72: The officer builds the invitee list of speakers and delegates from
+  existing accounts, manual entry or an Excel template, and sends invitations,
+  reminders and change notices to selected recipients. Invitations state the
+  time and venue, plus submission deadlines for speakers. Every mailing keeps its
+  content, recipients and per-recipient delivery result as evidence.
+- FR73: Invitees with an account respond in the system. Invitees without one
+  respond through a hashed, single-use, expiring email link; accepting
+  provisions a `RESEARCHER_INTERNAL_USER` in the unit chosen by the officer
+  (Academy members) or an `EXTERNAL_RESEARCHER_USER` (outside guests) and leads
+  to password setup; an email matching an existing account links to that
+  account; declining creates no account. Accounts with Academy-wide or
+  multi-unit scope can be invited without a primary unit.
+- FR74: A speaker who accepted can submit an abstract and a full paper (authors
+  and file) at any time before the deadline, with no abstract-acceptance step.
+  Each submission is an immutable version. After the deadline, submission is
+  allowed only against an open revision request. The officer can request a
+  revision with reason and due date, separately for abstract and full paper; the
+  speaker can withdraw before scheduling.
+- FR75: After closing submissions, the officer builds the detailed program:
+  one plenary session per day with nothing in parallel, then parallel track
+  sessions, each with room, chair, secretary, time window, breaks and a
+  per-paper duration (conference default, session override). The system places
+  full-paper submissions in order, skips breaks, keeps manually set times and
+  reports overruns in minutes without shortening talks.
+- FR76: Publishing the program is blocked by plenary overlap, two plenaries on
+  one day, room clashes, a speaker in overlapping sessions, overruns, or manual
+  times outside the session or over a break; unscheduled full papers require
+  confirmation. Publishing creates an immutable program version, marks scheduled
+  papers, and sends the program to accepted invitees; edits after publishing
+  require republishing as a new version. The published program exports to Word.
+- FR77: The officer uploads proceedings compiled outside the system as
+  versioned files and sends them to accepted invitees, including after the
+  conference is completed.
+- FR78: Accepted invitees see their conferences, papers, revision requests,
+  published program, Word program and proceedings in "Hội nghị của tôi".
+- FR79: Conference statistics (invited, accepted, declined, pending, speakers,
+  abstracts, full papers, scheduled, acceptance and full-paper rates; by status,
+  level, year, host unit, speaker unit, conference and session) appear on the
+  dashboard and in the "Hội nghị khoa học" tab of Reports, with Excel export.
+  They count only conferences the viewer may read, exclude cancelled
+  conferences from rates, and are hidden for users with no visible conference.
+- FR80: Conference lifecycle `draft → preparing → inviting → submission_closed →
+  program_published → completed`, or `cancelled` with a reason before
+  completion, plus invitation and paper states, are controlled states with
+  history and audit.
+- Out of scope by product-owner decision: paper peer review, attendance,
+  certificates, awards, and linking presented papers to researcher publications
+  or project products.
+
+## Approved Project And Proposal Updates — 2026-10-17
+
+- FR81: A progress report can be formally submitted only with result content,
+  progress content and at least one report or evidence file (`REPORT_INCOMPLETE`
+  otherwise); a draft can be saved without files.
+- FR82: The PI sees the staff reason on a report, labelled by state (supplement
+  request with due date, or staff comment), so a returned report always explains
+  what is required.
+- FR83: The Head of the Scientific Research Management Department and the Head of
+  the Research Management Board (Trưởng ban QLKH) can read progress-report
+  content, adjustment/extension requests and history reasons for projects in
+  scope. Staff not assigned to the project still see only version and status.
+- FR84: "Approaching deadline" and "overdue" flags apply only to projects still
+  being executed (preparing, in progress, suspended). Projects awaiting
+  acceptance, accepted, failed or closed are classed as "finished execution" and
+  have their own report filter.
+- FR85: A proposal receives the code `<year>-<unit code>-<sequence>` at first
+  submission; the approved project inherits it. The assigned proposal officer or
+  the Research Management Board head in scope, without conflict, can correct the
+  code with a reason from submission until the leadership decision. Codes are
+  validated for format (Vietnamese letters, digits, `.`, `_`, `-`, max 50
+  characters) and uniqueness; old and new codes are audited.
+- FR86: When a researcher's military rank, academic rank or degree changes, lists
+  still in use update the displayed title: proposal and project members,
+  conference invitees, evaluation and IRB councils in approval submissions (tờ
+  trình) that are draft or returned, and proposed acceptance councils.
+  Submitted, signed or issued evidence keeps the title as of that time: tờ trình
+  under review or signed,
+  established acceptance councils, proposal submission versions, published
+  conference programs, paper authors, audit logs and notifications.

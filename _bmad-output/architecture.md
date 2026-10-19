@@ -19,7 +19,7 @@ project_name: "DocManSystem"
 user_name: "ThanhDaika"
 date: "2026-04-27"
 created: "2026-04-27T22:51:34+0700"
-updated: "2026-07-29T00:00:00+0700"
+updated: "2026-10-19T00:00:00+0700"
 lastStep: 8
 status: "complete"
 completedAt: "2026-04-27"
@@ -853,6 +853,31 @@ stateDiagram-v2
     Rejected --> [*]
 ```
 
+### Scientific Conference State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Draft: createConference
+    Draft --> Preparing: assignOfficer
+    Preparing --> Inviting: sendFirstInvitation
+    Inviting --> SubmissionClosed: closeSubmission
+    SubmissionClosed --> ProgramPublished: publishProgram
+    ProgramPublished --> Completed: complete
+    Draft --> Cancelled: cancelWithReason
+    Preparing --> Cancelled: cancelWithReason
+    Inviting --> Cancelled: cancelWithReason
+    SubmissionClosed --> Cancelled: cancelWithReason
+    ProgramPublished --> Cancelled: cancelWithReason
+    Completed --> [*]
+    Cancelled --> [*]
+```
+
+Invitation (`draft → sent → accepted | declined`, `revoked` with reason) and
+paper (`awaiting_abstract → abstract_submitted → full_paper_submitted →
+scheduled`, `withdrawn` before scheduling) lifecycles are defined in
+`apps/api/src/conferences/conference-workflow.ts` and
+`docs/design/hoi-nghi-khoa-hoc.md` section 4.
+
 ### Task State Machine
 
 ```mermaid
@@ -1089,7 +1114,7 @@ docmansystem/
 
 - `apps/api` is the only service that owns business-state mutation and protected workflow decisions
 - `apps/web` never bypasses the API to access persistence directly
-- Public route surface is limited to authenticated internal APIs under `/api/v1`
+- Public route surface is limited to authenticated internal APIs under `/api/v1`, except the explicit unauthenticated token endpoints (password reset/activation and `/api/v1/public/conference-invitations/*`); the web app declares its matching public pages once in `PUBLIC_ROUTES` (`apps/web/src/lib/session.ts`)
 - Domain routes are grouped by module and workflow action
 
 **Component Boundaries:**
@@ -1127,6 +1152,7 @@ docmansystem/
 - Council and ethics management → `councils`, `ethics-dossiers`, `council-evaluations`, `related-documents`, `researcher-profiles`, `files`, `audit-logs`, `notifications`
 - Researcher profile management → `researcher-profiles`, `users`, `organizations`, `catalogs`, `audit-logs`, plus participation links to operational modules
 - Task management → `tasks`, `notifications`, `audit-logs`, `dashboard`
+- Scientific conference management → `conferences`, `users`, `organizations`, `catalogs`, `files`, `notifications`, `mail`, `audit-logs`, `dashboard`, `reports`
 - Role-based dashboard and reporting → `dashboard`, `reports`, plus read-side queries from all operational modules including seminars, student research, related documents, councils, ethics dossiers, and researcher profiles
 
 **Cross-Cutting Concerns:**
@@ -1339,6 +1365,24 @@ erDiagram
 - `council_evaluation_assignments`
 - `council_evaluations`
 - `council_decisions`
+
+**Scientific Conference Domain Ownership:**
+
+- `scientific_conferences`
+- `conference_officers`
+- `conference_invitations`
+- `conference_invitation_tokens`
+- `conference_papers`
+- `conference_paper_versions`
+- `conference_revision_requests`
+- `conference_mailings`
+- `conference_mailing_recipients`
+- `conference_events`
+- `conference_sessions`
+- `conference_session_breaks`
+- `conference_session_slots`
+- `conference_program_versions`
+- `conference_proceedings`
 
 **Operational Support Ownership:**
 
@@ -1647,3 +1691,92 @@ credential delivery, migration compatibility and history retention.
 - Profile/link/account/credential/first-password-change audit is preserved with
   safe transactional change facts. No test files are written or changed for this
   completion at the user's instruction; verification is recorded in its artifact.
+
+## Scientific Conference Module — 2026-10-17
+
+[Thiết kế: Quản lý Hội nghị Khoa học](../docs/design/hoi-nghi-khoa-hoc.md) is the
+current source of truth for this module (lifecycles, data model, API, screens,
+product-owner decisions). Requirements are PRD FR70–FR80.
+
+**Backend module** `apps/api/src/conferences/`:
+
+- `conferences.controller.ts` with `conferences.service.ts`
+  (conference and officer), `conference-invitations.service.ts` (invitees,
+  mailings, responses, account provisioning), `conference-papers.service.ts`
+  (submissions, revision requests), `conference-program.service.ts` (sessions,
+  slots, published program, proceedings).
+- Pure, unit-tested functions: `conference-access.ts` (authorization),
+  `conference-workflow.ts` (state tables), `conference-scheduling.ts`
+  (deterministic scheduling and blocking-error detection), `conference-stats.ts`
+  (statistics formulas), `conference-mail-templates.ts`.
+- Authorization: the Head of the Scientific Research Management Department
+  creates conferences and assigns officers; operational actions require the
+  active `conference_officers` row (one per conference, history kept); academy
+  leadership reads; submission rights come from an accepted `speaker`
+  invitation, never from the system role. The officer cannot be an invitee
+  (checked both ways).
+- Public endpoints `POST /api/v1/public/conference-invitations/lookup` and
+  `/respond` take the token in the request body (kept out of access logs).
+  Tokens are stored hashed, single-use and expiring; reissuing revokes the old
+  one; invalid or expired tokens disclose nothing about the conference. They are
+  rate-limited by the general nginx `api_per_client` zone; there is no
+  dedicated zone yet.
+- Accepting provisions a `RESEARCHER_INTERNAL_USER` in the officer-selected unit
+  or an `EXTERNAL_RESEARCHER_USER`, reusing `AccountActivationToken` and the
+  password-setup flow; a matching email links the existing account. An existing
+  account's unit is its primary scope, else its only scope, else empty (the
+  internal-unit check applies only to internal invitees without an account).
+- Evidence and immutability: paper versions, published program versions and
+  proceedings versions are append-only; each mailing stores content,
+  attachments, recipients, channel and per-recipient delivery result;
+  `conference_events` records every mutation with actor, transition and reason.
+- Read side: `GET /conferences/stats` and `stats/export.xlsx` use the same
+  visibility filter as the conference list and return `visible: false` when the
+  viewer has none. The dashboard section and the Reports tab
+  (`/reports?tab=conferences`) consume it. The published program is rendered to
+  Word in the browser (`apps/web/src/lib/conference-program-word.ts`).
+- Web routes: `/conferences`, `/conferences/[id]`, `/my-conferences`, public
+  `/conference-invitation`; client calls are centralized in
+  `apps/web/src/lib/conferences-api.ts`.
+
+## Cross-Module Updates — 2026-10-17
+
+- **Researcher title propagation**
+  (`apps/api/src/researcher-profiles/title-propagation.ts`): after every profile
+  update (staff edit, self edit, account create/link), denormalized display
+  names in still-mutable records are refreshed (PRD FR86). Submitted, signed or
+  published evidence is never rewritten. JSON columns are updated with direct
+  SQL so `updated_at` of proposals and projects does not change; one
+  `propagate-researcher-titles` audit entry records the changed row counts and
+  is skipped when nothing changed. `formatAcademicTitle` is the single formatter
+  for abbreviated academic rank and degree.
+- **Proposal code** (`apps/api/src/research-proposals/proposal-code.ts`):
+  `<year>-<unit code>-<sequence>` is assigned at first submission and inherited by
+  the approved project; a migration back-filled submitted proposals. Correction
+  uses capability `proposal.code.update` and
+  `POST /research-proposals/:id/code {code, reason, contextVersion}` (format and
+  uniqueness checks, audited old/new code), allowed only before the leadership
+  decision.
+- **Approved-project roles**: `apps/api/src/approved-projects/project-roles.ts`
+  is the single source for project role rules; `isProjectDepartmentHead`
+  (Trưởng phòng KHQS, Trưởng ban QLKH) grants reading report content and history
+  reasons. Deadline flags are computed only for projects still being executed.
+  Report submission enforces content plus at least one file
+  (`REPORT_INCOMPLETE`).
+- **Optimistic concurrency and input pipes**: every HTTP write to a proposal
+  dossier (draft edit, submit, resubmit, supplement, completeness, officer,
+  evaluation, budget, council, IRB), intake-period open/close and file deletion
+  must send `contextVersion` through the shared `readContextVersion` pipe; the
+  evaluation summary requires its revision even for drafts. Endpoints that
+  previously accepted raw bodies now use validation pipes
+  (`tests/request-pipes.test.mjs`).
+- **Operations**:
+  - `scripts/restore.sh` takes a safety backup first, drops and restores the
+    schema in one transaction, and extracts MinIO to a temporary directory
+    before replacing data.
+  - `SMTP_REQUIRE_TLS` (`apps/api/src/mail/smtp-tls.ts`) supports internal relays
+    without STARTTLS; activation-mail failures are logged.
+  - An unreachable object store returns `503 STORAGE_UNAVAILABLE` instead of 404.
+  - nginx generates `request_id`, forwards it as `X-Request-Id` and writes it to
+    the access log for tracing; readiness is monitored via `/api/v1/health/ready`
+    (`docs/van-hanh/trien-khai-va-van-hanh.md`).
