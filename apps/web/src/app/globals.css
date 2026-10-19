@@ -1346,6 +1346,16 @@ summary:focus-visible {
   background: var(--surface-muted);
 }
 
+button.multi-select-option {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .field .multi-select-option input {
   width: auto;
   min-height: auto;
