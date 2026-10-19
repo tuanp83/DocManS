@@ -34,8 +34,9 @@ ngày, cập nhật phiên bản, sao lưu và xử lý sự cố.
 | 3 | Có **image MinIO** đã kiểm thử. MinIO đã ngừng phát hành image công khai; file image không nằm trong git. | Chép `minio-RELEASE.2025-09-07T16-13-09Z-amd64.tar.gz` lên máy chủ và nạp (bước B3). |
 | 4 | Có **chứng chỉ TLS** cho tên miền. | CA nội bộ chép vào `nginx/ssl/` hoặc Let's Encrypt (bước B5). |
 | 5 | **Sao lưu ra ngoài máy chủ** và **diễn tập khôi phục** một lần. | Bước E. |
-| 6 | **Nhập dữ liệu thật**: đơn vị, tài khoản lãnh đạo và cán bộ QLKH, hồ sơ nhà khoa học, đợt tiếp nhận. | Bước C. |
-| 7 | **Chạy thử nghiệm thu** một luồng đầy đủ bằng tài khoản thật của từng vai trò. | Bước C7. |
+| 6 | **Lịch tự động** (sao lưu, chép ra máy khác, cảnh báo chứng chỉ, kiểm tra sức khoẻ) chạy được và **thư cảnh báo tới được hộp thư** CNTT. | Bước D1, làm đủ bảng kiểm tra. |
+| 7 | **Nhập dữ liệu thật**: đơn vị, tài khoản lãnh đạo và cán bộ QLKH, hồ sơ nhà khoa học, đợt tiếp nhận. | Bước C. |
+| 8 | **Chạy thử nghiệm thu** một luồng đầy đủ bằng tài khoản thật của từng vai trò. | Bước C7. |
 
 ### A3. Rủi ro đã biết, cần biện pháp vận hành cho tới khi sửa trong mã nguồn
 
@@ -45,7 +46,7 @@ ngày, cập nhật phiên bản, sao lưu và xử lý sự cố.
 | Văn bản khoa học nháp hoặc hết hiệu lực vẫn mở được nếu biết đường dẫn trực tiếp. | Không tải văn bản mật lên mục Văn bản & Biểu mẫu. |
 | Chưa có CSRF token riêng, chưa có Content-Security-Policy đầy đủ. | Chỉ phục vụ trong mạng nội bộ của Học viện; không dùng chung tên miền gốc với hệ thống khác do người ngoài quản lý. |
 | Một máy chủ duy nhất (không dự phòng nóng). | Sao lưu hằng ngày ra máy khác; mục tiêu khôi phục: mất tối đa 24 giờ dữ liệu, dựng lại trong 1 ngày làm việc. |
-| Chưa có hệ thống giám sát tập trung. | Cron kiểm tra sức khoẻ và gửi cảnh báo (bước D2). |
+| Chưa có hệ thống giám sát tập trung. | Cron kiểm tra sức khoẻ và gửi cảnh báo (bước D1). |
 
 ### A4. Đã gia cố trong đợt rà soát này
 
@@ -66,7 +67,7 @@ ngày, cập nhật phiên bản, sao lưu và xử lý sự cố.
 | CPU / RAM | 4 vCPU, 8 GB RAM (giới hạn các service cộng lại khoảng 6 GB). |
 | Ổ đĩa | 100 GB SSD cho hệ thống và dữ liệu; tăng theo dung lượng tệp đính kèm (mỗi tệp tối đa 10 MB). |
 | Hệ điều hành | Ubuntu Server 22.04 hoặc 24.04 LTS (x86_64 / amd64, vì image MinIO là bản amd64). |
-| Phần mềm | Docker Engine 24 trở lên, Docker Compose v2 (`docker compose`), git, openssl, cron. |
+| Phần mềm | Docker Engine 24 trở lên, Docker Compose v2 (`docker compose`), git, openssl, cron, rsync, mailutils và msmtp-mta (gửi thư cảnh báo, bước D1). |
 | Mạng | Tên miền nội bộ (vd. `docmans.hvqy.edu.vn`) trỏ về máy chủ; tường lửa chỉ mở 80, 443 và SSH từ mạng quản trị. |
 | Thư | Tài khoản SMTP của Học viện để gửi thư. |
 | Sao lưu | Một máy hoặc ổ khác để chép bản sao lưu hằng ngày. |
@@ -198,15 +199,71 @@ Xoá hoặc đánh dấu dữ liệu thử theo quy định trước khi mở ch
 
 ### D1. Lịch tự động (cron của người dùng triển khai)
 
+Sao lưu, chép bản sao lưu ra máy khác, cảnh báo chứng chỉ và kiểm tra sức khoẻ **chỉ chạy nhờ crontab** của máy chủ; hệ thống không tự làm. Bỏ sót hoặc khai sai bước này thì không có lỗi nào hiện ra: sao lưu ngừng mà không ai được báo. Làm đủ ba bước dưới đây với người dùng triển khai (người có quyền docker ở B2, không dùng root).
+
+**1. Chuẩn bị** (một lần):
+
+```bash
+# File log: người dùng thường không ghi được vào /var/log, cron sẽ bỏ qua cả lệnh nếu không tạo trước
+sudo install -o $USER -g $USER -m 640 /dev/null /var/log/docmans-backup.log
+sudo install -o $USER -g $USER -m 640 /dev/null /var/log/docmans-cert.log
+
+# Gửi thư cảnh báo từ máy chủ: Ubuntu Server không có sẵn lệnh `mail`
+sudo apt install -y mailutils msmtp-mta rsync
+cat > ~/.msmtprc <<'EOF'
+defaults
+auth on
+tls on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+account default
+host <SMTP_HOST>
+port 587
+from <SMTP_FROM>
+user <SMTP_USER>
+password <SMTP_PASSWORD>
+EOF
+chmod 600 ~/.msmtprc
+echo "Thư thử cảnh báo DocManS" | mail -s "DocManS thử cảnh báo" it@hvqy.edu.vn    # phải nhận được thư
+
+# Chép sang máy sao lưu không cần mật khẩu (cron không nhập được mật khẩu)
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/docmans_backup
+ssh-copy-id -i ~/.ssh/docmans_backup.pub <người dùng>@<máy sao lưu>
+cat >> ~/.ssh/config <<'EOF'
+Host backup-host
+  HostName <máy sao lưu>
+  User <người dùng>
+  IdentityFile ~/.ssh/docmans_backup
+EOF
+ssh backup-host 'mkdir -p /srv/docmans-backups'    # lần đầu: xác nhận khoá máy sao lưu
+```
+
+Thông số SMTP lấy như `SMTP_*` trong `.env.production` (B4); máy chủ thư chỉ hỗ trợ cổng 465 thì đặt `port 465` và thêm dòng `tls_starttls off`. Chứng chỉ do **CA nội bộ** cấp: cài chứng chỉ gốc của CA vào máy chủ (`sudo cp ca-goc.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates`), nếu không lệnh `curl` kiểm tra sức khoẻ sẽ báo lỗi chứng chỉ và gửi cảnh báo giả mỗi 5 phút.
+
+**2. Khai lịch** (`crontab -e`, thay `<SERVER_NAME>`):
+
 ```cron
-# Sao lưu 01:30 hằng ngày, sau đó chép ra máy khác
-30 1 * * * cd /opt/docmans && ./scripts/backup.sh >> /var/log/docmans-backup.log 2>&1 && rsync -a --delete backups/ backup-host:/srv/docmans-backups/
+MAILTO=""
+# Sao lưu 01:30 hằng ngày rồi chép ra máy khác; lỗi ở bất kỳ bước nào thì gửi thư
+30 1 * * * cd /opt/docmans && { ./scripts/backup.sh && rsync -a --delete backups/ backup-host:/srv/docmans-backups/; } >> /var/log/docmans-backup.log 2>&1 || echo "Sao lưu DocManS thất bại, xem /var/log/docmans-backup.log" | mail -s "DocManS cảnh báo" it@hvqy.edu.vn
 # Cảnh báo chứng chỉ sắp hết hạn (< 21 ngày)
-0 8 * * * cd /opt/docmans && ./scripts/check-cert-expiry.sh >> /var/log/docmans-cert.log 2>&1
+0 8 * * * cd /opt/docmans && ./scripts/check-cert-expiry.sh >> /var/log/docmans-cert.log 2>&1 || tail -1 /var/log/docmans-cert.log | mail -s "DocManS cảnh báo chứng chỉ" it@hvqy.edu.vn
 # Kiểm tra sức khoẻ 5 phút một lần (/health/ready kiểm tra cả cơ sở dữ liệu lẫn kho tệp MinIO;
 # /health chỉ kiểm tra cơ sở dữ liệu nên KHÔNG phát hiện được kho tệp sập)
 */5 * * * * curl -fsS --max-time 10 https://<SERVER_NAME>/api/v1/health/ready > /dev/null || echo "DocManS không phản hồi $(date)" | mail -s "DocManS cảnh báo" it@hvqy.edu.vn
 ```
+
+Cron không tự báo khi lệnh thoát mã khác 0, nên mỗi dòng có vế `|| ... | mail` riêng. Cảnh báo sức khoẻ lặp lại 5 phút một lần cho tới khi hệ thống phản hồi lại. `rsync --delete` giữ máy sao lưu giống hệt `backups/` (cùng 30 ngày); xoá nhầm `backups/` trên máy chủ thì đêm đó bản ở máy sao lưu cũng mất, nên nếu máy sao lưu có snapshot hoặc chụp định kỳ thì bật thêm.
+
+**3. Kiểm tra trước khi mở cho người dùng** (bắt buộc, ghi lại kết quả):
+
+| # | Kiểm tra | Đạt khi |
+|---|---|---|
+| 1 | `crontab -l` | Đủ ba dòng, đã thay `<SERVER_NAME>`. |
+| 2 | Chạy tay dòng sao lưu (chép phần lệnh sau năm trường giờ, từ `cd /opt/docmans`) | `/var/log/docmans-backup.log` kết thúc bằng "Hoàn tất"; thư mục mới có ở cả `backups/` lẫn `backup-host:/srv/docmans-backups/`. |
+| 3 | Chạy tay dòng chứng chỉ | Log ghi "OK: ... còn hạn tới ...". |
+| 4 | `curl -fsS https://<SERVER_NAME>/api/v1/health/ready` | Không báo lỗi (kể cả lỗi chứng chỉ). |
+| 5 | Thử đường cảnh báo: `dc stop nginx`, chờ tối đa 5 phút, `dc start nginx` | Nhận được thư "DocManS không phản hồi". |
+| 6 | Sáng hôm sau | Log sao lưu có lần chạy 01:30 kết thúc bằng "Hoàn tất", không có thư lỗi. |
 
 ### D2. Theo dõi
 
