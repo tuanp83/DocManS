@@ -21,6 +21,7 @@ import {
   type ScientificCurriculumVitae
 } from "@/lib/researcher-profiles-api";
 import { matchOrganizationUnit } from "@/lib/organization-match";
+import { foldSearchText } from "@/lib/search-text";
 
 const initialCv: ScientificCurriculumVitae = {
   personalInfo: {
@@ -118,7 +119,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
   const allowed = (action: string) => editing?.viewerAuthorization.allowedActions.some((value) => value === action) ?? false;
   const editable = editing ? allowed(self ? "researcher-profile.self.update" : "researcher-profile.update") : canCreate;
   const selectedResearchFields = catalogs.researchFields.filter((item) => form.researchFieldIds.includes(item.id));
-  const visibleResearchFields = catalogs.researchFields.filter((item) => item.name.toLowerCase().includes(researchFieldQuery.trim().toLowerCase()));
+  const visibleResearchFields = unselectedResearchFieldsMatching(researchFieldQuery, form.researchFieldIds);
   const accountProvisionOnCreate = !editing && !self && ((form.profileType ?? "INTERNAL") === "INTERNAL" || form.provisionAccount === true);
 
   function select(profile: ResearcherProfile) {
@@ -280,6 +281,41 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
         ? current.researchFieldIds.filter((value) => value !== id)
         : [...current.researchFieldIds, id]
     }));
+  }
+
+  /** Lĩnh vực chưa chọn có tên chứa chuỗi gõ (không phân biệt dấu); tên trùng khớp hoàn toàn xếp đầu. */
+  function unselectedResearchFieldsMatching(query: string, selectedIds: string[]) {
+    const folded = foldSearchText(query);
+    const matches = catalogs.researchFields.filter((item) => !selectedIds.includes(item.id) && foldSearchText(item.name).includes(folded));
+    const exact = matches.find((item) => foldSearchText(item.name) === folded);
+    return exact ? [exact, ...matches.filter((item) => item !== exact)] : matches;
+  }
+
+  function addResearchField(id: string) {
+    setForm((current) => (current.researchFieldIds.includes(id) ? current : { ...current, researchFieldIds: [...current.researchFieldIds, id] }));
+    setResearchFieldQuery("");
+  }
+
+  /** Mỗi đoạn trước dấu phẩy chọn lĩnh vực khớp đầu tiên; đoạn sau dấu phẩy cuối là phần đang gõ dở. */
+  function handleResearchFieldInput(value: string) {
+    setResearchFieldOpen(true);
+    if (!value.includes(",")) {
+      setResearchFieldQuery(value);
+      return;
+    }
+    const parts = value.split(",");
+    const pending = parts.pop() ?? "";
+    const picked = [...form.researchFieldIds];
+    const unmatched: string[] = [];
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const match = unselectedResearchFieldsMatching(part, picked)[0];
+      if (match) picked.push(match.id);
+      else unmatched.push(part.trim());
+    }
+    setForm((current) => ({ ...current, researchFieldIds: picked }));
+    // Đoạn không khớp lĩnh vực nào được giữ lại để người dùng sửa
+    setResearchFieldQuery([...unmatched, pending.trimStart()].join(", "));
   }
 
   function handleOrganizationUnitChange(value: string) {
@@ -645,8 +681,8 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
               <span>Loại nhà khoa học</span>
               <select value={filters.profileType} onChange={(event) => filter("profileType", event.target.value)}>
                 <option value="">Tất cả</option>
-                <option value="INTERNAL">Trong nước (Nội bộ)</option>
-                <option value="EXTERNAL">Nước ngoài (Bên ngoài)</option>
+                <option value="INTERNAL">Trong Học viện</option>
+                <option value="EXTERNAL">Ngoài Học viện</option>
               </select>
             </label>
             <label className="field">
@@ -704,7 +740,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                         ))}
                       </td>
                       <td>
-                        {profile.profileType === "EXTERNAL" ? "Nước ngoài" : "Trong nước"}
+                        {profile.profileType === "EXTERNAL" ? "Ngoài Học viện" : "Trong Học viện"}
                         <br />
                         <small className="text-secondary">{profile.externalAffiliation || profile.managementOrganization.name}</small>
                       </td>
@@ -869,7 +905,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                             if (!pInfo.nationality) cvPersonalInfo("nationality", "Việt Nam");
                           }}
                         />
-                        <span>Nhà khoa học trong nước</span>
+                        <span>Nhà khoa học trong Học viện</span>
                       </label>
                       <label className="stm-radio-option">
                         <input
@@ -881,7 +917,7 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                             field("profileType", "EXTERNAL");
                           }}
                         />
-                        <span>Nhà khoa học nước ngoài</span>
+                        <span>Nhà khoa học ngoài Học viện</span>
                       </label>
                     </div>
                   </div>
@@ -1032,12 +1068,14 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                         value={researchFieldQuery}
                         placeholder={selectedResearchFields.length ? "Tìm thêm lĩnh vực" : "Chưa chọn lĩnh vực"}
                         onFocus={() => setResearchFieldOpen(true)}
-                        onChange={(event) => {
-                          setResearchFieldQuery(event.target.value);
-                          setResearchFieldOpen(true);
-                        }}
+                        onChange={(event) => handleResearchFieldInput(event.target.value)}
                         onKeyDown={(event) => {
                           if (event.key === "Escape") setResearchFieldOpen(false);
+                          if (event.key === "Enter") {
+                            // Enter chọn ngay lĩnh vực đầu tiên khớp, không gửi form
+                            event.preventDefault();
+                            if (researchFieldQuery.trim() && visibleResearchFields[0]) addResearchField(visibleResearchFields[0].id);
+                          }
                         }}
                         aria-controls="research-fields-options"
                         aria-expanded={researchFieldOpen}
@@ -1051,17 +1089,22 @@ export function ResearcherProfilesPanel({ self = false }: { self?: boolean }) {
                       <div id="research-fields-options" className="multi-select-menu" role="group" aria-label="Chọn lĩnh vực nghiên cứu">
                         {visibleResearchFields.length ? (
                           visibleResearchFields.map((item) => (
-                            <label key={item.id} className="multi-select-option">
-                              <input type="checkbox" checked={form.researchFieldIds.includes(item.id)} onChange={() => toggleResearchField(item.id)} />
+                            <button
+                              key={item.id}
+                              type="button"
+                              className="multi-select-option"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => addResearchField(item.id)}
+                            >
                               {item.name}
-                            </label>
+                            </button>
                           ))
                         ) : (
-                          <p className="field-hint">Không có lĩnh vực phù hợp.</p>
+                          <p className="field-hint">{!researchFieldQuery.trim() && selectedResearchFields.length ? "Đã chọn hết các lĩnh vực." : "Không có lĩnh vực phù hợp."}</p>
                         )}
                       </div>
                     ) : null}
-                    <small className="field-hint">Chọn một hoặc nhiều lĩnh vực chuyên môn của nhà khoa học.</small>
+                    <small className="field-hint">Gõ tên lĩnh vực (có dấu hoặc không dấu), rồi gõ dấu phẩy, nhấn Enter hoặc bấm vào gợi ý để chọn và gõ tiếp lĩnh vực khác; bấm × trên lĩnh vực đã chọn để bỏ.</small>
                   </div>
 
                   <label className="field" style={{ marginTop: 12 }}>
