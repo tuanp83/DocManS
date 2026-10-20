@@ -300,6 +300,25 @@ describe("ScientificDocumentsService", () => {
     assert.deepEqual(seen, ["ACTIVE", "INACTIVE"]);
   });
 
+  it("a document no longer in force cannot be opened or downloaded by direct link, except by managers", async () => {
+    const inactive = { ...sampleDoc, id: "doc-2", status: "INACTIVE" };
+    const rows = [sampleDoc, inactive];
+    const matches = (row, where) => Object.entries(where).every(([key, value]) => row[key] === value);
+    const prisma = { scientificDocument: { findFirst: async ({ where }) => rows.find((row) => matches(row, where)) ?? null } };
+    const downloads = [];
+    const storage = { getObject: async (key) => { downloads.push(key); return Buffer.from("x"); } };
+    const service = new ScientificDocumentsService(prisma, { record: async () => {} }, storage, fileConfig);
+
+    await assert.rejects(() => service.getDocument(researcherActor, "doc-2"), /Không tìm thấy/);
+    await assert.rejects(() => service.downloadDocument(researcherActor, "doc-2"), /Không tìm thấy/);
+    assert.equal(downloads.length, 0, "không đọc tệp khi không có quyền");
+    assert.equal((await service.getDocument(researcherActor, "doc-1")).id, "doc-1");
+    for (const manager of [staffActor, adminActor]) {
+      assert.equal((await service.getDocument(manager, "doc-2")).status, "INACTIVE");
+      assert.ok(await service.downloadDocument(manager, "doc-2"));
+    }
+  });
+
   it("validates category, status, dates and lengths; an empty date clears it", () => {
     const valid = { documentNumber: "BM-04", title: "Mẫu", category: "GUIDELINE" };
     assert.throws(() => createScientificDocumentPipe.transform({ ...valid, category: "ANYTHING" }), BadRequestException);
