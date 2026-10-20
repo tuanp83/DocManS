@@ -3,6 +3,8 @@ import { SYSTEM_ROLES, type SystemRole } from "@rtms/permissions/system-roles";
 export { SYSTEM_ROLES, type SystemRole };
 
 export const AUTH_SESSION_COOKIE = "rtms_session";
+/** Tên cookie phiên ở production (https): tiền tố __Host- buộc Secure, Path=/ và không gắn Domain, nên tên miền con không ghi đè được. */
+export const SECURE_AUTH_SESSION_COOKIE = "__Host-rtms_session";
 export const AUTH_FAILURE_MESSAGE = "Tên đăng nhập hoặc mật khẩu không hợp lệ.";
 
 export type InternalUserStatus = "active" | "disabled";

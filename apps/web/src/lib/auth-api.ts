@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api-client";
+import { csrfHeaders, setCsrfToken } from "@/lib/csrf";
 import { getApiBaseUrl, type CurrentUser } from "@/lib/session";
 import { SYSTEM_ROLES } from "@rtms/permissions";
 
@@ -45,11 +46,12 @@ export async function loginWithPassword(username: string, password: string): Pro
       return { ok: false, message: safeAuthError };
     }
 
-    const body = (await response.json()) as { user?: unknown };
+    const body = (await response.json()) as { user?: unknown; csrfToken?: unknown };
     if (!isCurrentUser(body.user)) {
       return { ok: false, message: safeAuthError };
     }
 
+    setCsrfToken(body.csrfToken);
     return { ok: true, user: body.user };
   } catch {
     return { ok: false, message: safeAuthError };
@@ -60,9 +62,11 @@ export async function logoutSession() {
   try {
     const response = await fetch(`${getApiBaseUrl()}/auth/logout`, {
       method: "POST",
+      headers: csrfHeaders("POST"),
       credentials: "include"
     });
 
+    setCsrfToken(null);
     return response.ok;
   } catch {
     return false;
@@ -92,7 +96,8 @@ export async function getCurrentUser() {
       return null;
     }
 
-    const body = (await response.json()) as { user?: unknown };
+    const body = (await response.json()) as { user?: unknown; csrfToken?: unknown };
+    setCsrfToken(body.csrfToken);
     return isCurrentUser(body.user) ? body.user : null;
   } catch {
     return null;

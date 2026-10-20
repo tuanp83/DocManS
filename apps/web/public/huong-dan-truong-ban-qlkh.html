@@ -635,7 +635,7 @@
     </div>
 
     <div class="sidebar-search">
-      <input type="text" id="navSearch" placeholder="Tìm nhanh chức năng, nút bấm..." onkeyup="filterNav()" />
+      <input type="text" id="navSearch" placeholder="Tìm nhanh chức năng, nút bấm..." />
     </div>
 
     <div class="nav-group-title">Khởi động &amp; Tổng quan</div>
@@ -672,7 +672,7 @@
   <main class="main-content">
     <div class="top-actions">
       <a class="btn-action" href="./huong-dan-su-dung-truong-phong-khqs.html">📘 Xem Hướng dẫn Trưởng phòng KHQS</a>
-      <button class="btn-action primary" onclick="window.print()">🖨️ In hướng dẫn / Xuất PDF</button>
+      <button class="btn-action primary" type="button" data-action="print">🖨️ In hướng dẫn / Xuất PDF</button>
     </div>
 
     <header class="hero-banner">
@@ -1480,23 +1480,6 @@
 
   </main>
 
-  <script>
-    function filterNav() {
-      const input = document.getElementById('navSearch');
-      const filter = input.value.toLowerCase();
-      const ul = document.getElementById('navList');
-      const li = ul.getElementsByTagName('li');
-
-      for (let i = 0; i < li.length; i++) {
-        const a = li[i].getElementsByTagName('a')[0];
-        const txtValue = a.textContent || a.innerText;
-        if (txtValue.toLowerCase().indexOf(filter) > -1) {
-          li[i].style.display = '';
-        } else {
-          li[i].style.display = 'none';
-        }
-      }
-    }
-  </script>
+  <script src="/huong-dan.js"></script>
 </body>
 </html>

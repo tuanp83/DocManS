@@ -7,8 +7,10 @@ import { ChangePasswordRequestPipe, CompleteAccountActivationRequestPipe, Comple
 import {
   createExpiredSessionCookie,
   createSessionCookie,
-  readSessionCookie
+  readSessionCookie,
+  sessionSetCookieHeaders
 } from "./session-cookie.js";
+import { csrfTokenForSession } from "./csrf.js";
 
 function requestContext(request: any) {
   return {
@@ -28,16 +30,18 @@ export class AuthController {
     @Res({ passthrough: true }) response: any
   ) {
     const result = await this.authService.login(body, requestContext(request));
-    response.setHeader("Set-Cookie", createSessionCookie(result.session.id, process.env.NODE_ENV === "production", new Date(result.session.expiresAt)));
+    const isProduction = process.env.NODE_ENV === "production";
+    response.setHeader("Set-Cookie", sessionSetCookieHeaders(createSessionCookie(result.session.id, isProduction, new Date(result.session.expiresAt)), isProduction));
 
-    return { user: result.user };
+    return { user: result.user, csrfToken: csrfTokenForSession(result.session.id) };
   }
 
   @Post("logout")
   async logout(@Req() request: any, @Res({ passthrough: true }) response: any) {
     const sessionId = readSessionCookie(request.headers.cookie);
     const result = await this.authService.logout(sessionId, requestContext(request));
-    response.setHeader("Set-Cookie", createExpiredSessionCookie(process.env.NODE_ENV === "production"));
+    const isProduction = process.env.NODE_ENV === "production";
+    response.setHeader("Set-Cookie", sessionSetCookieHeaders(createExpiredSessionCookie(isProduction), isProduction));
 
     return result;
   }
@@ -45,7 +49,8 @@ export class AuthController {
   @Get("me")
   @UseGuards(SessionAuthGuard)
   me(@Req() request: any) {
-    return { user: request.currentUser };
+    const sessionId = readSessionCookie(request.headers.cookie);
+    return { user: request.currentUser, csrfToken: sessionId ? csrfTokenForSession(sessionId) : null };
   }
 
   @Post("change-password")

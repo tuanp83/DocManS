@@ -236,7 +236,7 @@ describe("auth API behavior", () => {
   });
 
   it("middleware validates session cookies through the auth API", () => {
-    const middlewareSource = readFileSync("apps/web/src/middleware.ts", "utf8");
+    const middlewareSource = readFileSync("apps/web/src/proxy.ts", "utf8");
 
     assert.equal(/hasSessionCookie\s*&&\s*pathname\s*===\s*["']\/login["']/.test(middlewareSource), false);
     assert.match(middlewareSource, /isPublicPath\(pathname\)/);

@@ -132,6 +132,8 @@ services:
       WEB_ORIGIN: ${PUBLIC_URL:?PUBLIC_URL is required}
       ACCOUNT_LOGIN_URL: ${PUBLIC_URL:?PUBLIC_URL is required}/login
       APP_BASE_URL: ${PUBLIC_URL:?PUBLIC_URL is required}
+      # Khoá ký mã chống giả mạo yêu cầu (CSRF), ít nhất 32 ký tự; đổi khoá thì mọi người phải tải lại trang.
+      CSRF_SECRET: ${CSRF_SECRET:?CSRF_SECRET is required}
       DEADLINE_REMINDERS_ENABLED: ${DEADLINE_REMINDERS_ENABLED:-true}
       HEALTH_SNAPSHOTS_ENABLED: ${HEALTH_SNAPSHOTS_ENABLED:-true}
       TRUST_PROXY: "loopback, linklocal, uniquelocal"
@@ -162,8 +164,11 @@ services:
     command: ["node", "node_modules/next/dist/bin/next", "start", "apps/web", "-H", "0.0.0.0", "-p", "3000"]
     environment:
       NODE_ENV: production
-      # Server-side (middleware) calls stay on the internal network.
+      # Server-side (proxy) calls stay on the internal network.
       API_INTERNAL_BASE_URL: http://api:4000/api/v1
+      # Chính sách bảo mật nội dung (apps/web/src/lib/csp.ts): report-only = chỉ báo cáo vi phạm (log API
+      # csp_violation), enforce = chặn. Chạy report-only 1–2 tuần, không còn vi phạm thì đổi sang enforce.
+      CSP_MODE: ${CSP_MODE:-report-only}
       NODE_OPTIONS: --max-old-space-size=512
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
