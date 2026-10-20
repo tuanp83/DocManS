@@ -7,6 +7,7 @@ import { requestContextMiddleware } from "./infrastructure/observability/request
 import helmet from "helmet";
 import express from "express";
 import { csrfProtection } from "./auth/csrf.js";
+import { CSP_REPORT_PATH, cspReportHandler } from "./security/csp-report.js";
 
 async function bootstrap() {
   if (process.env.NODE_ENV !== "production") {
@@ -34,6 +35,10 @@ async function bootstrap() {
     origin: allowedOrigins,
     credentials: true
   });
+
+  // Báo cáo vi phạm CSP do trình duyệt gửi (kiểu application/csp-report, không mang cookie phiên): xử lý trước lớp
+  // chống giả mạo yêu cầu, chỉ ghi log.
+  app.getHttpAdapter().getInstance().post(CSP_REPORT_PATH, ...cspReportHandler());
 
   // Chống giả mạo yêu cầu: kiểu dữ liệu, nguồn gửi và mã CSRF của phiên (auth/csrf.ts), trước mọi controller.
   // Không nhận thân dạng biểu mẫu (x-www-form-urlencoded): giao diện chỉ gửi JSON và multipart.

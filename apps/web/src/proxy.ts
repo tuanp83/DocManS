@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { createNonce, cspHeaderName, cspMode, isStaticHtmlPath, pageCsp, staticHtmlCsp } from "@/lib/csp";
 import { AUTH_SESSION_COOKIE, SECURE_AUTH_SESSION_COOKIE, isPublicRoute as isPublicPath } from "@/lib/session";
 
 async function hasValidSession(request: NextRequest) {
@@ -25,7 +26,33 @@ async function hasValidSession(request: NextRequest) {
   }
 }
 
-export async function middleware(request: NextRequest) {
+/**
+ * Gắn chính sách bảo mật nội dung (lib/csp.ts). Trang Next.js: nonce mới cho mỗi yêu cầu, đặt vào cả header
+ * của yêu cầu (Next.js đọc nonce từ đó để gắn vào script, style của framework) lẫn header của phản hồi.
+ * Trang HTML tĩnh trong public/: chính sách tĩnh, không có nonce.
+ */
+function withContentSecurityPolicy(request: NextRequest) {
+  const mode = cspMode();
+  if (mode === "off") return NextResponse.next();
+  const isDev = process.env.NODE_ENV === "development";
+  const headerName = cspHeaderName(mode);
+  if (isStaticHtmlPath(request.nextUrl.pathname)) {
+    const response = NextResponse.next();
+    response.headers.set(headerName, staticHtmlCsp({ isDev, apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL }));
+    return response;
+  }
+  const nonce = createNonce();
+  const policy = pageCsp({ nonce, isDev, apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL });
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  // Next.js chỉ đọc nonce từ header Content-Security-Policy của yêu cầu, kể cả khi đang ở chế độ chỉ báo cáo.
+  requestHeaders.set("Content-Security-Policy", policy);
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set(headerName, policy);
+  return response;
+}
+
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isPublicRoute = isPublicPath(pathname);
   const hasSessionCookie = Boolean(request.cookies.get(SECURE_AUTH_SESSION_COOKIE)?.value || request.cookies.get(AUTH_SESSION_COOKIE)?.value);
@@ -42,7 +69,7 @@ export async function middleware(request: NextRequest) {
     if (user.systemRole === "SYSTEM_ADMIN" && (pathname === "/" || pathname === "/dashboard")) return NextResponse.redirect(new URL("/users", request.url));
   }
 
-  return NextResponse.next();
+  return withContentSecurityPolicy(request);
 }
 
 export const config = {

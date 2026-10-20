@@ -1,4 +1,11 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
+// Phông Roboto lưu ngay trong ứng dụng (có bảng chữ tiếng Việt), không tải từ Google Fonts: chính sách bảo mật
+// nội dung chỉ cho phông từ chính máy chủ, và máy chủ build không cần ra Internet để lấy phông.
+import "@fontsource/roboto/300.css";
+import "@fontsource/roboto/400.css";
+import "@fontsource/roboto/500.css";
+import "@fontsource/roboto/700.css";
 import "./globals.css";
 import "@/themes/hvqy1.css";
 import "@/themes/science-profile.css";
@@ -21,6 +28,8 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Dựng động mọi trang: nonce của chính sách bảo mật nội dung (src/proxy.ts) chỉ gắn được khi dựng theo yêu cầu.
+  await connection();
   return (
     <html lang="vi" suppressHydrationWarning>
       <body>

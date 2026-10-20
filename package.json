@@ -29,6 +29,7 @@
     "test:web": "vitest run --root apps/web --config vitest.config.mts"
   },
   "dependencies": {
+    "@fontsource/roboto": "^5.2.8",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.2.7",

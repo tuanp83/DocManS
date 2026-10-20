@@ -81,6 +81,11 @@ server {
     # Chống clickjacking: không cho trang khác nhúng hệ thống vào iframe.
     add_header X-Frame-Options DENY always;
     add_header Content-Security-Policy "frame-ancestors 'none'" always;
+    # Chính sách bảo mật nội dung đầy đủ do giao diện Next.js đặt cho từng trang (apps/web/src/proxy.ts, có nonce);
+    # dòng trên chỉ là lớp chống nhúng iframe áp cho mọi phản hồi, kể cả API. Hai chính sách cùng áp dụng.
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
+    add_header Cross-Origin-Opener-Policy same-origin always;
+    add_header Cross-Origin-Resource-Policy same-origin always;
 
     # FILE_MAX_UPLOAD_BYTES defaults to 10 MB; 11m leaves room for multipart overhead.
     # Raise both together (backend remains authoritative).

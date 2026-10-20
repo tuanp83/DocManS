@@ -22,7 +22,9 @@ describe("workspace smoke checks", () => {
   it("has the expected RTMS app boundaries", () => {
     assert.equal(existsSync("apps/web/src/app/dashboard/page.tsx"), true);
     assert.equal(existsSync("apps/web/src/app/login/page.tsx"), true);
-    assert.equal(existsSync("apps/web/src/middleware.ts"), true);
+    // Next.js 16: tệp middleware.ts đổi tên thành proxy.ts; không được có cả hai.
+    assert.equal(existsSync("apps/web/src/proxy.ts"), true);
+    assert.equal(existsSync("apps/web/src/middleware.ts"), false);
     assert.equal(existsSync("apps/api/src/main.ts"), true);
     assert.equal(existsSync("packages/permissions/src/index.ts"), true);
     assert.equal(existsSync("packages/ui-tokens/src/index.ts"), true);
@@ -48,7 +50,7 @@ describe("workspace smoke checks", () => {
 
   it("uses server-backed auth boundaries instead of browser storage placeholders", () => {
     const sessionSource = readFileSync("apps/web/src/lib/session.ts", "utf8");
-    const middlewareSource = readFileSync("apps/web/src/middleware.ts", "utf8");
+    const middlewareSource = readFileSync("apps/web/src/proxy.ts", "utf8");
     const loginPageSource = readFileSync("apps/web/src/app/login/page.tsx", "utf8");
     const authControllerExists = existsSync("apps/api/src/auth/auth.controller.ts");
     const authGuardExists = existsSync("apps/api/src/auth/session-auth.guard.ts");
