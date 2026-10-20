@@ -7,6 +7,8 @@ export type AdminUser = {
   status: string;
   systemRole: string | null;
   unit: string;
+  /** Thư công vụ: đăng nhập được bằng thư và nhận mã xác thực hai lớp. */
+  credentialEmail?: string | null;
   organizationUnitId?: string;
   /** Chức danh tại đơn vị (chỉ để hiển thị). */
   positions?: UserPosition[];
@@ -112,6 +114,7 @@ export async function createAdminUser(input: {
   password: string;
   systemRole: string;
   organizationUnitId: string;
+  credentialEmail?: string;
 }) {
   return requestJson<{ user: AdminUser }>("/users", {
     method: "POST",
@@ -143,6 +146,7 @@ export async function updateAdminUser(
     displayName: string;
     systemRole: string;
     organizationUnitId: string;
+    credentialEmail?: string;
   }
 ) {
   return requestJson<{ user: AdminUser }>(`/users/${userId}`, {

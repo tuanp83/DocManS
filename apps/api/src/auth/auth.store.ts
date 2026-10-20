@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { positionDisplay } from "../organization/unit-positions.js";
 import { PrismaService } from "../infrastructure/prisma/prisma.service.js";
 import { SYSTEM_ROLES, type AuthSession, type InternalUser, type SafeUserContext, type SystemRole } from "./auth.types.js";
+import { isLoginOtpRequiredRole, loginOtpApplies } from "./login-otp.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
@@ -52,9 +53,14 @@ export class AuthStore {
       unit: user.unit,
       organizationScopes: user.organizationScopes,
       mustChangePassword: user.mustChangePassword,
+      loginOtp: { required: isLoginOtpRequiredRole(user.systemRole), enabled: loginOtpApplies(user) },
       researcherProfileId: user.researcherProfileId,
       positions: user.positions
     };
+  }
+
+  async setLoginOtpEnabled(userId: string, enabled: boolean) {
+    await this.prisma.user.update({ where: { id: userId }, data: { loginOtpEnabled: enabled } });
   }
 
   async createSession(userId: string, credentialVersion: number) {
@@ -192,6 +198,8 @@ export class AuthStore {
     unit: string;
     mustChangePassword?: boolean;
     credentialVersion?: number;
+    credentialEmail?: string | null;
+    loginOtpEnabled?: boolean;
     researcherProfile?: { id: string; status: string } | null;
     unitPositions?: Array<{ positionCode: string; organizationUnit: { name: string; unitType: string; status: string } }>;
     organizationScopes?: Array<{
@@ -232,6 +240,8 @@ export class AuthStore {
       organizationScopes,
       mustChangePassword: user.mustChangePassword ?? false,
       credentialVersion: user.credentialVersion ?? 0,
+      credentialEmail: user.credentialEmail ?? null,
+      loginOtpEnabled: user.loginOtpEnabled ?? false,
       researcherProfileId: user.researcherProfile?.status === "ACTIVE" ? user.researcherProfile.id : undefined,
       // Chức danh tại đơn vị (chỉ để hiển thị, không dùng để phân quyền).
       positions: (user.unitPositions ?? []).filter((position) => position.organizationUnit.status === "active").map((position) => positionDisplay(position.organizationUnit.unitType, position.positionCode, position.organizationUnit.name))

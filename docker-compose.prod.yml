@@ -113,6 +113,8 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       # Required only on the very first deploy; ignored once the admin exists.
       ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
+      # Thư công vụ của quản trị, nhận mã xác thực hai lớp (bắt buộc với quản trị).
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -134,6 +136,9 @@ services:
       APP_BASE_URL: ${PUBLIC_URL:?PUBLIC_URL is required}
       # Khoá ký mã chống giả mạo yêu cầu (CSRF), ít nhất 32 ký tự; đổi khoá thì mọi người phải tải lại trang.
       CSRF_SECRET: ${CSRF_SECRET:?CSRF_SECRET is required}
+      # Xác thực hai lớp qua thư (apps/api/src/auth/login-otp.ts): required-roles = bắt buộc với lãnh đạo, Phòng KHQS,
+      # quản trị; off = tắt tạm khi máy chủ thư hỏng (ghi rõ trong nhật ký sự cố, bật lại ngay khi thư hoạt động).
+      LOGIN_OTP_MODE: ${LOGIN_OTP_MODE:-required-roles}
       DEADLINE_REMINDERS_ENABLED: ${DEADLINE_REMINDERS_ENABLED:-true}
       HEALTH_SNAPSHOTS_ENABLED: ${HEALTH_SNAPSHOTS_ENABLED:-true}
       TRUST_PROXY: "loopback, linklocal, uniquelocal"

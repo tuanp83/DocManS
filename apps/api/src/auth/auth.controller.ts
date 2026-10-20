@@ -1,6 +1,6 @@
 import { Body, Controller, ForbiddenException, Get, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service.js";
-import type { LoginRequest } from "./auth.types.js";
+import type { LoginRequest, SafeUserContext } from "./auth.types.js";
 import { LoginRequestPipe } from "./login-request.pipe.js";
 import { SessionAuthGuard } from "./session-auth.guard.js";
 import { ChangePasswordRequestPipe, CompleteAccountActivationRequestPipe, CompletePasswordResetRequestPipe } from "./password-request.pipe.js";
@@ -11,6 +11,9 @@ import {
   sessionSetCookieHeaders
 } from "./session-cookie.js";
 import { csrfTokenForSession } from "./csrf.js";
+
+type HttpRequest = { ip?: string; socket?: { remoteAddress?: string }; headers: Record<string, string | string[] | undefined>; currentUser?: SafeUserContext };
+type CookieResponse = { setHeader(name: string, value: string | string[]): void };
 
 function requestContext(request: any) {
   return {
@@ -30,9 +33,30 @@ export class AuthController {
     @Res({ passthrough: true }) response: any
   ) {
     const result = await this.authService.login(body, requestContext(request));
+    // Cần mã xác thực qua thư: chưa có phiên, giao diện chuyển sang bước nhập mã.
+    if ("challenge" in result) return { otpRequired: true, ...result.challenge };
+    return this.issueSession(result, response);
+  }
+
+  @Post("login/verify")
+  async verifyLoginOtp(@Body() body: { challengeId?: unknown; code?: unknown }, @Req() request: HttpRequest, @Res({ passthrough: true }) response: CookieResponse) {
+    return this.issueSession(await this.authService.verifyLoginOtp(body ?? {}, requestContext(request)), response);
+  }
+
+  @Post("login/resend")
+  async resendLoginOtp(@Body() body: { challengeId?: unknown }, @Req() request: HttpRequest) {
+    return { otpRequired: true, ...(await this.authService.resendLoginOtp(body ?? {}, requestContext(request))) };
+  }
+
+  @Post("login-otp")
+  @UseGuards(SessionAuthGuard)
+  async setLoginOtp(@Body() body: { enabled?: unknown }, @Req() request: HttpRequest) {
+    return this.authService.setLoginOtpEnabled(request.currentUser!.id, body?.enabled, requestContext(request));
+  }
+
+  private issueSession(result: { session: { id: string; expiresAt: string | Date }; user: unknown }, response: CookieResponse) {
     const isProduction = process.env.NODE_ENV === "production";
     response.setHeader("Set-Cookie", sessionSetCookieHeaders(createSessionCookie(result.session.id, isProduction, new Date(result.session.expiresAt)), isProduction));
-
     return { user: result.user, csrfToken: csrfTokenForSession(result.session.id) };
   }
 

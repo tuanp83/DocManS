@@ -1,10 +1,11 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { AuditLogService } from "./audit-log.service.js";
 import { AuthRateLimitService } from "./auth-rate-limit.service.js";
 import { AuthStore } from "./auth.store.js";
 import { PasswordService } from "./password.service.js";
 import { AUTH_FAILURE_MESSAGE, type LoginRequest } from "./auth.types.js";
 import { validateNewPassword } from "./password-request.pipe.js";
+import { isLoginOtpRequiredRole, loginOtpApplies, LoginOtpService, type LoginChallengeResult } from "./login-otp.js";
 
 const DUMMY_PASSWORD_HASH =
   "scrypt:rtms-dummy-user:96634051871e68281b278b3fd4750c99b588a7de2d52473164898e8c8bef8317235443d642c5ecb4b92a434ad6fad6909a16e0642697c58222e82b92e3437589";
@@ -20,7 +21,8 @@ export class AuthService {
     private readonly auditLog: AuditLogService,
     private readonly rateLimit: AuthRateLimitService,
     private readonly authStore: AuthStore,
-    private readonly passwordService: PasswordService
+    private readonly passwordService: PasswordService,
+    private readonly loginOtp: LoginOtpService
   ) {}
 
   async login(input: LoginRequest, context: RequestContext) {
@@ -50,6 +52,63 @@ export class AuthService {
     }
 
     this.rateLimit.reset(rateLimitKey);
+
+    // Xác thực hai lớp: mật khẩu đúng chưa cấp phiên, gửi mã qua thư và chờ /auth/login/verify (auth/login-otp.ts).
+    if (loginOtpApplies(user)) {
+      const challenge = await this.loginOtp.start(user, context).catch(async (error) => {
+        await this.auditLog.record({ action: "login-otp-send", result: "failure", actorId: user.id, targetEntity: "auth-session", targetEntityId: user.id, username: user.username, ip: context.ip, userAgent: context.userAgent, reason: (error as { response?: { code?: string } })?.response?.code ?? "send_failed" });
+        throw error;
+      });
+      await this.auditLog.record({ action: "login-otp-send", result: "success", actorId: user.id, targetEntity: "login-challenge", targetEntityId: challenge.challengeId, username: user.username, ip: context.ip, userAgent: context.userAgent });
+      return { challenge };
+    }
+
+    return this.openSession(user, context);
+  }
+
+  /** Nhập đúng mã thì cấp phiên; phiên chỉ cấp được khi mật khẩu chưa đổi từ lúc gửi mã (credentialVersion). */
+  async verifyLoginOtp(input: { challengeId?: unknown; code?: unknown }, context: RequestContext) {
+    const challengeId = typeof input.challengeId === "string" ? input.challengeId : "";
+    const code = typeof input.code === "string" ? input.code.trim() : "";
+    let verified: { userId: string; credentialVersion: number };
+    try {
+      verified = await this.loginOtp.verify(challengeId, code);
+    } catch (error) {
+      await this.auditLog.record({ action: "login-otp-verify", result: "failure", targetEntity: "login-challenge", targetEntityId: challengeId || "unknown", ip: context.ip, userAgent: context.userAgent, reason: (error as { response?: { code?: string } })?.response?.code ?? "invalid" });
+      throw error;
+    }
+    const user = await this.authStore.findUserById(verified.userId);
+    if (!user || user.status !== "active" || user.credentialVersion !== verified.credentialVersion) {
+      throw new UnauthorizedException({ code: "LOGIN_OTP_INVALID", message: "Lượt đăng nhập không còn hiệu lực. Vui lòng đăng nhập lại." });
+    }
+    return this.openSession(user, context, "email-otp");
+  }
+
+  async resendLoginOtp(input: { challengeId?: unknown }, context: RequestContext): Promise<LoginChallengeResult> {
+    const challengeId = typeof input.challengeId === "string" ? input.challengeId : "";
+    const challenge = await this.loginOtp.resend(challengeId, (userId) => this.authStore.findUserById(userId));
+    await this.auditLog.record({ action: "login-otp-resend", result: "success", targetEntity: "login-challenge", targetEntityId: challengeId, ip: context.ip, userAgent: context.userAgent });
+    return challenge;
+  }
+
+  /** Tự bật / tắt xác thực hai lớp. Vai trò bắt buộc không tắt được; bật cần có thư công vụ. */
+  async setLoginOtpEnabled(userId: string, enabled: unknown, context: RequestContext) {
+    if (typeof enabled !== "boolean") throw new BadRequestException({ message: "Giá trị bật/tắt không hợp lệ." });
+    const user = await this.authStore.findUserById(userId);
+    if (!user) throw new UnauthorizedException({ message: "Yêu cầu đăng nhập để tiếp tục." });
+    if (!enabled && isLoginOtpRequiredRole(user.systemRole)) {
+      throw new ForbiddenException({ code: "LOGIN_OTP_REQUIRED", message: "Vai trò của đồng chí bắt buộc xác thực hai lớp, không tắt được." });
+    }
+    if (enabled && !user.credentialEmail) {
+      throw new BadRequestException({ code: "LOGIN_OTP_EMAIL_MISSING", message: "Tài khoản chưa có thư công vụ để nhận mã. Liên hệ quản trị hệ thống để bổ sung." });
+    }
+    await this.authStore.setLoginOtpEnabled(userId, enabled);
+    await this.auditLog.record({ action: enabled ? "login-otp-enable" : "login-otp-disable", result: "success", actorId: userId, targetEntity: "user", targetEntityId: userId, username: user.username, ip: context.ip, userAgent: context.userAgent });
+    const updated = await this.authStore.findUserById(userId);
+    return { loginOtp: this.authStore.toSafeUser(updated!).loginOtp };
+  }
+
+  private async openSession(user: NonNullable<Awaited<ReturnType<AuthStore["findUserById"]>>>, context: RequestContext, method = "password") {
     const session = await this.authStore.createSession(user.id, user.credentialVersion);
     const safeUser = this.authStore.toSafeUser(user);
 
@@ -61,7 +120,8 @@ export class AuthService {
       targetEntityId: session.id,
       username: user.username,
       ip: context.ip,
-      userAgent: context.userAgent
+      userAgent: context.userAgent,
+      reason: method === "password" ? undefined : method
     });
 
     return { session, user: safeUser };

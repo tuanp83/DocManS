@@ -15,6 +15,8 @@ model User {
   passwordHash                         String                         @map("password_hash")
   credentialEmail                      String?                        @unique @map("credential_email")
   mustChangePassword                   Boolean                        @default(false) @map("must_change_password")
+  /// Tự bật xác thực hai lớp qua thư (vai trò lãnh đạo, Phòng KHQS, quản trị luôn bắt buộc, xem auth/login-otp.ts).
+  loginOtpEnabled                      Boolean                        @default(false) @map("login_otp_enabled")
   credentialVersion                    Int                            @default(0) @map("credential_version")
   status                               String
   legacyRole                           String?                        @map("legacy_role")
@@ -24,6 +26,7 @@ model User {
   createdAt                            DateTime                       @default(now()) @map("created_at")
   updatedAt                            DateTime                       @updatedAt @map("updated_at")
   sessions                             Session[]
+  loginChallenges                      LoginChallenge[]
   passwordResetTokens                  PasswordResetToken[]           @relation("PasswordResetTarget")
   issuedPasswordResetTokens            PasswordResetToken[]           @relation("PasswordResetIssuer")
   activationTokens                     AccountActivationToken[]       @relation("AccountActivationTarget")
@@ -201,6 +204,27 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+/// Lượt đăng nhập đã qua mật khẩu, chờ mã xác thực gửi qua thư (auth/login-otp.ts). Chỉ lưu băm của mã.
+model LoginChallenge {
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  user              User      @relation(fields: [userId], references: [id])
+  credentialVersion Int       @map("credential_version")
+  codeHash          String    @map("code_hash")
+  attempts          Int       @default(0)
+  sendCount         Int       @default(1) @map("send_count")
+  lastSentAt        DateTime  @default(now()) @map("last_sent_at")
+  expiresAt         DateTime  @map("expires_at")
+  consumedAt        DateTime? @map("consumed_at")
+  ip                String?
+  userAgent         String?   @map("user_agent")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("login_challenges")
 }
 
 model PasswordResetToken {

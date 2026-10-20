@@ -107,7 +107,8 @@ export function AdminUsersPanel() {
       password: String(form.get("password") ?? ""),
       confirmPassword: String(form.get("confirmPassword") ?? ""),
       systemRole: String(form.get("systemRole") ?? ""),
-      organizationUnitId: String(form.get("organizationUnitId") ?? "")
+      organizationUnitId: String(form.get("organizationUnitId") ?? ""),
+      credentialEmail: String(form.get("credentialEmail") ?? "").trim()
     };
 
     if (
@@ -134,7 +135,8 @@ export function AdminUsersPanel() {
         displayName: input.displayName,
         password: input.password,
         systemRole: input.systemRole,
-        organizationUnitId: input.organizationUnitId
+        organizationUnitId: input.organizationUnitId,
+        ...(input.credentialEmail ? { credentialEmail: input.credentialEmail } : {})
       });
       if (formElement.isConnected) {
         formElement.reset();
@@ -194,6 +196,7 @@ export function AdminUsersPanel() {
       systemRole: String(form.get("systemRole") ?? ""),
       organizationUnitId: String(form.get("organizationUnitId") ?? "")
     };
+    const credentialEmail = String(form.get("credentialEmail") ?? "").trim();
 
     if (!input.displayName || !input.systemRole || !input.organizationUnitId) {
       setFormError("Vui lòng nhập đủ họ tên hiển thị, vai trò và phạm vi đơn vị.");
@@ -202,7 +205,7 @@ export function AdminUsersPanel() {
 
     setIsSubmitting(true);
     try {
-      const result = await updateAdminUser(editingUser.id, input);
+      const result = await updateAdminUser(editingUser.id, { ...input, ...(credentialEmail ? { credentialEmail } : {}) });
       setUsers((current) => current.map((user) => (user.id === editingUser.id ? result.user : user)));
       setEditingUser(result.user);
       setMessage("Đã cập nhật tài khoản, vai trò và phạm vi đơn vị.");
@@ -395,6 +398,11 @@ export function AdminUsersPanel() {
               <input name="displayName" defaultValue={editingUser.displayName} autoComplete="name" />
             </label>
             <label className="field">
+              <span>Thư công vụ</span>
+              <input name="credentialEmail" type="email" defaultValue={editingUser.credentialEmail ?? ""} autoComplete="email" placeholder="ten.nguoi@vmmu.edu.vn" />
+              <small className="field-hint">Nhận mã xác thực hai lớp khi đăng nhập; bắt buộc với Ban giám đốc, Phòng KHQS, quản trị.</small>
+            </label>
+            <label className="field">
               <span>Vai trò</span>
               <select name="systemRole" defaultValue={editingUser.systemRole ?? ""}>
                 {roles.map((role) => (
@@ -448,6 +456,11 @@ export function AdminUsersPanel() {
             <label className="field">
               <span>Họ tên hiển thị</span>
               <input name="displayName" autoComplete="name" />
+            </label>
+            <label className="field">
+              <span>Thư công vụ</span>
+              <input name="credentialEmail" type="email" autoComplete="email" placeholder="ten.nguoi@vmmu.edu.vn" />
+              <small className="field-hint">Bắt buộc với Ban giám đốc, Phòng KHQS, quản trị: nhận mã xác thực hai lớp khi đăng nhập.</small>
             </label>
             <label className="field">
               <span>Mật khẩu khởi tạo</span>
