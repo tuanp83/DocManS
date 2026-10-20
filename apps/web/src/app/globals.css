@@ -29,6 +29,13 @@
   --neutral-soft: #eef2ef;
   --shadow: 0 8px 20px rgba(15, 63, 42, 0.06);
   --radius: 8px;
+  /* Thang lớp hiển thị dùng chung: bảng trượt và hộp thoại luôn nằm trên thanh menu và khung thông báo.
+     Giao diện chủ đề (themes/*.css) dùng lại các biến này, không đặt số riêng. */
+  --z-tooltip: 5;
+  --z-topbar: 100;
+  --z-popover: 150;
+  --z-overlay: 1000;
+  --z-confirm: 10000;
   color-scheme: light;
 }
 
@@ -198,7 +205,7 @@ summary:focus-visible {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: var(--z-topbar);
   display: flex;
   min-height: 70px;
   align-items: center;
@@ -2250,7 +2257,7 @@ button.dash-tile:focus-visible {
 
 .viz-tooltip {
   position: absolute;
-  z-index: 5;
+  z-index: var(--z-tooltip);
   min-width: 150px;
   max-width: 260px;
   border: 1px solid rgba(11, 11, 11, 0.1);
@@ -2449,7 +2456,7 @@ button.hbar-row:focus-visible {
 .drill-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-overlay);
   display: flex;
   justify-content: flex-end;
   background: rgba(16, 37, 27, 0.35);
@@ -2648,7 +2655,7 @@ button.hbar-row:focus-visible {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2702,7 +2709,7 @@ button.hbar-row:focus-visible {
 
 /* Hộp xác nhận / thông báo (components/ui/confirm-dialog.tsx): luôn nằm trên các hộp thoại khác. */
 .modal-backdrop:has(.confirm-message) {
-  z-index: 10000;
+  z-index: var(--z-confirm);
 }
 
 .modal-panel:has(.confirm-message) {
