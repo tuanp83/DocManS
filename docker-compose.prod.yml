@@ -132,6 +132,8 @@ services:
       WEB_ORIGIN: ${PUBLIC_URL:?PUBLIC_URL is required}
       ACCOUNT_LOGIN_URL: ${PUBLIC_URL:?PUBLIC_URL is required}/login
       APP_BASE_URL: ${PUBLIC_URL:?PUBLIC_URL is required}
+      # Khoá ký mã chống giả mạo yêu cầu (CSRF), ít nhất 32 ký tự; đổi khoá thì mọi người phải tải lại trang.
+      CSRF_SECRET: ${CSRF_SECRET:?CSRF_SECRET is required}
       DEADLINE_REMINDERS_ENABLED: ${DEADLINE_REMINDERS_ENABLED:-true}
       HEALTH_SNAPSHOTS_ENABLED: ${HEALTH_SNAPSHOTS_ENABLED:-true}
       TRUST_PROXY: "loopback, linklocal, uniquelocal"

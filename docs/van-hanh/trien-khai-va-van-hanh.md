@@ -44,12 +44,13 @@ ngày, cập nhật phiên bản, sao lưu và xử lý sự cố.
 |---|---|
 | Quản trị **đặt lại mật khẩu** thì thấy mã một lần trên màn hình. | Chỉ giao mã qua kênh đã được phê duyệt; mỗi lần đặt lại có trong Nhật ký hệ thống, định kỳ rà soát. |
 | Văn bản khoa học nháp hoặc hết hiệu lực vẫn mở được nếu biết đường dẫn trực tiếp. | Không tải văn bản mật lên mục Văn bản & Biểu mẫu. |
-| Chưa có CSRF token riêng, chưa có Content-Security-Policy đầy đủ. | Chỉ phục vụ trong mạng nội bộ của Học viện; không dùng chung tên miền gốc với hệ thống khác do người ngoài quản lý. |
+| Chưa có Content-Security-Policy đầy đủ (đã có chống giả mạo yêu cầu, xem A4). | Chưa mở ra Internet cho tới khi có CSP; không dùng chung tên miền gốc với hệ thống khác do người ngoài quản lý. |
 | Một máy chủ duy nhất (không dự phòng nóng). | Sao lưu hằng ngày ra máy khác; mục tiêu khôi phục: mất tối đa 24 giờ dữ liệu, dựng lại trong 1 ngày làm việc. |
 | Chưa có hệ thống giám sát tập trung. | Cron kiểm tra sức khoẻ và gửi cảnh báo (bước D1). |
 
 ### A4. Đã gia cố trong đợt rà soát này
 
+- **Chống giả mạo yêu cầu (CSRF)**: mọi yêu cầu ghi tới API phải đến từ chính địa chỉ `PUBLIC_URL` (kiểm tra `Origin`/`Referer`), chỉ nhận JSON hoặc tải tệp (không nhận biểu mẫu HTML), và yêu cầu đã đăng nhập phải kèm mã CSRF gắn với phiên (ký bằng `CSRF_SECRET`). Cookie phiên đổi tên thành `__Host-rtms_session` (bắt buộc `Secure`, không gắn tên miền), nên trang ở tên miền con không ghi đè được. Lần triển khai đầu sau thay đổi này mọi người phải đăng nhập lại.
 - Seed production chỉ **thêm dữ liệu nền còn thiếu**, không ghi đè tên đơn vị, trạng thái đơn vị, danh mục, thời gian phiên đăng nhập và mẫu thông báo mà quản trị đã chỉnh (có kiểm thử trên PostgreSQL thật: `tests/seed-production-db.test.mjs`).
 - nginx **ghi đè** `X-Forwarded-For` bằng địa chỉ kết nối thật, nên người dùng trong mạng nội bộ không tự đặt được IP để vượt giới hạn đăng nhập hay làm sai IP trong nhật ký; thêm `X-Frame-Options: DENY`, `frame-ancestors 'none'`, ẩn phiên bản nginx.
 - Thêm `scripts/unit-scopes.sh` để xem, cấp, gỡ phạm vi đơn vị (có nhật ký kiểm toán).
@@ -110,6 +111,7 @@ openssl rand -base64 32                  # tạo mật khẩu ngẫu nhiên cho 
 | `ADMIN_USERNAME`, `ADMIN_INITIAL_PASSWORD` | Tài khoản quản trị đầu tiên; mật khẩu ≥ 12 ký tự, có chữ hoa, chữ thường, chữ số. **Xoá dòng mật khẩu sau lần triển khai đầu.** |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Thông tin máy chủ thư. |
 | `SMTP_REQUIRE_TLS` | Giữ `true` (bắt buộc STARTTLS). Chỉ đặt `false` khi máy chủ chuyển tiếp thư nội bộ không hỗ trợ STARTTLS (log API báo `STARTTLS ... not implemented`). |
+| `CSRF_SECRET` | Chuỗi ngẫu nhiên ít nhất 32 ký tự (`openssl rand -base64 32`), ký mã chống giả mạo yêu cầu. Thiếu thì `docker compose` báo lỗi và không khởi động. Đổi khoá chỉ làm người dùng phải tải lại trang. |
 | `DEADLINE_REMINDERS_ENABLED`, `HEALTH_SNAPSHOTS_ENABLED` | Giữ `true`: nhắc hạn 07:00 và chụp sức khoẻ đề tài 23:55 Chủ nhật (giờ Việt Nam). |
 
 **Không bao giờ** đặt `NODE_ENV` khác `production` cho bản triển khai: ngoài production, seed tạo 17 tài khoản mẫu mật khẩu `1234`. File `docker-compose.prod.yml` đã cố định `NODE_ENV=production`; chỉ dùng file này trên máy chủ, không dùng `docker-compose.yml` (bản phát triển).
@@ -329,6 +331,8 @@ Gián đoạn thường dưới 1 phút. Nên cập nhật ngoài giờ làm vi�
 | Người dùng bị báo "thao tác quá nhanh" (429) | Vượt giới hạn tần suất (nhiều người chung một IP) | Tạm thời bình thường; nếu kéo dài, nâng `rate`/`burst` trong `nginx/prod/templates/default.conf.template`, `dc restart nginx` (`dc up -d nginx` không đủ: compose không thấy thay đổi nên không khởi động lại, template không được dựng lại). |
 | Tải tệp báo "Kho tệp tạm thời không truy cập được" (503) | Container `minio` dừng hoặc lỗi; tệp vẫn còn | `dc ps minio`, `dc logs --tail 50 minio`; `dc up -d minio`. `/api/v1/health/ready` trở lại `200` là xong. |
 | Đăng nhập sai nhiều lần bị khoá tạm | Chống dò mật khẩu (5 lần sai / 15 phút) | Chờ 15 phút, hoặc quản trị đặt lại mật khẩu. |
+| Thao tác báo "Yêu cầu không đến từ trang của hệ thống" (403, `CSRF_ORIGIN_REJECTED`) | Người dùng mở hệ thống bằng địa chỉ khác `PUBLIC_URL` (IP, tên miền cũ, http thay vì https), hoặc yêu cầu đến từ trang khác | Truy cập đúng địa chỉ `PUBLIC_URL` (https, đúng tên miền). `dc logs api \| grep csrf_rejected` cho biết nguồn bị từ chối. |
+| Thao tác báo "Phiên làm việc đã thay đổi" (403, `CSRF_TOKEN_INVALID`) lặp lại | Giao diện tự lấy lại mã và gửi lại một lần; còn lỗi là phiên đã hết hoặc `CSRF_SECRET` vừa đổi | Tải lại trang hoặc đăng nhập lại. |
 | Đầy ổ đĩa | Tệp đính kèm, bản sao lưu, image cũ | `docker system df`; `docker image prune` (giữ image `rollback`); giảm `RETENTION_DAYS` nếu đã có bản sao ngoài máy. |
 | Hệ thống chậm | Thiếu RAM, nhiều kết nối CSDL | `docker stats`; tăng RAM máy chủ hoặc `DB_POOL_MAX` (tổng < 100). |
 

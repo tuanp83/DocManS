@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { AUTH_SESSION_COOKIE, isPublicRoute as isPublicPath } from "@/lib/session";
+import { AUTH_SESSION_COOKIE, SECURE_AUTH_SESSION_COOKIE, isPublicRoute as isPublicPath } from "@/lib/session";
 
 async function hasValidSession(request: NextRequest) {
   const cookieHeader = request.headers.get("cookie");
@@ -28,7 +28,7 @@ async function hasValidSession(request: NextRequest) {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isPublicRoute = isPublicPath(pathname);
-  const hasSessionCookie = Boolean(request.cookies.get(AUTH_SESSION_COOKIE)?.value);
+  const hasSessionCookie = Boolean(request.cookies.get(SECURE_AUTH_SESSION_COOKIE)?.value || request.cookies.get(AUTH_SESSION_COOKIE)?.value);
 
   if (!hasSessionCookie && !isPublicRoute) {
     return NextResponse.redirect(new URL("/login", request.url));
