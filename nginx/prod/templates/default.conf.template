@@ -98,8 +98,8 @@ server {
     gzip_vary on;
     gzip_types application/json application/javascript text/css text/plain image/svg+xml;
 
-    # Chống dò mật khẩu ở tầng proxy (API còn khoá theo số lần sai). Ngưỡng rộng vì nhiều người có thể chung IP.
-    location = /api/v1/auth/login {
+    # Chống dò mật khẩu và mã xác thực hai lớp ở tầng proxy (API còn khoá theo số lần sai). Ngưỡng rộng vì nhiều người có thể chung IP.
+    location ~ ^/api/v1/auth/login(/verify|/resend)?$ {
         limit_req zone=login_per_ip burst=30 nodelay;
         proxy_pass http://docmans_api;
         proxy_http_version 1.1;

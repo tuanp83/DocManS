@@ -13,6 +13,8 @@ export function isPublicRoute(pathname: string) {
 
 export type CurrentUser = {
   mustChangePassword?: boolean;
+  /** Xác thực hai lớp qua thư: bắt buộc theo vai trò, hoặc tự bật. */
+  loginOtp?: { required: boolean; enabled: boolean };
   researcherProfileId?: string;
   /** Chức danh tại đơn vị, ví dụ "Trưởng khoa – Khoa Nội" (chỉ để hiển thị). */
   positions?: string[];
@@ -30,6 +32,7 @@ export type CurrentUser = {
 
 export type ShellAccount = {
   mustChangePassword?: boolean;
+  loginOtp?: CurrentUser["loginOtp"];
   researcherProfileId?: string;
   id: string;
   username: string;
@@ -51,6 +54,7 @@ export function getApiBaseUrl() {
 export function toShellAccount(user: CurrentUser): ShellAccount {
   return {
     mustChangePassword: user.mustChangePassword,
+    loginOtp: user.loginOtp,
     researcherProfileId: user.researcherProfileId,
     id: user.id,
     username: user.username,

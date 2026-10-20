@@ -19,7 +19,7 @@ export const CSRF_HEADER = "x-csrf-token";
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const ALLOWED_CONTENT_TYPES = ["application/json", "multipart/form-data"];
 const TOKEN_EXEMPT_PATHS = [
-  /^\/api\/v1\/auth\/(login|logout|password-reset\/complete|account-activation\/complete)$/,
+  /^\/api\/v1\/auth\/(login|login\/verify|login\/resend|logout|password-reset\/complete|account-activation\/complete)$/,
   /^\/api\/v1\/public\//
 ];
 

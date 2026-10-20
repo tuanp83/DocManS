@@ -18,6 +18,7 @@ type CreateUserInput = {
   password?: unknown;
   systemRole?: unknown;
   organizationUnitId?: unknown;
+  credentialEmail?: unknown;
 };
 
 type UpdateUserInput = {
@@ -25,6 +26,7 @@ type UpdateUserInput = {
   systemRole?: unknown;
   organizationUnitId?: unknown;
   status?: unknown;
+  credentialEmail?: unknown;
 };
 
 type ListUsersInput = {
@@ -309,6 +311,7 @@ export class AdminUsersService {
     if (existing) {
       throw new BadRequestException({ message: "Tên đăng nhập đã tồn tại." });
     }
+    const credentialEmail = input.credentialEmail === undefined ? null : await this.readCredentialEmail(input.credentialEmail);
 
     const organizationUnit = await this.findActiveOrganizationUnit(organizationUnitId);
     const passwordHash = await this.passwordService.hashPassword(password);
@@ -323,6 +326,7 @@ export class AdminUsersService {
           status: "active",
           systemRole,
           mustChangePassword: true,
+          credentialEmail,
           unit: organizationUnit.name
         }
       });
@@ -368,6 +372,7 @@ export class AdminUsersService {
       status?: string;
       systemRole?: string;
       unit?: string;
+      credentialEmail?: string;
     } = {};
 
     if (input.displayName !== undefined) {
@@ -375,6 +380,15 @@ export class AdminUsersService {
     }
 
     const auditEvents: Array<{ action: string; before: unknown; after: unknown }> = [];
+
+    if (input.credentialEmail !== undefined) {
+      const credentialEmail = await this.readCredentialEmail(input.credentialEmail, userId);
+      if (credentialEmail !== existing.credentialEmail) {
+        data.credentialEmail = credentialEmail;
+        // Thư công vụ là nơi nhận mã xác thực hai lớp và đăng nhập được bằng thư: đổi thư luôn ghi nhật ký.
+        auditEvents.push({ action: "admin-user-email-change", before: { credentialEmail: existing.credentialEmail }, after: { credentialEmail } });
+      }
+    }
 
     if (input.status !== undefined) {
       const status = this.readUserStatus(input.status);
@@ -526,6 +540,15 @@ export class AdminUsersService {
     return status;
   }
 
+  /** Thư công vụ: đăng nhập được bằng thư và nhận mã xác thực hai lớp, nên không được trùng tài khoản khác. */
+  private async readCredentialEmail(value: unknown, userId?: string) {
+    const email = readText(value, "credentialEmail", 254).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException({ message: "Thư công vụ không hợp lệ." });
+    const owner = await this.prisma.user.findUnique({ where: { credentialEmail: email }, select: { id: true } });
+    if (owner && owner.id !== userId) throw new BadRequestException({ message: "Thư công vụ đã được dùng cho tài khoản khác." });
+    return email;
+  }
+
   private toUserResponse(user: {
     id: string;
     username: string | null;
@@ -533,6 +556,7 @@ export class AdminUsersService {
     status: string;
     systemRole: string | null;
     unit: string;
+    credentialEmail?: string | null;
     organizationScopes?: Array<{
       isPrimary: boolean;
       organizationUnit: {
@@ -551,6 +575,7 @@ export class AdminUsersService {
       status: user.status,
       systemRole: user.systemRole,
       unit: user.unit,
+      credentialEmail: user.credentialEmail ?? null,
       organizationUnitId: organizationScope?.organizationUnit.id,
       positions: (user.unitPositions ?? []).map((position) => ({
         organizationUnitId: position.organizationUnitId,

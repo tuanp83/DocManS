@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { changePassword, completeAccountActivation, completePasswordReset } from "@/lib/auth-api";
+import { useSession } from "@/components/auth/session-provider";
+import { changePassword, completeAccountActivation, completePasswordReset, setLoginOtpEnabled } from "@/lib/auth-api";
 
 export function ChangePasswordForm() {
   const router = useRouter(); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
@@ -19,6 +20,26 @@ export function ChangePasswordForm() {
     {error ? <p className="form-error" role="alert">{error}</p> : null}
     <button className="button primary" disabled={busy} type="submit">{busy ? "Đang xử lý" : "Đổi mật khẩu"}</button>
   </form>;
+}
+
+/** Xác thực hai lớp qua thư: vai trò bắt buộc chỉ xem trạng thái; vai trò khác tự bật, tắt. */
+export function LoginOtpSettings() {
+  const { account, refreshCurrentUser } = useSession(); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  const state = account?.loginOtp;
+  if (!state) return null;
+  return <div className="admin-form">
+    <h2>Xác thực hai lớp</h2>
+    <p className="record-meta">{state.required
+      ? "Vai trò của đồng chí bắt buộc xác thực hai lớp: mỗi lần đăng nhập, hệ thống gửi mã 6 chữ số tới thư công vụ."
+      : state.enabled
+        ? "Đang bật: mỗi lần đăng nhập, hệ thống gửi mã 6 chữ số tới thư công vụ của đồng chí."
+        : "Đang tắt. Bật để mỗi lần đăng nhập cần thêm mã gửi tới thư công vụ, kể cả khi mật khẩu bị lộ."}</p>
+    {error ? <p className="form-error" role="alert">{error}</p> : null}
+    {state.required ? null : <button className="button" disabled={busy} type="button" onClick={async () => {
+      setError(""); setBusy(true);
+      try { await setLoginOtpEnabled(!state.enabled); await refreshCurrentUser(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Không thể thay đổi xác thực hai lớp."); } finally { setBusy(false); }
+    }}>{busy ? "Đang xử lý" : state.enabled ? "Tắt xác thực hai lớp" : "Bật xác thực hai lớp"}</button>}
+  </div>;
 }
 
 export function ResetPasswordForm() {

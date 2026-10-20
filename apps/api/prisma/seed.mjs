@@ -206,10 +206,20 @@ if (process.env.NODE_ENV === "production") {
   users.length = 0;
 
   const adminUsername = (process.env.ADMIN_USERNAME ?? "admin").trim();
-  const existingAdmin = await prisma.user.findUnique({ where: { id: PRODUCTION_ADMIN_ID }, select: { id: true } });
+  // Thư công vụ của quản trị: nhận mã xác thực hai lớp khi đăng nhập (bắt buộc với vai trò quản trị).
+  const adminEmail = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+  if (adminEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) throw new Error("ADMIN_EMAIL không phải địa chỉ thư hợp lệ.");
+  const existingAdmin = await prisma.user.findUnique({ where: { id: PRODUCTION_ADMIN_ID }, select: { id: true, credentialEmail: true } });
 
   if (existingAdmin) {
     console.log("Seed production: tài khoản quản trị đã tồn tại, giữ nguyên (không ghi đè thông tin đăng nhập).");
+    // Bản cũ tạo quản trị không có thư: bổ sung một lần từ ADMIN_EMAIL, không ghi đè thư đã có.
+    if (!existingAdmin.credentialEmail && adminEmail) {
+      await prisma.user.update({ where: { id: PRODUCTION_ADMIN_ID }, data: { credentialEmail: adminEmail } });
+      console.log(`Seed production: đã bổ sung thư ${adminEmail} cho tài khoản quản trị.`);
+    } else if (!existingAdmin.credentialEmail) {
+      console.warn("Seed production: tài khoản quản trị chưa có thư; đặt ADMIN_EMAIL để nhận mã xác thực hai lớp, nếu không quản trị không đăng nhập được.");
+    }
   } else {
     if (!/^[a-z0-9][a-z0-9._-]{2,63}$/i.test(adminUsername)) {
       throw new Error("ADMIN_USERNAME chỉ gồm chữ, số, dấu chấm, gạch dưới, gạch ngang (3–64 ký tự).");
@@ -236,6 +246,7 @@ if (process.env.NODE_ENV === "production") {
       username: adminUsername,
       passwordHash: `scrypt:${salt}:${derivedKey.toString("hex")}`,
       mustChangePassword: true,
+      credentialEmail: adminEmail || null,
       displayName: "Quản trị hệ thống",
       status: "active",
       systemRole: "SYSTEM_ADMIN",

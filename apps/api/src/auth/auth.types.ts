@@ -20,6 +20,9 @@ export type InternalUser = {
   organizationScopes: OrganizationScope[];
   mustChangePassword?: boolean;
   credentialVersion: number;
+  /** Thư công vụ dùng để đăng nhập và nhận mã xác thực hai lớp. */
+  credentialEmail?: string | null;
+  loginOtpEnabled?: boolean;
   researcherProfileId?: string;
   /** Chức danh tại đơn vị, ví dụ "Trưởng khoa – Khoa Nội". Chỉ để hiển thị, không phân quyền. */
   positions?: string[];
@@ -39,6 +42,8 @@ export type SafeUserContext = {
   unit: string;
   organizationScopes: OrganizationScope[];
   mustChangePassword?: boolean;
+  /** Xác thực hai lớp qua thư: bắt buộc theo vai trò, hoặc tự bật (auth/login-otp.ts). */
+  loginOtp?: { required: boolean; enabled: boolean };
   researcherProfileId?: string;
   /** Chức danh tại đơn vị, ví dụ "Trưởng khoa – Khoa Nội". Chỉ để hiển thị, không phân quyền. */
   positions?: string[];
