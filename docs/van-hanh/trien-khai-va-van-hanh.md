@@ -43,13 +43,13 @@ ngày, cập nhật phiên bản, sao lưu và xử lý sự cố.
 | Rủi ro | Biện pháp tạm thời |
 |---|---|
 | Quản trị **đặt lại mật khẩu** thì thấy mã một lần trên màn hình. | Chỉ giao mã qua kênh đã được phê duyệt; mỗi lần đặt lại có trong Nhật ký hệ thống, định kỳ rà soát. |
-| Văn bản khoa học nháp hoặc hết hiệu lực vẫn mở được nếu biết đường dẫn trực tiếp. | Không tải văn bản mật lên mục Văn bản & Biểu mẫu. |
 | Chính sách bảo mật nội dung (CSP) mới chạy ở chế độ chỉ báo cáo (`CSP_MODE=report-only`) sau lần triển khai đầu. | 1–2 tuần sau triển khai, `dc logs --since 168h api \| grep csp_violation` không còn dòng nào thì đặt `CSP_MODE=enforce` trong `.env.production` và `dc up -d web` (mục D2). Chưa bật chặn thì chưa mở hệ thống ra Internet. |
 | Một máy chủ duy nhất (không dự phòng nóng). | Sao lưu hằng ngày ra máy khác; mục tiêu khôi phục: mất tối đa 24 giờ dữ liệu, dựng lại trong 1 ngày làm việc. |
 | Chưa có hệ thống giám sát tập trung. | Cron kiểm tra sức khoẻ và gửi cảnh báo (bước D1). |
 
 ### A4. Đã gia cố trong đợt rà soát này
 
+- **Văn bản & Biểu mẫu ngừng hiệu lực** không còn mở hay tải được bằng đường dẫn trực tiếp: người không phải cán bộ quản lý chỉ xem, tải văn bản đang hiệu lực (trước đây chỉ danh sách bị lọc). Cán bộ QLKH và quản trị vẫn xem được mọi văn bản chưa xoá.
 - **Chống giả mạo yêu cầu (CSRF)**: mọi yêu cầu ghi tới API phải đến từ chính địa chỉ `PUBLIC_URL` (kiểm tra `Origin`/`Referer`), chỉ nhận JSON hoặc tải tệp (không nhận biểu mẫu HTML), và yêu cầu đã đăng nhập phải kèm mã CSRF gắn với phiên (ký bằng `CSRF_SECRET`). Cookie phiên đổi tên thành `__Host-rtms_session` (bắt buộc `Secure`, không gắn tên miền), nên trang ở tên miền con không ghi đè được. Lần triển khai đầu sau thay đổi này mọi người phải đăng nhập lại.
 - **Chính sách bảo mật nội dung (CSP)**: mỗi trang có một mã ngẫu nhiên (nonce) riêng cho từng lần tải; chỉ script mang đúng mã mới chạy, nên mã độc chèn vào trang (script nội tuyến, thuộc tính `onerror`, script từ nguồn lạ, liên kết `javascript:`) bị trình duyệt chặn. Phông chữ lưu ngay trong ứng dụng, không tải từ Google Fonts. Trình duyệt gửi báo cáo vi phạm về API (log `csp_violation`). nginx thêm `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`.
 - Seed production chỉ **thêm dữ liệu nền còn thiếu**, không ghi đè tên đơn vị, trạng thái đơn vị, danh mục, thời gian phiên đăng nhập và mẫu thông báo mà quản trị đã chỉnh (có kiểm thử trên PostgreSQL thật: `tests/seed-production-db.test.mjs`).

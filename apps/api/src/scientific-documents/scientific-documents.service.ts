@@ -35,6 +35,15 @@ export class ScientificDocumentsService {
     return MANAGER_ROLES.includes(actor.systemRole);
   }
 
+  /**
+   * Điều kiện đọc một văn bản: người quản lý đọc mọi văn bản chưa xoá; người dùng khác chỉ đọc văn bản đang hiệu lực,
+   * cùng quy tắc với danh sách. Văn bản ngừng hiệu lực mở bằng đường dẫn trực tiếp trả "không tìm thấy" như văn bản
+   * không tồn tại, không lộ là có văn bản đó.
+   */
+  private readableWhere(actor: SafeUserContext, id: string) {
+    return this.canManage(actor) ? { id, deletedAt: null } : { id, deletedAt: null, status: "ACTIVE" };
+  }
+
   assertCanManage(actor: SafeUserContext) {
     if (!this.canManage(actor)) {
       throw new ForbiddenException({
@@ -88,7 +97,7 @@ export class ScientificDocumentsService {
 
   async getDocument(actor: SafeUserContext, id: string) {
     const doc = await this.prisma.scientificDocument.findFirst({
-      where: { id, deletedAt: null },
+      where: this.readableWhere(actor, id),
       include: {
         createdBy: {
           select: {
@@ -274,7 +283,7 @@ export class ScientificDocumentsService {
 
   async downloadDocument(actor: SafeUserContext, id: string) {
     const doc = await this.prisma.scientificDocument.findFirst({
-      where: { id, deletedAt: null }
+      where: this.readableWhere(actor, id)
     });
 
     if (!doc) {
