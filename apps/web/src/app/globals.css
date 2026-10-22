@@ -2917,3 +2917,37 @@ button.hbar-row:focus-visible {
     padding: 0 !important;
   }
 }
+
+/* Báo cáo công tác KHQS: ô nhập gọn trong các biểu */
+.khqs-grid td {
+  vertical-align: top;
+}
+
+.khqs-grid input,
+.khqs-grid select,
+.khqs-grid textarea {
+  width: 100%;
+  min-width: 90px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-primary);
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.khqs-grid textarea {
+  min-width: 180px;
+  resize: vertical;
+}
+
+.khqs-grid input:disabled,
+.khqs-grid select:disabled,
+.khqs-grid textarea:disabled {
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+}
+
+.khqs-report .section-card {
+  margin-bottom: 16px;
+}

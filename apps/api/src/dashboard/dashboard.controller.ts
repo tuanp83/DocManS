@@ -44,6 +44,15 @@ export class DashboardController {
     return this.analytics.drillDown(request.currentUser, query);
   }
 
+  /** Toàn bộ danh sách chi tiết (mọi trang) ra Excel: cùng tham số với drill-down, không có page / pageSize. */
+  @Get("drill-down/export")
+  async exportDrillDown(@Req() request: RequestWithCurrentUser, @Query() query: Record<string, unknown>, @Res() res: Response) {
+    const { buffer, fileName } = await this.exportService.exportDrillDownToExcel(request.currentUser, query);
+    res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buffer);
+  }
+
   @Get("export-proposals")
   async exportProposals(@Req() request: RequestWithCurrentUser, @Query() query: Record<string, unknown>, @Res() res: Response) {
     const buffer = await this.exportService.exportProposalsToExcel(request.currentUser, query);
