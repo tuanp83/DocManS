@@ -115,6 +115,12 @@ test("an IRB council goes from invitations to the certificate through every role
   assert.equal(await db.proposalIrbMember.count({ where: { proposalId: id, status: "invited" } }), 7);
   assert.equal(s.sent.filter((event) => event.type === "IRB_INVITATION").length, 7);
 
+  // Thành viên lưu chưa kèm đơn vị (dữ liệu cũ): cửa sổ quản lý lấy đơn vị từ lý lịch.
+  await db.researcherProfile.create({ data: { managementOrganizationUnitId: khoa.id, fullName: "NKH chair", fullNameKey: "nkh chair", status: "ACTIVE", linkedUserId: people.chair.id, createdById: officer.id, updatedById: officer.id } });
+  const shown = (await s.decisions.getIRBInfo(officer, id)).irb.council.members;
+  assert.equal(shown.find((item) => item.userId === people.chair.id).unit, "Khoa Nội IRB");
+  assert.equal(shown.find((item) => item.userId === people.rev1.id).unit, "", "không có lý lịch thì để trống");
+
   // Chưa đồng ý: chỉ thấy tên đề tài (lời mời), không đọc được hồ sơ hay thông tin IRB.
   const invitation = await myInvitation(s, people.chair, id);
   assert.deepEqual(Object.keys(invitation.proposal).sort(), ["code", "id", "title"]);
