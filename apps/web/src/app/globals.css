@@ -2951,3 +2951,42 @@ button.hbar-row:focus-visible {
 .khqs-report .section-card {
   margin-bottom: 16px;
 }
+
+/* Quyết định xem / in trên trình duyệt (cùng HTML với bản Word: lib/decision-document.ts) */
+.decision-document table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.decision-document table.header-table td,
+.decision-document table.footer-table td {
+  border: none;
+  padding: 2px 4px;
+  vertical-align: top;
+}
+
+.decision-document table.border-table th,
+.decision-document table.border-table td {
+  border: 1px solid #000;
+  padding: 6px 8px;
+  font-size: 12pt;
+  vertical-align: middle;
+}
+
+.decision-document table.border-table th {
+  background: #f2f2f2;
+  font-weight: 700;
+  text-align: center;
+}
+
+.decision-document p {
+  margin: 0 0 4px;
+}
+
+@media screen {
+  .decision-document [style*="page-break-before"] {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px dashed #94a3b8;
+  }
+}

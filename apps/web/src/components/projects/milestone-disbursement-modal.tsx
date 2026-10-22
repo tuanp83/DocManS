@@ -301,7 +301,7 @@ export function MilestoneDisbursementModal({
                   <option value="COMPLETED">Đã hoàn tất quyết toán</option>
                 </select>
               </div>
-              <span style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>Thông tư 57/BQP</span>
+              <span style={{ fontSize: "11px", color: "#64748b", marginTop: "4px" }}>Thông tư 14/2022/TT-BQP</span>
             </div>
           </div>
 
