@@ -633,7 +633,7 @@ export class ProposalDecisionsService {
         systemRole: p.linkedUser?.systemRole || "",
         // Cùng cách ghi với lúc lý lịch đổi học hàm, học vị (title-propagation): "PGS. TS.".
         academicTitle: formatAcademicTitle(p) || "Nhà khoa học",
-        unit: p.managementOrganizationUnit?.name || p.linkedUser?.unit || (p.profileType === "EXTERNAL" ? "Đơn vị ngoài" : "Học viện Quân y"),
+        unit: profileUnitName(p),
         militaryRank: p.militaryRank || "",
         position: p.position || "",
         // Chức danh tại đơn vị của tài khoản (chỉ để hiển thị khi chọn thành viên hội đồng).
@@ -942,7 +942,7 @@ export class ProposalDecisionsService {
     const rows = await irbMemberRows(this.prisma, proposalId);
     const mine = rows.find((row) => row.userId === actor.id && row.status === IRB_MEMBER_STATUS.active);
     if (!mine) await assertCanReadEvaluation(this.prisma, actor, proposal);
-    const irb = irbOf(proposal);
+    const irb = await withIrbMemberUnits(this.prisma, irbOf(proposal));
     return {
       proposalId,
       irb,
@@ -1547,6 +1547,24 @@ function irbOf(proposal: { irbMetadata?: unknown }): IrbState {
     conclusion: raw.conclusion ?? null,
     certificate: raw.certificate ?? null
   };
+}
+
+/** Đơn vị hiển thị của nhà khoa học: đơn vị quản lý lý lịch, rồi đơn vị của tài khoản. */
+function profileUnitName(p: { profileType?: string | null; managementOrganizationUnit?: { name: string } | null; linkedUser?: { unit: string | null } | null }) {
+  return p.managementOrganizationUnit?.name || p.linkedUser?.unit || (p.profileType === "EXTERNAL" ? "Đơn vị ngoài" : "Học viện Quân y");
+}
+
+/** Hội đồng lập trước khi lưu kèm đơn vị: bổ sung đơn vị từ lý lịch để hiển thị (không ghi lại). */
+async function withIrbMemberUnits(client: CouncilClient, irb: IrbState): Promise<IrbState> {
+  const members = (Array.isArray(irb.council.members) ? irb.council.members : []) as IrbLoose[];
+  const missing = members.filter((member) => !member.unit && member.userId).map((member) => String(member.userId));
+  if (!missing.length || !client.researcherProfile?.findMany) return irb;
+  const profiles = (await client.researcherProfile.findMany({
+    where: { linkedUserId: { in: missing } },
+    select: { linkedUserId: true, profileType: true, managementOrganizationUnit: { select: { name: true } }, linkedUser: { select: { unit: true } } }
+  })) as Array<{ linkedUserId: string; profileType?: string | null; managementOrganizationUnit?: { name: string } | null; linkedUser?: { unit: string | null } | null }>;
+  const units = new Map(profiles.map((p) => [p.linkedUserId, profileUnitName(p)]));
+  return { ...irb, council: { ...irb.council, members: members.map((member) => (member.unit ? member : { ...member, unit: units.get(String(member.userId)) ?? "" })) } };
 }
 
 async function irbMemberRows(client: CouncilClient, proposalId: string): Promise<IrbMemberRow[]> {
