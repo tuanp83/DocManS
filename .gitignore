@@ -31,3 +31,6 @@ tmp/
 *.dump
 *.pem
 *.key
+
+# Next.js tự sinh lại khi chạy dev / build / typegen (tài liệu Next.js 16: không đưa vào Git)
+next-env.d.ts
