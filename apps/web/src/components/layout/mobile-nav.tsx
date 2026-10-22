@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "@/components/auth/session-provider";
-import { getNavigationItems } from "@/lib/navigation";
+import { getNavigationItems, isNavigationItemActive } from "@/lib/navigation";
 
 export function MobileNav() {
   const pathname = usePathname();
@@ -20,7 +20,7 @@ export function MobileNav() {
       <summary>Menu điều hướng</summary>
       <nav className="mobile-menu-links" aria-label="Điều hướng mobile">
         {navigationItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const isActive = isNavigationItemActive(pathname, item);
           return (
             <Link className={isActive ? "is-active" : ""} href={item.href} key={item.href}>
               {item.label}

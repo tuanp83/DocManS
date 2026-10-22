@@ -1,20 +1,10 @@
 import { Suspense } from "react";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { PageHeader } from "@/components/ui/page-header";
-import { ResearchProposalsPanel } from "@/components/research-proposals/research-proposals-panel";
+import { ProposalsWorkspace } from "@/components/research-proposals/proposals-workspace";
 
 export default function ProposalsPage() {
   return (
-    <>
-      <Breadcrumb items={[{ label: "Dashboard", href: "/dashboard" }, { label: "Quản lý đề tài" }]} />
-      <PageHeader
-        eyebrow="Hồ sơ đề xuất"
-        title="Danh sách hồ sơ đề tài"
-        description="Theo dõi hồ sơ theo đợt tiếp nhận, trạng thái, thời gian thực hiện và lịch sử nộp."
-      />
-      <Suspense>
-        <ResearchProposalsPanel allowCreate={false} />
-      </Suspense>
-    </>
+    <Suspense>
+      <ProposalsWorkspace />
+    </Suspense>
   );
 }

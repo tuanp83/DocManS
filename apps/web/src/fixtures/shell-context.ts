@@ -32,6 +32,8 @@ export type NavigationItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** Các trang khác thuộc mục này (đánh dấu mục đang mở), ví dụ /projects thuộc "Quản lý đề tài". */
+  alsoActiveFor?: string[];
 };
 
 export type RouteDefinition = {
