@@ -1,9 +1,19 @@
 import type { CouncilMember } from "@/lib/research-proposals-api";
+import { buildDecisionHtml } from "@/lib/decision-document";
+import {
+  approvalDecisionDocument,
+  councilDecisionDocument,
+  directorSignatureTitle,
+  productPanelDecisionDocument,
+  type ApprovalDecisionInput,
+  type CouncilDecisionInput,
+  type ProductPanelDecisionInput
+} from "@/lib/decision-templates";
 
 /**
  * Xuất văn bản Word (.docx)
  * Conforms to Vietnamese Administrative Document Standards (Nghị định 30/2020/NĐ-CP)
- * and Military Science Regulations (Thông tư 57/2021/TT-BQP).
+ * and Military Science Regulations (Thông tư 14/2022/TT-BQP).
  */
 
 /** Chỗ trống trên văn bản khi chưa có dữ liệu thật — không điền tên, nội dung, điểm số hay số quyết định giả. */
@@ -14,10 +24,7 @@ function esc(value: unknown) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
 }
 
-/** Chức danh ký thay Giám đốc: Phó GĐ phụ trách Khoa học ký "KT. GIÁM ĐỐC / PHÓ GIÁM ĐỐC". */
-export function directorSignatureTitle(signerRole?: string | null) {
-  return signerRole === "SCIENCE_DEPUTY_DIRECTOR" ? ["KT. GIÁM ĐỐC", "PHÓ GIÁM ĐỐC"] : ["GIÁM ĐỐC"];
-}
+export { directorSignatureTitle };
 
 export interface ExportWordOptions {
   filename: string;
@@ -94,243 +101,34 @@ export async function exportHtmlToWord({ filename, title, contentHtml, orientati
 }
 
 // -----------------------------------------------------------------------------
-// 1. QUYẾT ĐỊNH THÀNH LẬP HỘI ĐỒNG ĐÁNH GIÁ (GIAI ĐOẠN 1)
+// 1–2. QUYẾT ĐỊNH (thể thức chung theo mẫu Phòng KHQS: lib/decision-document.ts)
 // -----------------------------------------------------------------------------
-export function exportCouncilDecisionWord(proposal: {
-  code?: string | null;
-  title: string;
-  councilMetadata?: any;
-}) {
-  const council = proposal.councilMetadata || {};
-  const dateObj = council.decidedAt ? new Date(council.decidedAt) : new Date();
-  const day = dateObj.getDate().toString().padStart(2, "0");
-  const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
-  const year = dateObj.getFullYear();
+const fileCode = (code?: string | null) => (code || "chua_co_ma").replace(/[^a-zA-Z0-9]/g, "_");
 
-  const code = proposal.code || BLANK;
-  const decisionNumber = council.decisionNumber || BLANK;
-  const signatory = council.decidedByName || BLANK;
-  const signatoryTitle = directorSignatureTitle(council.decidedByRole);
-  const members = Array.isArray(council.members) ? council.members : [];
-
-  const memberRows = members
-    .map(
-      (m: CouncilMember, idx: number) => `
-      <tr>
-        <td style="text-align: center;">${idx + 1}</td>
-        <td><b>${esc(m.displayName)}</b></td>
-        <td>${esc(m.academicTitle || "—")}</td>
-        <td>${esc(m.unit || m.organization || "Học viện Quân y")}</td>
-        <td style="text-align: center; font-weight: bold;">${esc(m.roleLabel || m.role)}</td>
-      </tr>
-    `
-    )
-    .join("");
-
-  const meetingDateStr = council.meetingDate
-    ? new Intl.DateTimeFormat("vi-VN").format(new Date(council.meetingDate))
-    : "theo kế hoạch của Ban Quản lý KHQS";
-
-  const contentHtml = `
-    <!-- HEADER -->
-    <table class="header-table" style="width: 100%; margin-bottom: 12pt;">
-      <tr>
-        <td style="width: 45%; text-align: center;">
-          <p style="margin: 0; font-size: 12pt;">BỘ QUỐC PHÒNG</p>
-          <p style="margin: 0; font-size: 12pt; font-weight: bold;">HỌC VIỆN QUÂN Y</p>
-          <p style="margin: 0; font-size: 11pt;">Số: <b>${esc(decisionNumber)}</b></p>
-        </td>
-        <td style="width: 55%; text-align: center;">
-          <p style="margin: 0; font-size: 12pt; font-weight: bold;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
-          <p style="margin: 0; font-size: 12pt; font-weight: bold;">Độc lập - Tự do - Hạnh phúc</p>
-          <p style="margin: 0; font-size: 12pt; font-style: italic;">Hà Nội, ngày ${day} tháng ${month} năm ${year}</p>
-        </td>
-      </tr>
-    </table>
-
-    <div style="text-align: center; margin: 18pt 0 14pt 0;">
-      <p style="margin: 0; font-size: 14pt; font-weight: bold;">QUYẾT ĐỊNH</p>
-      <p style="margin: 4pt 0 0 0; font-size: 13pt; font-weight: bold;">Về việc thành lập Hội đồng tư vấn xét duyệt thuyết minh đề tài nghiên cứu khoa học</p>
-    </div>
-
-    <div style="text-align: center; margin-bottom: 12pt;">
-      <p style="margin: 0; font-size: 13pt; font-weight: bold;">GIÁM ĐỐC HỌC VIỆN QUÂN Y</p>
-    </div>
-
-    <div style="margin-bottom: 12pt; font-size: 12pt; font-style: italic;">
-      <p>Căn cứ Luật Khoa học và Công nghệ ngày 18 tháng 6 năm 2013;</p>
-      <p>Căn cứ Thông tư số 57/2021/TT-BQP ngày 06 tháng 5 năm 2021 của Bộ trưởng Bộ Quốc phòng quy định về quản lý nhiệm vụ khoa học và công nghệ trong Bộ Quốc phòng;</p>
-      <p>Căn cứ Quy chế tổ chức và hoạt động nghiên cứu khoa học của Học viện Quân y ban hành kèm theo Quyết định của Giám đốc Học viện;</p>
-      <p>Xét đề nghị của đồng chí Trưởng phòng Khoa học Quân sự tại Tờ trình ngày ${day} tháng ${month} năm ${year},</p>
-    </div>
-
-    <div style="text-align: center; margin: 12pt 0;">
-      <p style="margin: 0; font-size: 13pt; font-weight: bold;">QUYẾT ĐỊNH:</p>
-    </div>
-
-    <div>
-      <p><b>Điều 1.</b> Thành lập Hội đồng tư vấn xét duyệt thuyết minh đề tài nghiên cứu khoa học cấp Học viện/Bộ Quốc phòng:</p>
-      <p style="padding-left: 18pt;">- Tên đề tài: <b>${esc(proposal.title)}</b></p>
-      <p style="padding-left: 18pt;">- Mã số hồ sơ: <b>${esc(code)}</b></p>
-      <p style="padding-left: 18pt;">- Hội đồng gồm các đồng chí có tên trong danh sách sau:</p>
-
-      <table class="border-table" style="margin: 10pt 0;">
-        <thead>
-          <tr>
-            <th style="width: 6%;">TT</th>
-            <th style="width: 28%;">Họ và tên</th>
-            <th style="width: 22%;">Học hàm, học vị</th>
-            <th style="width: 26%;">Đơn vị công tác</th>
-            <th style="width: 18%;">Trách nhiệm</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${memberRows}
-        </tbody>
-      </table>
-
-      <p><b>Điều 2.</b> Trách nhiệm và thời gian làm việc của Hội đồng:</p>
-      <p style="padding-left: 18pt;">1. Hội đồng có nhiệm vụ nghiên cứu hồ sơ thuyết minh đề tài, đánh giá khách quan, trung thực, chính xác theo đúng các tiêu chí quy định tại Thông tư 57/2021/TT-BQP của Bộ Quốc phòng.</p>
-      <p style="padding-left: 18pt;">2. Thời gian tiến hành phiên họp: Dự kiến ngày <b>${meetingDateStr}</b> tại Học viện Quân y.</p>
-      <p style="padding-left: 18pt;">3. Kinh phí hoạt động của Hội đồng thực hiện theo quy định hiện hành của Bộ Quốc phòng và Học viện.</p>
-
-      <p><b>Điều 3.</b> Quyết định này có hiệu lực kể từ ngày ký. Hội đồng tự giải thể sau khi hoàn thành nhiệm vụ.</p>
-      <p>Các đồng chí Thủ trưởng Phòng Khoa học Quân sự, Phòng Tài chính, các đơn vị liên quan và các đồng chí có tên tại Điều 1 chịu trách nhiệm thi hành Quyết định này./.</p>
-    </div>
-
-    <!-- FOOTER SIGNATURE -->
-    <table class="footer-table" style="width: 100%; margin-top: 20pt;">
-      <tr>
-        <td style="width: 45%; vertical-align: top;">
-          <p style="margin: 0; font-size: 11pt; font-weight: bold; font-style: italic;">Nơi nhận:</p>
-          <p style="margin: 0; font-size: 10pt; font-style: italic;">- Ban Giám đốc Học viện (để b/c);</p>
-          <p style="margin: 0; font-size: 10pt; font-style: italic;">- Như Điều 3 (để thực hiện);</p>
-          <p style="margin: 0; font-size: 10pt; font-style: italic;">- Phòng KHQS, Phòng TC;</p>
-          <p style="margin: 0; font-size: 10pt; font-style: italic;">- Lưu: VT, KHQS.</p>
-        </td>
-        <td style="width: 55%; text-align: center; vertical-align: top;">
-          ${signatoryTitle.map((line) => `<p style="margin: 0; font-size: 12pt; font-weight: bold;">${line}</p>`).join("\n          ")}
-          <p style="margin: 4pt 0 40pt 0; font-size: 10pt; font-style: italic;">(Đã ký và đóng dấu)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(signatory)}</p>
-        </td>
-      </tr>
-    </table>
-  `;
-
+/** Quyết định thành lập Hội đồng tư vấn tuyển chọn, đánh giá xét duyệt thuyết minh đề tài (kèm Phụ lục I). */
+export function exportCouncilDecisionWord(proposal: CouncilDecisionInput) {
   return exportHtmlToWord({
-    filename: `Quyet_dinh_thanh_lap_Hoi_dong_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
-    title: `Quyết định thành lập Hội đồng - ${esc(code)}`,
-    contentHtml
+    filename: `Quyet_dinh_thanh_lap_Hoi_dong_${fileCode(proposal.code)}`,
+    title: `Quyết định thành lập Hội đồng - ${proposal.code || proposal.title}`,
+    contentHtml: buildDecisionHtml(councilDecisionDocument(proposal))
   });
 }
 
-// -----------------------------------------------------------------------------
-// 2. QUYẾT ĐỊNH PHÊ DUYỆT ĐỀ TÀI & KINH PHÍ
-// -----------------------------------------------------------------------------
-export function exportProposalApprovalDecisionWord(proposal: {
-  code?: string | null;
-  title: string;
-  ownerDisplayName?: string | null;
-  hostOrganizationUnitName?: string | null;
-  budgetMetadata?: { amount?: number | string | null; currency?: string | null; note?: string | null; approvedAmount?: number | null; approvedNote?: string | null } | null;
-  startDate?: string | null;
-  endDate?: string | null;
-  /** Giám đốc đã ký quyết định phê duyệt; chưa có thì để trống chỗ ký. */
-  signerName?: string | null;
-  /** Quyết định của lãnh đạo; lấy số và ngày của quyết định phê duyệt. */
-  decisions?: Array<{ decision: string; decidedAt?: string | null; decisionNumber?: string | null }> | null;
-}) {
-  const approved = proposal.decisions?.find((item) => item.decision === "approved");
-  // Ngày ký quyết định phê duyệt; chưa phê duyệt (bản xem trước) thì lấy ngày hôm nay.
-  const dateObj = approved?.decidedAt ? new Date(approved.decidedAt) : new Date();
-  const day = dateObj.getDate().toString().padStart(2, "0");
-  const month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
-  const year = dateObj.getFullYear();
-
-  const code = proposal.code || BLANK;
-  // Số quyết định do văn thư cấp; chưa có thì để trống để điền tay.
-  const decisionNumber = approved?.decisionNumber || BLANK;
-  const amount = Number(proposal.budgetMetadata?.approvedAmount || proposal.budgetMetadata?.amount || 0);
-  const formattedAmount = new Intl.NumberFormat("vi-VN").format(amount);
-
-  const contentHtml = `
-    <!-- HEADER -->
-    <table class="header-table" style="width: 100%; margin-bottom: 12pt;">
-      <tr>
-        <td style="width: 45%; text-align: center;">
-          <p style="margin: 0; font-size: 12pt;">BỘ QUỐC PHÒNG</p>
-          <p style="margin: 0; font-size: 12pt; font-weight: bold;">HỌC VIỆN QUÂN Y</p>
-          <p style="margin: 0; font-size: 11pt;">Số: <b>${esc(decisionNumber)}</b></p>
-        </td>
-        <td style="width: 55%; text-align: center;">
-          <p style="margin: 0; font-size: 12pt; font-weight: bold;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
-          <p style="margin: 0; font-size: 12pt; font-weight: bold;">Độc lập - Tự do - Hạnh phúc</p>
-          <p style="margin: 0; font-size: 12pt; font-style: italic;">Hà Nội, ngày ${day} tháng ${month} năm ${year}</p>
-        </td>
-      </tr>
-    </table>
-
-    <div style="text-align: center; margin: 18pt 0 14pt 0;">
-      <p style="margin: 0; font-size: 14pt; font-weight: bold;">QUYẾT ĐỊNH</p>
-      <p style="margin: 4pt 0 0 0; font-size: 13pt; font-weight: bold;">Về việc phê duyệt đề tài nghiên cứu khoa học và phát triển công nghệ</p>
-    </div>
-
-    <div style="text-align: center; margin-bottom: 12pt;">
-      <p style="margin: 0; font-size: 13pt; font-weight: bold;">GIÁM ĐỐC HỌC VIỆN QUÂN Y</p>
-    </div>
-
-    <div style="margin-bottom: 12pt; font-size: 12pt; font-style: italic;">
-      <p>Căn cứ Luật Khoa học và Công nghệ ngày 18 tháng 6 năm 2013;</p>
-      <p>Căn cứ Thông tư số 57/2021/TT-BQP ngày 06 tháng 5 năm 2021 của Bộ trưởng Bộ Quốc phòng quy định về quản lý nhiệm vụ khoa học và công nghệ trong Bộ Quốc phòng;</p>
-      <p>Căn cứ Biên bản họp và Kết luận của Hội đồng tư vấn xét duyệt thuyết minh đề tài;</p>
-      <p>Theo đề nghị của đồng chí Trưởng phòng Khoa học Quân sự và Trưởng phòng Tài chính Học viện,</p>
-    </div>
-
-    <div style="text-align: center; margin: 12pt 0;">
-      <p style="margin: 0; font-size: 13pt; font-weight: bold;">QUYẾT ĐỊNH:</p>
-    </div>
-
-    <div>
-      <p><b>Điều 1.</b> Phê duyệt chính thức đề tài nghiên cứu khoa học với các nội dung sau:</p>
-      <p style="padding-left: 18pt;">- Tên đề tài: <b>${esc(proposal.title)}</b></p>
-      <p style="padding-left: 18pt;">- Mã số đề tài: <b>${esc(code)}</b></p>
-      <p style="padding-left: 18pt;">- Chủ nhiệm đề tài: <b>${esc(proposal.ownerDisplayName || BLANK)}</b></p>
-      <p style="padding-left: 18pt;">- Đơn vị chủ trì: <b>${esc(proposal.hostOrganizationUnitName || "Học viện Quân y")}</b></p>
-      <p style="padding-left: 18pt;">- Thời gian thực hiện: từ <b>${esc(proposal.startDate ? new Intl.DateTimeFormat("vi-VN").format(new Date(proposal.startDate)) : BLANK)}</b> đến <b>${esc(proposal.endDate ? new Intl.DateTimeFormat("vi-VN").format(new Date(proposal.endDate)) : BLANK)}</b>.</p>
-
-      <p><b>Điều 2.</b> Kinh phí thực hiện đề tài:</p>
-      <p style="padding-left: 18pt;">- Tổng kinh phí được phê duyệt: <b>${formattedAmount} VNĐ</b></p>
-      <p style="padding-left: 18pt;">- Nguồn kinh phí: Ngân sách sự nghiệp khoa học quân sự được giao dự toán năm ${year}.</p>
-      <p style="padding-left: 18pt;">- Việc thanh quyết toán kinh phí thực hiện theo quy chế tài chính hiện hành của Bộ Quốc phòng.</p>
-
-      <p><b>Điều 3.</b> Trách nhiệm thi hành:</p>
-      <p style="padding-left: 18pt;">Chủ nhiệm đề tài và đơn vị chủ trì chịu trách nhiệm tổ chức triển khai nghiên cứu theo đúng thuyết minh đã duyệt, đảm bảo tiến độ, chất lượng và an toàn tuyệt đối.</p>
-      <p style="padding-left: 18pt;">Các đồng chí Trưởng phòng Khoa học Quân sự, Trưởng phòng Tài chính, các cơ quan chức năng và Chủ nhiệm đề tài chịu trách nhiệm thi hành Quyết định này./.</p>
-    </div>
-
-    <!-- FOOTER SIGNATURE -->
-    <table class="footer-table" style="width: 100%; margin-top: 20pt;">
-      <tr>
-        <td style="width: 45%; vertical-align: top;">
-          <p style="margin: 0; font-size: 11pt; font-weight: bold; font-style: italic;">Nơi nhận:</p>
-          <p style="margin: 0; font-size: 10pt; font-style: italic;">- Ban Giám đốc Học viện (để b/c);</p>
-          <p style="margin: 0; font-size: 10pt; font-style: italic;">- Cục Quân Y (để b/c);</p>
-          <p style="margin: 0; font-size: 10pt; font-style: italic;">- Như Điều 3;</p>
-          <p style="margin: 0; font-size: 10pt; font-style: italic;">- Lưu: VT, KHQS.</p>
-        </td>
-        <td style="width: 55%; text-align: center; vertical-align: top;">
-          <p style="margin: 0; font-size: 12pt; font-weight: bold;">GIÁM ĐỐC</p>
-          <p style="margin: 4pt 0 40pt 0; font-size: 10pt; font-style: italic;">(Đã ký và đóng dấu)</p>
-          <p style="margin: 0; font-size: 13pt; font-weight: bold;">${esc(proposal.signerName || BLANK)}</p>
-        </td>
-      </tr>
-    </table>
-  `;
-
+/** Quyết định phê duyệt đề tài và kinh phí thực hiện. */
+export function exportProposalApprovalDecisionWord(proposal: ApprovalDecisionInput) {
   return exportHtmlToWord({
-    filename: `Quyet_dinh_phe_duyet_de_tai_${code.replace(/[^a-zA-Z0-9]/g, "_")}`,
-    title: `Quyết định phê duyệt đề tài - ${esc(code)}`,
-    contentHtml
+    filename: `Quyet_dinh_phe_duyet_de_tai_${fileCode(proposal.code)}`,
+    title: `Quyết định phê duyệt đề tài - ${proposal.code || proposal.title}`,
+    contentHtml: buildDecisionHtml(approvalDecisionDocument(proposal))
+  });
+}
+
+/** Quyết định thành lập Tổ thẩm định, đánh giá sản phẩm KH&CN của đề tài (kèm Phụ lục I, II). */
+export function exportProductPanelDecisionWord(input: ProductPanelDecisionInput) {
+  return exportHtmlToWord({
+    filename: `Quyet_dinh_thanh_lap_To_tham_dinh_${fileCode(input.project.code)}`,
+    title: `Quyết định thành lập Tổ thẩm định - ${input.project.code || input.project.title}`,
+    contentHtml: buildDecisionHtml(productPanelDecisionDocument(input))
   });
 }
 
@@ -391,7 +189,7 @@ export function exportCouncilMinutesWord(proposal: {
     <div style="text-align: center; margin: 18pt 0 14pt 0;">
       <p style="margin: 0; font-size: 14pt; font-weight: bold;">BIÊN BẢN HỌP HỘI ĐỒNG</p>
       <p style="margin: 4pt 0 0 0; font-size: 13pt; font-weight: bold;">ĐÁNH GIÁ, XÉT DUYỆT THUYẾT MINH ĐỀ TÀI NCKH</p>
-      <p style="margin: 2pt 0 0 0; font-size: 11pt; font-style: italic;">(Theo Mẫu 03 - Thông tư 57/2021/TT-BQP)</p>
+      <p style="margin: 2pt 0 0 0; font-size: 11pt; font-style: italic;">(Theo Thông tư số 14/2022/TT-BQP ngày 01/02/2022 của Bộ Quốc phòng)</p>
     </div>
 
     <div>
@@ -573,7 +371,7 @@ export function exportIndividualReviewWord(
 
     <div style="text-align: center; margin: 18pt 0 14pt 0;">
       <p style="margin: 0; font-size: 14pt; font-weight: bold;">PHIẾU NHẬN XÉT, ĐÁNH GIÁ THUYẾT MINH ĐỀ TÀI NCKH</p>
-      <p style="margin: 4pt 0 0 0; font-size: 12pt; font-style: italic;">(Dành cho Chuyên gia phản biện và Thành viên Hội đồng - Mẫu 02 Thông tư 57/2021/TT-BQP)</p>
+      <p style="margin: 4pt 0 0 0; font-size: 12pt; font-style: italic;">(Dành cho Chuyên gia phản biện và Thành viên Hội đồng - theo Thông tư số 14/2022/TT-BQP)</p>
     </div>
 
     <div>
@@ -618,7 +416,7 @@ export function exportIndividualReviewWord(
 }
 
 /**
- * Xuất Biên bản nghiệm thu và đánh giá kết quả NCKH (Thông tư 57/2021/TT-BQP)
+ * Xuất Biên bản nghiệm thu và đánh giá kết quả NCKH (Thông tư 14/2022/TT-BQP)
  */
 export function exportAcceptanceMinutesWord(
   proposal: ProposalExportData,
@@ -693,7 +491,7 @@ export function exportAcceptanceMinutesWord(
     <div style="text-align: center; margin: 18pt 0 14pt 0;">
       <p style="margin: 0; font-size: 15pt; font-weight: bold;">BIÊN BẢN HỌP HỘI ĐỒNG ĐÁNH GIÁ, NGHIỆM THU KẾT QUẢ NCKH</p>
       <p style="margin: 4pt 0 0 0; font-size: 13pt; font-weight: bold; color: #1e3a8a;">(NGHIỆM THU ${councilTypeLabel})</p>
-      <p style="margin: 3pt 0 0 0; font-size: 11pt; font-style: italic;">(Ban hành kèm theo Thông tư số 57/2021/TT-BQP ngày 16/4/2021 của Bộ trưởng Bộ Quốc phòng)</p>
+      <p style="margin: 3pt 0 0 0; font-size: 11pt; font-style: italic;">(Theo Thông tư số 14/2022/TT-BQP ngày 01/02/2022 của Bộ Quốc phòng)</p>
     </div>
 
     <div>

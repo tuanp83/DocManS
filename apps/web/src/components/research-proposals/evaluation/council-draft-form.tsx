@@ -254,7 +254,7 @@ export function CouncilDraftForm({
                     className="button"
                     style={{ fontSize: "12px", background: "#f1f5f9", borderColor: "#cbd5e1", color: "#0f172a", whiteSpace: "nowrap" }}
                   >
-                    ⚡ Gợi ý cơ cấu chuẩn (Thông tư 57/BQP)
+                    ⚡ Gợi ý cơ cấu chuẩn (Thông tư 14/2022/TT-BQP)
                   </button>
                 )}
                 <button

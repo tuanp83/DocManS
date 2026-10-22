@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { SectionCard } from "@/components/ui/section-card";
 import { acceptanceCandidates, canProject, projectFileUrl, type CouncilCandidate, type ProjectProduct, type ProjectRecord } from "@/lib/projects-api";
+import { exportProductPanelDecisionWord } from "@/lib/word-export";
 
 /**
  * Bước 1 của nghiệm thu: mỗi nội dung công việc trong thuyết minh là một sản phẩm (dạng 1–6), do tổ chuyên gia
@@ -37,6 +38,18 @@ function Picker({ files, purpose, selected, onChange, onUpload, busy, label }: {
   </div>;
 }
 
+/** Quyết định thành lập Tổ thẩm định, đánh giá sản phẩm của một lần nghiệm thu (bản Word để trình Giám đốc ký). */
+function exportPanelDecision(project: ProjectRecord, product: ProjectProduct, review: ProjectProduct["reviews"][number]) {
+  const pi = project.members.find((member) => member.participationRole === "TOPIC_PI" && member.status === "ACTIVE");
+  return exportProductPanelDecisionWord({
+    project: { code: project.code, title: project.title, piName: pi?.name, unitName: project.hostOrganizationUnit?.name },
+    products: [{ title: product.title, productForm: product.productForm, requirements: product.requirements }],
+    members: review.panelMembers,
+    reviewDate: review.reviewDate,
+    location: review.location
+  });
+}
+
 function ProductCard({ product, project, files, busy, run, upload, candidates }: { product: ProjectProduct; candidates: CouncilCandidate[] } & Omit<Props, "project"> & { project: ProjectRecord }) {
   const allowed = (action: Parameters<typeof canProject>[1]) => canProject(project, action);
   const [note, setNote] = useState("");
@@ -57,6 +70,7 @@ function ProductCard({ product, project, files, busy, run, upload, candidates }:
       {review.reviewDate ? ` · ngày ${date(review.reviewDate)}` : ""}{review.location ? ` · ${review.location}` : ""}
       {review.result ? ` · kết luận: ${review.result === "PASSED" ? "Đạt" : "Không đạt"}${review.conclusion ? ` — ${review.conclusion}` : ""}` : " · đang nghiệm thu"}
       <Files ids={review.minutesFileIds} files={files} />
+      <div className="button-row"><button className="button small secondary" type="button" onClick={() => void exportPanelDecision(project, product, review)} title="Quyết định thành lập Tổ thẩm định, đánh giá sản phẩm KH&CN (kèm Phụ lục I, II) để trình Giám đốc ký">Quyết định thành lập Tổ (Word)</button></div>
     </div>)}
 
     {allowed("project.product.submit") && ["PLANNED", "FAILED", "SUBMITTED"].includes(product.status) ? <div className="form-section-inline">
