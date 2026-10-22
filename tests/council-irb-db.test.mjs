@@ -195,6 +195,20 @@ describe("Council and IRB writes on real PostgreSQL", () => {
     assert.ok(council.contextVersion.aggregateVersion >= approved.contextVersion.aggregateVersion);
   });
 
+  it("lập tờ trình hội đồng: cấp bậc, chức vụ, loại lý lịch chép từ lý lịch khoa học để in quyết định", async () => {
+    const proposal = await newProposal();
+    await assignOfficer(proposal.id);
+    await db.researcherProfile.create({ data: { managementOrganizationUnitId: orgB.id, fullName: "Vũ Nhất Định", fullNameKey: unique("vu nhat dinh"), status: "ACTIVE", linkedUserId: memberA.id, militaryRank: "Thiếu tướng", position: "Phó Giám đốc Học viện Quân y", createdById: staff.id, updatedById: staff.id } });
+    const { contextVersion } = await decisions.getIRBInfo(staff, proposal.id);
+    const council = await decisions.proposeCouncil(staff, proposal.id, { contextVersion, action: "save", members: [{ role: "chair", roleLabel: "Chủ tịch", userId: memberA.id, displayName: "Vũ Nhất Định", academicTitle: "PGS. TS." }] });
+    const [chair] = council.councilMetadata.members;
+    assert.equal(chair.militaryRank, "Thiếu tướng");
+    assert.equal(chair.position, "Phó Giám đốc Học viện Quân y");
+    assert.equal(chair.profileType, "INTERNAL");
+    const stored = await db.researchProposal.findUnique({ where: { id: proposal.id }, select: { councilMetadata: true } });
+    assert.equal(stored.councilMetadata.members[0].militaryRank, "Thiếu tướng");
+  });
+
   it("concurrent reviews without contextVersion are both kept: the server retries the serialization conflict", async () => {
     const proposal = await approvedIrbProposal();
     await Promise.all([

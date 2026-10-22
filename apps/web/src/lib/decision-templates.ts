@@ -1,13 +1,17 @@
 import {
+  academyUnit,
   BLANK,
   DECISION_BASES,
   decisionRecipients,
   esc,
   memberAppendix,
+  officialName,
+  officialNameFromDisplay,
   shortDate,
   topicClause,
   type DecisionDocument
 } from "@/lib/decision-document";
+import { getProposalLevelLabel } from "@/lib/proposal-classification";
 import { numberToVietnameseWords } from "@/lib/vietnamese-currency";
 
 /** Nội dung từng loại quyết định theo mẫu Phòng KHQS; thể thức chung ở decision-document.ts. */
@@ -17,46 +21,102 @@ export function directorSignatureTitle(signerRole?: string | null) {
   return signerRole === "SCIENCE_DEPUTY_DIRECTOR" ? ["KT. GIÁM ĐỐC", "PHÓ GIÁM ĐỐC"] : ["GIÁM ĐỐC"];
 }
 
-type CouncilMemberLike = { displayName?: string | null; academicTitle?: string | null; unit?: string | null; organization?: string | null; roleLabel?: string | null; role?: string | null };
+type CouncilMemberLike = {
+  role?: string | null; roleLabel?: string | null; displayName?: string | null; academicTitle?: string | null; unit?: string | null; organization?: string | null;
+  militaryRank?: string | null; position?: string | null; profileType?: string | null;
+};
 
 export type CouncilDecisionInput = {
   code?: string | null;
   title: string;
   ownerDisplayName?: string | null;
   hostOrganizationUnitName?: string | null;
+  proposalTypeCode?: string | null;
+  startDate?: string | null;
   councilMetadata?: {
     decisionNumber?: string | null;
     decidedAt?: string | null;
     decidedByName?: string | null;
     decidedByRole?: string | null;
-    meetingDate?: string | null;
-    meetingLocation?: string | null;
     members?: CouncilMemberLike[] | null;
   } | null;
 };
 
-/** Quyết định thành lập Hội đồng tư vấn tuyển chọn, đánh giá xét duyệt thuyết minh đề tài. */
+/** Vai trò trong Hội đồng xét duyệt và thứ tự ghi trong quyết định (mẫu QĐ 1273/QĐ-HVQY). */
+const COUNCIL_ROLE_TEXT: Record<string, string> = {
+  chair: "Chủ tịch Hội đồng",
+  vice_chair: "Phó Chủ tịch Hội đồng",
+  reviewer_1: "Ủy viên phản biện 1",
+  reviewer_2: "Ủy viên phản biện 2",
+  reviewer: "Ủy viên phản biện",
+  member: "Ủy viên",
+  secretary: "Ủy viên, Thư ký khoa học"
+};
+const COUNCIL_ROLE_ORDER = ["chair", "vice_chair", "reviewer_1", "reviewer_2", "reviewer", "member", "secretary"];
+
+/** "cấp Học viện" trong trích yếu, Điều 1. */
+const levelPhrase = (code?: string | null) => {
+  const label = code ? getProposalLevelLabel(code) : "";
+  return label && label !== "Chưa phân cấp" ? ` ${label.charAt(0).toLocaleLowerCase("vi")}${label.slice(1)}` : "";
+};
+
+const vnYear = (value?: string | null) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric" }).format(value && !Number.isNaN(new Date(value).valueOf()) ? new Date(value) : new Date());
+
+/**
+ * Chức vụ, đơn vị sau họ tên như mẫu: "Phó Giám đốc Học viện Quân y"; "Trưởng phòng Khoa học Quân sự, Học viện Quân y"
+ * (chức vụ đã nêu đơn vị thì không lặp); "Trưởng ban Công nghệ thông tin, Văn phòng, Học viện Quân y"; người ngoài
+ * Học viện: chức vụ, cơ quan.
+ */
+function councilAffiliation(member: CouncilMemberLike) {
+  const unit = (member.unit || member.organization || "").trim();
+  const position = member.position?.trim() ?? "";
+  if (member.profileType === "EXTERNAL") return [position, unit].filter(Boolean).join(", ");
+  if (/học viện quân y/i.test(position)) return position;
+  const mentionsUnit = !!unit && position.toLocaleLowerCase("vi").includes(unit.toLocaleLowerCase("vi"));
+  return [position, mentionsUnit ? "" : unit, "Học viện Quân y"].filter(Boolean).filter((part, index, parts) => !(part === "Học viện Quân y" && parts.slice(0, index).some((item) => /học viện quân y/i.test(item)))).join(", ");
+}
+
+/** "Thiếu tướng, PGS, TS Vũ Nhất Định, Phó Giám đốc Học viện Quân y: Chủ tịch Hội đồng." */
+function councilMemberLine(member: CouncilMemberLike) {
+  const name = officialName({ militaryRank: member.militaryRank, titles: member.academicTitle, name: member.displayName ?? "" });
+  const affiliation = councilAffiliation(member);
+  const role = COUNCIL_ROLE_TEXT[member.role ?? ""] ?? member.roleLabel ?? "";
+  return `${esc(name)}${affiliation ? `, ${esc(affiliation)}` : ""}: ${esc(role)}.`;
+}
+
+/** Quyết định thành lập Hội đồng xét duyệt thuyết minh nhiệm vụ KH&CN (mẫu QĐ 1273/QĐ-HVQY). */
 export function councilDecisionDocument(proposal: CouncilDecisionInput): DecisionDocument {
   const council = proposal.councilMetadata ?? {};
-  const members = Array.isArray(council.members) ? council.members : [];
-  const topic = topicClause({ title: proposal.title, code: proposal.code, piName: proposal.ownerDisplayName, unitName: proposal.hostOrganizationUnitName });
-  const meeting = council.meetingDate || council.meetingLocation
-    ? `\n\nThời gian, địa điểm họp Hội đồng: ${council.meetingDate ? `ngày ${esc(shortDate(council.meetingDate))}` : BLANK}${council.meetingLocation ? ` tại ${esc(council.meetingLocation)}` : ""}.`
-    : "";
+  const members = [...(Array.isArray(council.members) ? council.members : [])].sort((left, right) => {
+    const rank = (member: CouncilMemberLike) => { const index = COUNCIL_ROLE_ORDER.indexOf(member.role ?? ""); return index < 0 ? COUNCIL_ROLE_ORDER.length : index; };
+    return rank(left) - rank(right);
+  });
+  const level = levelPhrase(proposal.proposalTypeCode);
+  const year = vnYear(proposal.startDate || council.decidedAt);
+  const memberLines = members.length ? members.map((member, index) => `${index + 1}. ${councilMemberLine(member)}`) : [`1. ${BLANK}: Chủ tịch Hội đồng.`];
   return {
     number: council.decisionNumber,
     date: council.decidedAt,
-    subjectHtml: `Về việc thành lập Hội đồng tư vấn tuyển chọn, đánh giá xét duyệt thuyết minh đề tài: “${esc(proposal.title)}”; Mã số: ${esc(proposal.code || BLANK)}`,
-    bases: [DECISION_BASES.charter, DECISION_BASES.regulation, DECISION_BASES.proposal(proposal.title), DECISION_BASES.request],
+    subjectHtml: `Về việc thành lập Hội đồng xét duyệt thuyết minh nhiệm vụ<br/>khoa học và công nghệ${esc(level)} năm ${esc(year)}`,
+    bases: [DECISION_BASES.law, DECISION_BASES.charter, DECISION_BASES.selection, DECISION_BASES.regulation, DECISION_BASES.request],
     articles: [
-      `Thành lập Hội đồng tư vấn tuyển chọn, đánh giá xét duyệt thuyết minh đề tài: ${topic} <i>(Danh sách Phụ lục I kèm theo)</i>.`,
-      `Hội đồng có nhiệm vụ tư vấn tuyển chọn, đánh giá xét duyệt thuyết minh đề tài theo quy định hiện hành của Nhà nước và Bộ Quốc phòng; Hội đồng tự giải thể sau khi hoàn thành nhiệm vụ.${meeting}\n\nĐồng chí Chủ tịch Hội đồng chịu trách nhiệm trước Giám đốc Học viện và pháp luật về văn bản, tài liệu do mình ký.`,
-      "Phòng Khoa học Quân sự, Chủ nhiệm đề tài có trách nhiệm chuẩn bị đầy đủ hồ sơ và các điều kiện để Hội đồng làm việc đạt kết quả.",
-      "Quyết định này có hiệu lực kể từ ngày ký.\n\nĐồng chí Trưởng phòng Khoa học Quân sự, Chủ nhiệm đề tài và các đồng chí có tên tại Điều 1 chịu trách nhiệm thi hành quyết định này./."
+      [
+        `Thành lập Hội đồng xét duyệt thuyết minh nhiệm vụ Khoa học và công nghệ${esc(level)} thực hiện năm ${esc(year)}:`,
+        `<b>Tên đề tài:</b> ${esc(proposal.title)}.`,
+        `<b>Chủ nhiệm đề tài:</b> ${esc(officialNameFromDisplay(proposal.ownerDisplayName) || BLANK)}.`,
+        `<b>Đơn vị:</b> ${esc(academyUnit(proposal.hostOrganizationUnitName))}.`,
+        "Học viện Quân y mời và giao nhiệm vụ cho các đồng chí sau tham gia Hội đồng:",
+        ...memberLines
+      ].join("\n\n"),
+      [
+        `Hội đồng có nhiệm vụ đánh giá, xét duyệt thuyết minh các nhiệm vụ Khoa học và công nghệ${esc(level)} thực hiện năm ${esc(year)} theo quy định hiện hành của Nhà nước và Bộ Quốc phòng.`,
+        "Đồng chí Chủ tịch Hội đồng được phép ký những văn bản do Hội đồng ban hành và chịu trách nhiệm trước Giám đốc Học viện và pháp luật về những văn bản, tài liệu do mình ký.",
+        "Hội đồng tự giải thể sau khi hoàn thành nhiệm vụ."
+      ].join("\n\n"),
+      "Trưởng phòng Khoa học Quân sự, các cơ quan đơn vị liên quan, Chủ nhiệm đề tài và các đồng chí có tên tại Điều 1 chịu trách nhiệm thi hành quyết định này./."
     ],
-    recipients: decisionRecipients("Thành viên Hội đồng"),
-    signer: { titleLines: directorSignatureTitle(council.decidedByRole), displayName: council.decidedByName },
-    appendices: [memberAppendix("Phụ lục I", "DANH SÁCH HỘI ĐỒNG TƯ VẤN TUYỂN CHỌN, ĐÁNH GIÁ XÉT DUYỆT THUYẾT MINH ĐỀ TÀI", members.map((member) => ({ name: member.displayName ?? "", academicTitle: member.academicTitle, unit: member.unit || member.organization, role: member.roleLabel || member.role || "" })), "Trách nhiệm trong Hội đồng")]
+    recipients: decisionRecipients(),
+    signer: { titleLines: directorSignatureTitle(council.decidedByRole), displayName: council.decidedByName }
   };
 }
 
@@ -82,14 +142,14 @@ export function approvalDecisionDocument(proposal: ApprovalDecisionInput): Decis
     number: approved?.decisionNumber,
     date: approved?.decidedAt,
     subjectHtml: `Về việc phê duyệt đề tài và kinh phí thực hiện đề tài: “${esc(proposal.title)}”; Mã số: ${esc(proposal.code || BLANK)}`,
-    bases: [DECISION_BASES.charter, DECISION_BASES.regulation, DECISION_BASES.proposal(proposal.title), "Căn cứ Biên bản họp và Kết luận của Hội đồng tư vấn tuyển chọn, đánh giá xét duyệt thuyết minh đề tài;", DECISION_BASES.request],
+    bases: [DECISION_BASES.law, DECISION_BASES.charter, DECISION_BASES.selection, DECISION_BASES.regulation, DECISION_BASES.proposal(proposal.title), "Căn cứ Biên bản họp và Kết luận của Hội đồng xét duyệt thuyết minh đề tài;", DECISION_BASES.request],
     articles: [
       `Phê duyệt đề tài: ${topicClause({ title: proposal.title, code: proposal.code, piName: proposal.ownerDisplayName, unitName: proposal.hostOrganizationUnitName })}; Thời gian thực hiện: từ ${esc(shortDate(proposal.startDate))} đến ${esc(shortDate(proposal.endDate))}.`,
       `Kinh phí thực hiện đề tài: ${money}, từ nguồn ngân sách sự nghiệp khoa học quân sự năm ${year}. Việc quản lý, sử dụng và thanh quyết toán kinh phí thực hiện theo quy định hiện hành của Nhà nước và Bộ Quốc phòng.`,
       "Chủ nhiệm đề tài có trách nhiệm tổ chức thực hiện đề tài theo đúng thuyết minh đã được phê duyệt, bảo đảm tiến độ, chất lượng; Phòng Khoa học Quân sự, Phòng Tài chính có trách nhiệm hướng dẫn, theo dõi, kiểm tra việc thực hiện và sử dụng kinh phí của đề tài.",
-      "Quyết định này có hiệu lực kể từ ngày ký.\n\nĐồng chí Trưởng phòng Khoa học Quân sự, Trưởng phòng Tài chính, Chủ nhiệm đề tài và các cơ quan, đơn vị liên quan chịu trách nhiệm thi hành quyết định này./."
+      "Quyết định này có hiệu lực kể từ ngày ký.\n\nTrưởng phòng Khoa học Quân sự, Trưởng phòng Tài chính, các cơ quan đơn vị liên quan và Chủ nhiệm đề tài chịu trách nhiệm thi hành quyết định này./."
     ],
-    recipients: decisionRecipients(undefined, ["Phòng Tài chính;"]),
+    recipients: decisionRecipients(["Phòng Tài chính;"]),
     signer: { titleLines: ["GIÁM ĐỐC"], displayName: proposal.signerName ?? approved?.decidedByDisplayName }
   };
 }
@@ -118,7 +178,7 @@ export function productPanelDecisionDocument(input: ProductPanelDecisionInput): 
       "Phòng Khoa học Quân sự, Chủ nhiệm đề tài có trách nhiệm chuẩn bị đầy đủ hồ sơ và các điều kiện để Tổ làm việc đạt kết quả.",
       "Quyết định này có hiệu lực kể từ ngày ký.\n\nĐồng chí Trưởng phòng Khoa học Quân sự, Chủ nhiệm đề tài và các đồng chí có tên tại Điều 1 chịu trách nhiệm thi hành quyết định này./."
     ],
-    recipients: decisionRecipients("Thành viên Tổ Thẩm định"),
+    recipients: decisionRecipients(),
     signer: { titleLines: ["GIÁM ĐỐC"] },
     appendices: [
       memberAppendix("Phụ lục I", "DANH SÁCH TỔ THẨM ĐỊNH, ĐÁNH GIÁ SẢN PHẨM KH&CN", leaderFirst.map((member) => ({ name: member.fullName, academicTitle: member.academicTitle, unit: member.unit, role: member.role === "LEADER" ? "Tổ trưởng" : "Thành viên" })), "Nhiệm vụ trong Tổ"),
