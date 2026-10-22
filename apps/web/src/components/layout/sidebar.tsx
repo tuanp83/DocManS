@@ -26,7 +26,7 @@ export function Sidebar() {
       </Link>
       <nav className="side-nav">
         {navigationItems.map((item) => (
-          <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} />
+          <NavLink key={item.href} href={item.href} label={item.label} icon={item.icon} alsoActiveFor={item.alsoActiveFor} />
         ))}
       </nav>
       <div className="sidebar-note">
