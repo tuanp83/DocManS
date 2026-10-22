@@ -23,6 +23,8 @@ export interface ExportWordOptions {
   filename: string;
   title: string;
   contentHtml: string;
+  /** Khổ ngang cho biểu, bảng nhiều cột (mặc định khổ dọc). */
+  orientation?: "portrait" | "landscape";
 }
 
 export interface ProposalExportData {
@@ -62,12 +64,13 @@ function prepareForDocx(contentHtml: string) {
  * Xuất văn bản ra tệp Word thật (.docx, Office Open XML): khổ A4, lề trên/phải/dưới 20 mm, lề trái 25 mm,
  * Times New Roman 13pt. Bộ chuyển đổi chỉ được tải khi người dùng bấm xuất.
  */
-export async function exportHtmlToWord({ filename, title, contentHtml }: ExportWordOptions) {
+export async function exportHtmlToWord({ filename, title, contentHtml, orientation = "portrait" }: ExportWordOptions) {
   const { default: htmlToDocx } = await import("@turbodocx/html-to-docx");
   const html = `<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)}</title></head><body>${prepareForDocx(contentHtml)}</body></html>`;
   // Đơn vị: khổ giấy và lề tính bằng twip (1/20 pt), cỡ chữ tính bằng nửa điểm.
   const result = await htmlToDocx(html, null, {
-    orientation: "portrait",
+    // Khổ A4 luôn khai báo theo chiều dọc; với "landscape" thư viện tự xoay trang.
+    orientation,
     pageSize: { width: 11906, height: 16838 },
     margins: { top: 1134, right: 1134, bottom: 1134, left: 1418, header: 708, footer: 708 },
     title,

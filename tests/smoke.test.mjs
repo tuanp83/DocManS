@@ -171,7 +171,8 @@ describe("workspace smoke checks", () => {
       "ConferenceSessionBreak",
       "ConferenceSessionSlot",
       "ConferenceProgramVersion",
-      "ConferenceProceedings"
+      "ConferenceProceedings",
+      "KhqsPeriodicReport"
     ]);
     assert.match(schemaSource, /@@map\("users"\)/);
     assert.match(schemaSource, /@@map\("system_role_migration_issues"\)/);

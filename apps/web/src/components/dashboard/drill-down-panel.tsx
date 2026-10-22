@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
+  drillDownExportPath,
   formatDay,
   formatMoney,
   HEALTH_KEY_LABELS,
@@ -19,11 +20,13 @@ import {
   type ProposalRow
 } from "@/lib/dashboard-api";
 import { ProjectGantt } from "./project-gantt";
+import { downloadFromApi } from "@/lib/api-download";
 
 export type DrillRequest = { metric: DrillDownMetric; filters: DrillDownFilters; title: string; description?: string };
 export type DashboardLabels = { status: (value: string, subject: "projects" | "proposals") => string; level: (value: string | null) => string; field: (value: string | null) => string };
 
 const PAGE_SIZE = 50;
+const EXPORT_FILE_NAMES: Record<DrillDownMetric, string> = { projects: "Chi_tiet_De_tai.xlsx", proposals: "Chi_tiet_Ho_so.xlsx", products: "Chi_tiet_San_pham.xlsx", deliverables: "Chi_tiet_San_pham_dau_ra.xlsx" };
 const HEALTH_TONE: Record<HealthKey, string> = { green: "success", amber: "warning", red: "danger", none: "neutral" };
 
 function HealthBadge({ health }: { health: HealthKey }) {
@@ -125,6 +128,8 @@ export function DrillDownPanel({ request, labels, onClose }: { request: DrillReq
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"list" | "gantt">("list");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   // Giữ onClose mới nhất trong ref: hiệu ứng tiêu điểm chỉ chạy một lần khi mở, không chạy lại mỗi lần trang cha vẽ lại.
@@ -163,6 +168,18 @@ export function DrillDownPanel({ request, labels, onClose }: { request: DrillReq
     return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; previous?.focus?.(); };
   }, []);
 
+  const exportExcel = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await downloadFromApi(drillDownExportPath(request.metric, request.filters), EXPORT_FILE_NAMES[request.metric], "Không tải được tệp Excel danh sách chi tiết.");
+    } catch (reason) {
+      setExportError(reason instanceof Error ? reason.message : "Không tải được tệp Excel danh sách chi tiết.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const pages = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
   const items = result?.metric === request.metric ? result.items : [];
 
@@ -181,11 +198,13 @@ export function DrillDownPanel({ request, labels, onClose }: { request: DrillReq
                 <button type="button" aria-pressed={view === "gantt"} onClick={() => setView("gantt")}>Gantt</button>
               </div>
             ) : null}
+            <button type="button" className="button small secondary" disabled={exporting || !result?.total} onClick={exportExcel} title="Tải toàn bộ danh sách (mọi trang) theo bộ lọc đang xem">{exporting ? "Đang tạo tệp…" : "Tải Excel"}</button>
             <button ref={closeRef} type="button" className="button small" onClick={onClose}>Đóng</button>
           </div>
         </div>
         <div className="drill-body" aria-busy={loading}>
           {error ? <div className="callout danger" role="alert"><strong>Không tải được danh sách.</strong><p>{error}</p></div> : null}
+          {exportError ? <div className="callout danger" role="alert"><strong>Không tải được tệp Excel.</strong><p>{exportError}</p></div> : null}
           {!error && result && !items.length && !loading ? <p className="chart-card-subtitle">Không có mục nào.</p> : null}
           {items.length ? (
             <div style={{ opacity: loading ? 0.55 : 1 }}>

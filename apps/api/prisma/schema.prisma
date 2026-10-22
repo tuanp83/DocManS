@@ -117,6 +117,8 @@ model User {
   publishedConferencePrograms  ConferenceProgramVersion[]  @relation("ConferenceProgramPublisher")
   uploadedConferenceProceedings ConferenceProceedings[]    @relation("ConferenceProceedingsUploader")
 
+  updatedKhqsReports KhqsPeriodicReport[] @relation("KhqsReportUpdater")
+
   @@map("users")
 }
 
@@ -1050,6 +1052,7 @@ model ApprovedProject {
 
   @@index([hostOrganizationUnitId, status])
   @@index([status, endDate])
+  @@index([startDate])
   @@map("approved_projects")
 }
 
@@ -1435,6 +1438,7 @@ model ProjectDisbursement {
 
   @@unique([projectId, trancheKey])
   @@index([projectId, position])
+  @@index([projectId, disbursedDate])
   @@map("project_disbursements")
 }
 
@@ -2020,4 +2024,22 @@ model ConferenceProceedings {
 
   @@unique([conferenceId, versionNumber])
   @@map("conference_proceedings")
+}
+
+/// Báo cáo kết quả công tác KHQS theo kỳ (6 tháng đầu năm "H1" / cả năm "FY"): văn bản báo cáo, các biểu nhập tay
+/// (KQ-3, KQ-4, KQ-6) và phần sửa kết quả / ghi chú của KQ-1, KQ-2. Các dòng KQ-1, KQ-2 dựng từ đề tài khi xem.
+model KhqsPeriodicReport {
+  id           String   @id @default(uuid())
+  year         Int
+  period       String
+  narrative    Json     @default("{}")
+  manualTables Json     @default("{}") @map("manual_tables")
+  version      Int      @default(0)
+  updatedById  String?  @map("updated_by_id")
+  updatedBy    User?    @relation("KhqsReportUpdater", fields: [updatedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([year, period])
+  @@map("khqs_periodic_reports")
 }

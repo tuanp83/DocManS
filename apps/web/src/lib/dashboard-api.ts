@@ -123,6 +123,11 @@ export function loadDrillDown<M extends DrillDownMetric>(metric: M, filters: Dri
   return getJson<DrillDownResult<M>>(`drill-down${dashboardQuery({ metric, page, pageSize, ...filters })}`, signal);
 }
 
+/** Đường dẫn xuất Excel toàn bộ danh sách chi tiết (mọi trang) theo cùng bộ lọc. */
+export function drillDownExportPath(metric: DrillDownMetric, filters: DrillDownFilters) {
+  return `/dashboard/drill-down/export${dashboardQuery({ metric, ...filters })}`;
+}
+
 export function formatMoney(amount: number) {
   if (amount >= 1_000_000_000) return `${(amount / 1_000_000_000).toLocaleString("vi-VN", { maximumFractionDigits: 1 })} tỷ đ`;
   if (amount >= 1_000_000) return `${Math.round(amount / 1_000_000).toLocaleString("vi-VN")} triệu đ`;

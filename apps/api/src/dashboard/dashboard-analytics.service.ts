@@ -419,11 +419,17 @@ export class DashboardAnalyticsService {
   // ---- Danh sách chi tiết --------------------------------------------------------------------------------
 
   async drillDown(actor: SafeUserContext | undefined, rawQuery: unknown) {
+    const { metric, filters, rows, page, pageSize } = await this.drillDownRows(actor, rawQuery, { paging: true });
+    return { metric, filters, ...paginate(rows, page, pageSize) };
+  }
+
+  /** Toàn bộ dòng của một danh sách chi tiết (cùng phân quyền, bộ lọc, thứ tự với drillDown), dùng cho xuất Excel. */
+  async drillDownRows(actor: SafeUserContext | undefined, rawQuery: unknown, options: { paging?: boolean } = {}): Promise<{ metric: DrillDownMetric; filters: DashboardFilters; rows: Array<Record<string, unknown>>; page: number; pageSize: number }> {
     this.assertActor(actor);
     const raw = (rawQuery && typeof rawQuery === "object" ? rawQuery : {}) as Record<string, unknown>;
     const metric = raw.metric as DrillDownMetric;
     if (typeof metric !== "string" || !DRILL_DOWN_METRICS.includes(metric)) throw new BadRequestException({ code: "DASHBOARD_QUERY_INVALID", field: "metric", message: `metric phải là một trong: ${DRILL_DOWN_METRICS.join(", ")}.` });
-    const query = parseDashboardQuery(rawQuery, ["metric", "page", "pageSize", ...DRILL_DOWN_FILTERS[metric]]);
+    const query = parseDashboardQuery(rawQuery, ["metric", ...(options.paging ? (["page", "pageSize"] as const) : []), ...DRILL_DOWN_FILTERS[metric]]);
     const filters: DashboardFilters = Object.fromEntries(DRILL_DOWN_FILTERS[metric].filter((key) => (query)[key] !== undefined).map((key) => [key, (query)[key]]));
     const now = new Date();
     const page = query.page ?? 1;
@@ -442,7 +448,7 @@ export class DashboardAnalyticsService {
           totalBudget: hideFinanceRows ? null : project.finance?.totalBudget ?? null, totalDisbursed: hideFinanceRows ? null : project.finance?.totalDisbursed ?? null,
           link: `/projects/${encodeURIComponent(project.id)}`
         }));
-      return { metric, filters, ...paginate(rows, page, pageSize) };
+      return { metric, filters, rows, page, pageSize };
     }
 
     if (metric === "proposals") {
@@ -456,7 +462,7 @@ export class DashboardAnalyticsService {
           militaryScope: proposal.militaryScope ?? null, officerName: proposal.officer?.name ?? null,
           link: `/proposals/${encodeURIComponent(proposal.id)}`
         }));
-      return { metric, filters, ...paginate(rows, page, pageSize) };
+      return { metric, filters, rows, page, pageSize };
     }
 
     if (metric === "products") {
@@ -470,7 +476,7 @@ export class DashboardAnalyticsService {
           project: { id: project.id, code: project.code, title: project.title }, unit: { id: project.unitId, name: project.unitName },
           link: `/projects/${encodeURIComponent(project.id)}`
         }));
-      return { metric, filters, ...paginate(rows, page, pageSize) };
+      return { metric, filters, rows, page, pageSize };
     }
 
     const rows = (await this.readableDeliverables(actor, filters, now))
@@ -481,6 +487,6 @@ export class DashboardAnalyticsService {
         proposal: { id: row.proposalId, code: row.proposal.code ?? null, title: row.proposal.title }, unit: { id: row.proposal.hostOrganizationUnitId, name: row.proposal.hostOrganizationUnit?.name ?? row.proposal.hostOrganizationUnitId },
         link: `/proposals/${encodeURIComponent(row.proposalId)}`
       }));
-    return { metric, filters, ...paginate(rows, page, pageSize) };
+    return { metric, filters, rows, page, pageSize };
   }
 }
