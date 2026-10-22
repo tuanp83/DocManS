@@ -22,6 +22,10 @@ export type CouncilMemberInput = {
   displayName: string;
   academicTitle?: string;
   unit?: string;
+  /** Cấp bậc, chức vụ, loại lý lịch (INTERNAL / EXTERNAL) chép từ lý lịch khoa học lúc lập / duyệt hội đồng, để in quyết định. */
+  militaryRank?: string;
+  position?: string;
+  profileType?: string;
 };
 
 const MAX_MEMBERS = 15;
@@ -51,6 +55,13 @@ export function readCouncilDate(value: unknown, label: string) {
   return parsed.toISOString();
 }
 
+function optionalFacts(member: Record<string, unknown>, index: number) {
+  const militaryRank = text(member.militaryRank, `Cấp bậc của thành viên thứ ${index + 1}`, 100);
+  const position = text(member.position, `Chức vụ của thành viên thứ ${index + 1}`, 255);
+  const profileType = member.profileType === "INTERNAL" || member.profileType === "EXTERNAL" ? member.profileType : "";
+  return { ...(militaryRank ? { militaryRank } : {}), ...(position ? { position } : {}), ...(profileType ? { profileType } : {}) };
+}
+
 export function readCouncilMembers(value: unknown): CouncilMemberInput[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) invalid("Danh sách thành viên hội đồng không hợp lệ.");
@@ -66,7 +77,8 @@ export function readCouncilMembers(value: unknown): CouncilMemberInput[] {
       ...(userId ? { userId } : {}),
       displayName: text(member.displayName, `Họ tên thành viên thứ ${index + 1}`, 200, true),
       academicTitle: text(member.academicTitle, `Học hàm, học vị của thành viên thứ ${index + 1}`, 200),
-      unit: text(member.unit ?? member.organization, `Đơn vị của thành viên thứ ${index + 1}`, 255)
+      unit: text(member.unit ?? member.organization, `Đơn vị của thành viên thứ ${index + 1}`, 255),
+      ...optionalFacts(member, index)
     };
   });
 }

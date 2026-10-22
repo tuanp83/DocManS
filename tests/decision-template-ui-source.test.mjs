@@ -18,7 +18,7 @@ test("bản Word của ba quyết định dựng từ mẫu chung; Tổ thẩm �
   const word = read("apps/web/src/lib/word-export.ts");
   for (const call of ["buildDecisionHtml(councilDecisionDocument(proposal))", "buildDecisionHtml(approvalDecisionDocument(proposal))", "buildDecisionHtml(productPanelDecisionDocument(input))"]) assert.ok(word.includes(call), call);
   assert.match(read("apps/web/src/components/projects/project-products-panel.tsx"), /exportProductPanelDecisionWord\(/);
-  assert.match(read("apps/web/src/lib/decision-document.ts"), /Thông tư số 14\/2022\/TT-BQP ngày 01\/02\/2022/);
+  assert.match(read("apps/web/src/lib/decision-document.ts"), /Thông tư 14\/2022\/TT-BQP ngày 01\/02\/2022/);
 });
 
 test("văn bản và giao diện căn cứ Thông tư 14/2022/TT-BQP, không còn Thông tư 57/2021 đã thay thế", () => {

@@ -11,32 +11,74 @@ export function esc(value: unknown) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
 }
 
-/** Căn cứ dùng chung của các quyết định KH&CN (theo mẫu). */
+/** Căn cứ dùng chung của các quyết định KH&CN (theo mẫu QĐ 1273/QĐ-HVQY, 4626/QĐ-HVQY). */
 export const DECISION_BASES = {
-  charter: "Căn cứ Thông tư số 14/2022/TT-BQP ngày 01/02/2022 của Bộ Quốc phòng Ban hành Điều lệ Công tác khoa học và công nghệ Quân đội nhân dân Việt Nam;",
-  regulation: "Căn cứ Quy chế quản lý hoạt động khoa học và công nghệ số 5379/QC-HVQY ngày 23/12/2023 của Học viện Quân y;",
+  law: "Căn cứ Luật Khoa học, công nghệ và Đổi mới sáng tạo số 93/2025/QH15 ngày 27/6/2025;",
+  charter: "Căn cứ Thông tư 14/2022/TT-BQP ngày 01/02/2022 của Bộ Quốc phòng ban hành Điều lệ công tác khoa học và công nghệ Quân đội nhân dân Việt Nam;",
+  selection: "Căn cứ Thông tư 05/2024/TT-BQP Quy định tuyển chọn, giao trực tiếp đơn vị, cá nhân thực hiện nhiệm vụ khoa học và công nghệ cấp Bộ Quốc phòng;",
+  regulation: "Căn cứ Quy chế Quản lý hoạt động khoa học và công nghệ số 5379/QC-HVQY ngày 23/12/2023 của Học viện Quân y;",
   proposal: (title: string) => `Căn cứ Thuyết minh đề tài: “${title}”;`,
   contract: `Căn cứ Hợp đồng số ${BLANK} ngày ${BLANK} giữa Học viện Quân y với nhóm nghiên cứu;`,
   request: "Theo đề nghị của Trưởng phòng Khoa học Quân sự."
 };
 
-/** Nơi nhận theo mẫu; `members` là dòng thành viên (Hội đồng / Tổ thẩm định). */
-export function decisionRecipients(members?: string, extra: string[] = []) {
-  return ["Đ/c Giám đốc, Chính ủy HV;", `Đ/c PGĐHV: ${BLANK};`, ...(members ? [`${members};`] : []), ...extra, "J6, Chủ nhiệm đề tài;", "Lưu: VT, QLKHQS/J6."];
+/** Thủ trưởng Học viện nhận quyết định (Nơi nhận "TT Tiến, TT Thuận, TT Định"); đổi Thủ trưởng thì sửa dòng này. */
+export const LEADERSHIP_RECIPIENTS = "TT Tiến, TT Thuận, TT Định";
+
+/** Nơi nhận theo mẫu: Như Điều 1; Thủ trưởng; Chủ nhiệm đề tài; (thêm); Lưu. */
+export function decisionRecipients(extra: string[] = []) {
+  return ["Như Điều 1;", `${LEADERSHIP_RECIPIENTS};`, "Chủ nhiệm đề tài;", ...extra, "Lưu: VT, QLKHQS/J6."];
 }
 
-const TITLE_TOKEN = /^(?:GS|PGS|TS|TSKH|ThS|BS|BSCKI{1,2}|CN|KS|DS)\.?$/i;
+const TITLE_TOKEN = /^(?:GS|PGS|TS|TSKH|ThS|BS|BSCKI{1,2}|CN|KS|DS)\.?,?$/i;
 
-/**
- * Dòng người ký: cấp bậc và họ tên, bỏ học hàm, học vị ("Trung tướng, GS. TS. Trần Viết Tiến" → "Trung tướng
- * Trần Viết Tiến"), như mẫu. Tên hiển thị của tài khoản đồng bộ theo lý lịch khoa học (cấp bậc, học hàm, họ tên).
- */
+/** Học hàm, học vị viết như văn bản Học viện: "PGS. TS." → "PGS, TS". */
+export function officialTitles(titles?: string | null) {
+  return (titles ?? "").split(/[\s,]+/).map((token) => token.replace(/\.+$/, "")).filter(Boolean).join(", ");
+}
+
+/** "Thiếu tướng, PGS, TS Vũ Nhất Định"; thiếu cấp bậc: "PGS, TS Lê Đức Hậu"; thiếu học vị: "Trung tướng Trần Viết Tiến". */
+export function officialName(input: { militaryRank?: string | null; titles?: string | null; name: string }) {
+  const rank = input.militaryRank?.trim();
+  const titles = officialTitles(input.titles);
+  const name = input.name.trim();
+  const withTitles = titles ? `${titles} ${name}` : name;
+  if (!rank) return withTitles;
+  const capitalized = rank.charAt(0).toLocaleUpperCase("vi") + rank.slice(1);
+  return titles ? `${capitalized}, ${withTitles}` : `${capitalized} ${withTitles}`;
+}
+
+/** Tách tên hiển thị của tài khoản ("Thượng tá, PGS. TS. Đỗ Minh Trung", đồng bộ theo lý lịch) thành cấp bậc, học vị, họ tên. */
+export function splitDisplayName(displayName?: string | null) {
+  const value = displayName?.trim() ?? "";
+  const comma = value.indexOf(",");
+  const head = comma > 0 ? value.slice(0, comma).trim() : "";
+  // Phần trước dấu phẩy là cấp bậc nếu không phải học hàm, học vị ("PGS, TS Lê B" không có cấp bậc).
+  const hasRank = !!head && !TITLE_TOKEN.test(head);
+  const rest = hasRank ? value.slice(comma + 1).trim() : value;
+  const tokens = rest.split(/\s+/).filter(Boolean);
+  const titleTokens: string[] = [];
+  while (tokens.length > 1 && TITLE_TOKEN.test(tokens[0])) titleTokens.push(tokens.shift()!);
+  return { militaryRank: hasRank ? head : "", titles: titleTokens.join(" "), name: tokens.join(" ") };
+}
+
+/** Tên chủ nhiệm, thành viên trong thân quyết định: "Thượng tá, TS Phạm Anh Tuấn". */
+export function officialNameFromDisplay(displayName?: string | null) {
+  const parts = splitDisplayName(displayName);
+  return parts.name ? officialName(parts) : "";
+}
+
+/** Dòng người ký: cấp bậc và họ tên, bỏ học hàm, học vị ("Trung tướng, GS. TS. Trần Viết Tiến" → "Trung tướng Trần Viết Tiến"). */
 export function signerLine(displayName?: string | null) {
-  const value = displayName?.trim();
-  if (!value) return "";
-  const [rank, rest] = value.includes(",") ? [value.slice(0, value.indexOf(",")).trim(), value.slice(value.indexOf(",") + 1).trim()] : ["", value];
-  const name = rest.split(/\s+/).filter((token) => !TITLE_TOKEN.test(token)).join(" ");
-  return rank ? `${rank} ${name}` : name;
+  const parts = splitDisplayName(displayName);
+  return parts.name ? officialName({ militaryRank: parts.militaryRank, name: parts.name }) : "";
+}
+
+/** Đơn vị trong Học viện ghi kèm "Học viện Quân y": "Khoa Toán – Tin học, Học viện Quân y". */
+export function academyUnit(unit?: string | null) {
+  const value = unit?.trim();
+  if (!value) return BLANK;
+  return /học viện quân y/i.test(value) ? value : `${value}, Học viện Quân y`;
 }
 
 /** "Số: 4626 /QĐ-HVQY": số văn thư cấp đã có ký hiệu thì giữ nguyên, chỉ có số thì thêm ký hiệu, chưa có thì để trống. */
@@ -64,11 +106,9 @@ export function shortDate(value?: string | null) {
   return Number.isNaN(date.valueOf()) ? BLANK : new Intl.DateTimeFormat("vi-VN", { timeZone: value.length === 10 ? "UTC" : "Asia/Ho_Chi_Minh", day: "2-digit", month: "numeric", year: "numeric" }).format(date);
 }
 
-/** "Đề tài: “…”; Mã số: …; Chủ nhiệm đề tài: …; Đơn vị: …/Học viện Quân y" — đã escape. */
+/** "“…”; Mã số: …; Chủ nhiệm đề tài: …; Đơn vị: …, Học viện Quân y" — đã escape. */
 export function topicClause(input: { title: string; code?: string | null; piName?: string | null; unitName?: string | null }) {
-  const unit = input.unitName?.trim();
-  const unitText = !unit ? BLANK : /học viện quân y/i.test(unit) ? unit : `${unit}/Học viện Quân y`;
-  return `“${esc(input.title)}”; Mã số: ${esc(input.code || BLANK)}; Chủ nhiệm đề tài: ${esc(input.piName || BLANK)}; Đơn vị: ${esc(unitText)}`;
+  return `“${esc(input.title)}”; Mã số: ${esc(input.code || BLANK)}; Chủ nhiệm đề tài: ${esc(officialNameFromDisplay(input.piName) || BLANK)}; Đơn vị: ${esc(academyUnit(input.unitName))}`;
 }
 
 export type DecisionAppendix = { label: string; title: string; headers: Array<{ label: string; width?: number }>; rows: string[][]; emptyText?: string };

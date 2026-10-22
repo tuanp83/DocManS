@@ -492,8 +492,9 @@ export class ProposalDecisionsService {
       invitedFor = { code: proposal.code ?? null, title: proposal.title };
       await assertEvaluationCoordinator(tx, actor, proposal);
       await this.assertNoDecisionConflict(actor, proposal);
-      const { action, members, meetingDate, meetingLocation, tentativeAgenda } = readProposeCouncilInput(input);
+      const { action, members: requestedMembers, meetingDate, meetingLocation, tentativeAgenda } = readProposeCouncilInput(input);
       assertProposalStatus(proposal, ["submitted", "resubmitted", "under_review"], "Chỉ lập tờ trình hội đồng khi hồ sơ đã nộp hoặc đang đánh giá.");
+      const members = await withCouncilProfileFacts(tx, requestedMembers);
 
       const currentCouncil = (proposal.councilMetadata as Record<string, unknown>) || {};
       if (currentCouncil.status === "approved") {
@@ -679,8 +680,9 @@ export class ProposalDecisionsService {
       const decisionNumber = requestedNumber || `QĐ-TLHĐ-${proposalCode.replace(/[^a-zA-Z0-9]/g, "")}/HVQY`;
       notifyFor = { code: proposal.code ?? null, title: proposal.title, decisionNumber };
 
-      // Lãnh đạo duyệt đúng danh sách đã trình (những người đã nhận lời), không thay danh sách ở bước này.
-      const members = readCouncilMembers(currentCouncil.members);
+      // Lãnh đạo duyệt đúng danh sách đã trình (những người đã nhận lời), không thay danh sách ở bước này; tờ trình lập
+      // trước khi lưu cấp bậc, chức vụ được bổ sung từ lý lịch để quyết định in đủ.
+      const members = await withCouncilProfileFacts(tx, readCouncilMembers(currentCouncil.members));
       const compositionProblems = councilMetadataProblems(members, true);
       if (compositionProblems.length) {
         throw new BadRequestException({ message: `Thành phần hội đồng chưa đúng quy định: ${compositionProblems.join(" ")}` });
@@ -1547,6 +1549,25 @@ function irbOf(proposal: { irbMetadata?: unknown }): IrbState {
     conclusion: raw.conclusion ?? null,
     certificate: raw.certificate ?? null
   };
+}
+
+/** Cấp bậc, chức vụ, loại lý lịch của thành viên hội đồng theo lý lịch khoa học (chỉ điền chỗ còn trống). */
+async function withCouncilProfileFacts(client: CouncilClient, members: CouncilMemberInput[]): Promise<CouncilMemberInput[]> {
+  const userIds = members.filter((member) => member.userId && (!member.militaryRank || !member.position || !member.profileType)).map((member) => String(member.userId));
+  if (!userIds.length || !client.researcherProfile?.findMany) return members;
+  const profiles = (await client.researcherProfile.findMany({
+    where: { linkedUserId: { in: userIds } },
+    select: { linkedUserId: true, militaryRank: true, position: true, profileType: true }
+  })) as Array<{ linkedUserId: string; militaryRank?: string | null; position?: string | null; profileType?: string | null }>;
+  const byUser = new Map(profiles.map((profile) => [profile.linkedUserId, profile]));
+  return members.map((member) => {
+    const profile = member.userId ? byUser.get(member.userId) : undefined;
+    if (!profile) return member;
+    const militaryRank = member.militaryRank || profile.militaryRank?.trim() || "";
+    const position = member.position || profile.position?.trim() || "";
+    const profileType = member.profileType || (profile.profileType === "EXTERNAL" ? "EXTERNAL" : profile.profileType ? "INTERNAL" : "");
+    return { ...member, ...(militaryRank ? { militaryRank } : {}), ...(position ? { position } : {}), ...(profileType ? { profileType } : {}) };
+  });
 }
 
 /** Đơn vị hiển thị của nhà khoa học: đơn vị quản lý lý lịch, rồi đơn vị của tài khoản. */
