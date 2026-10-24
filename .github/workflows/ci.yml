@@ -110,6 +110,7 @@ jobs:
           MINIO_APP_SECRET_KEY=ci-app-secret
           SMTP_HOST=smtp.example.invalid
           SMTP_FROM=ci@example.invalid
+          CSRF_SECRET=ci-csrf-secret-khong-dung-that-0123456789
           EOF
           docker compose -f docker-compose.prod.yml --env-file /tmp/ci.env config --quiet
 
